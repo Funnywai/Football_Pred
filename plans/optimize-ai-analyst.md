@@ -3,6 +3,27 @@
 > **分析對象**：`src/services/deepseek.ts`、`src/services/dailyAnalysis.ts`、`src/services/hkjc.ts`  
 > **目標**：在維持或提升預測品質的前提下，降低 API 成本、縮短響應時間、提升輸出可用性。
 
+## 實作狀態
+
+| 階段 | 項目 | 狀態 | 實作日期 |
+|------|------|------|----------|
+| **S1** | 合併 API Call（移除 `fetchTeamResearch`） | ✅ 已完成 | 2026-07-04 |
+| **S2** | 調降 Temperature 0.8→0.3 | ✅ 已完成 | 2026-07-04 |
+| **S3** | 下調 max_tokens 8192→4096 | ✅ 已完成 | 2026-07-04 |
+| **S4** | 統一 Batch/Single Prompt | ✅ 已完成 | 2026-07-04 |
+| M1 | 結構化輸出（JSON） | ⏳ 待實作 | — |
+| M2 | TeamProfile 快取表 | ⏳ 待實作 | — |
+| M3 | Analysis 追蹤表 | ⏳ 待實作 | — |
+| M4 | 價值過濾器 | ⏳ 待實作 | — |
+| L1 | 外部數據源 | ⏳ 待實作 | — |
+| L2 | 多模型 Ensemble | ⏳ 待實作 | — |
+| L3 | 強化學習 Prompt 迭代 | ⏳ 待實作 | — |
+
+### S1-S4 實作摘要
+
+- **`deepseek.ts`**：移除 `fetchTeamResearch()` 函式；System prompt 新增球隊資訊整理區塊（FIFA 排名、戰績、關鍵球員等）；統一單場/多場 prompt 品質；`temperature: 0.3`、`max_tokens: 4096`。
+- **`dailyAnalysis.ts`**：移除 `fetchTeamResearch` 引入與呼叫，`analyzeSingleMatch()` 和 `analyzeAndPost()` 簡化為直接使用 `buildHistoricalContext()`。
+
 ---
 
 ## 一、現行 workflow 盤點
@@ -381,19 +402,19 @@ const response = await deepseek.chat.completions.create({
 
 ## 五、執行優先序建議
 
-| 優先序 | 項目 | 預期效益 | 實作難度 |
-|--------|------|---------|---------|
-| **P0** | S1：合併 API Call（移除 `fetchTeamResearch`） | 成本 -50%、速度 +100% | 低 |
-| **P0** | S2：調降 Temperature 至 0.3 | 預測穩定性大幅提升 | 低 |
-| **P1** | S4：統一 Batch/Single Prompt | 品質一致 | 低 |
-| **P1** | M1：結構化輸出（JSON） | 可追蹤、可自動化 | 中 |
-| **P1** | M4：價值過濾器 | 減少無意義分析 | 低 |
-| **P2** | S3：下調 max_tokens | 略微加速、減少冗長 | 低 |
-| **P2** | M2：TeamProfile 快取 | 進一步降低成本 | 中 |
-| **P3** | M3：Analysis 追蹤表 | 長期迭代基礎 | 中 |
-| **P4** | L1：外部數據源 | 預測準確率核心提升 | 高 |
-| **P5** | L2：多模型 Ensemble | 最高準確率 | 高 |
-| **P6** | L3：強化學習 Prompt 迭代 | 全自動優化 | 極高 |
+| 優先序 | 項目 | 預期效益 | 實作難度 | 狀態 |
+|--------|------|---------|---------|------|
+| **P0** | S1：合併 API Call（移除 `fetchTeamResearch`） | 成本 -50%、速度 +100% | 低 | ✅ |
+| **P0** | S2：調降 Temperature 至 0.3 | 預測穩定性大幅提升 | 低 | ✅ |
+| **P1** | S4：統一 Batch/Single Prompt | 品質一致 | 低 | ✅ |
+| **P1** | M1：結構化輸出（JSON） | 可追蹤、可自動化 | 中 | ⏳ |
+| **P1** | M4：價值過濾器 | 減少無意義分析 | 低 | ⏳ |
+| **P2** | S3：下調 max_tokens | 略微加速、減少冗長 | 低 | ✅ |
+| **P2** | M2：TeamProfile 快取 | 進一步降低成本 | 中 | ⏳ |
+| **P3** | M3：Analysis 追蹤表 | 長期迭代基礎 | 中 | ⏳ |
+| **P4** | L1：外部數據源 | 預測準確率核心提升 | 高 | ⏳ |
+| **P5** | L2：多模型 Ensemble | 最高準確率 | 高 | ⏳ |
+| **P6** | L3：強化學習 Prompt 迭代 | 全自動優化 | 極高 | ⏳ |
 
 ---
 

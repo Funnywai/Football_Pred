@@ -2,7 +2,7 @@ import cron from "node-cron"
 import { Client, EmbedBuilder, TextChannel } from "discord.js"
 import prisma from "../db/prisma"
 import { fetchWorldCupMatches, fetchHistoricMatchResults, type HkjcMatchData } from "./hkjc"
-import { generateMatchAnalysis, fetchTeamResearch } from "./deepseek"
+import { generateMatchAnalysis } from "./deepseek"
 import { Match } from "@prisma/client"
 
 export function startDailyAnalysisCron(client: Client): void {
@@ -94,9 +94,7 @@ export async function analyzeSingleMatch(
   matchRecord: Match,
   channel: TextChannel
 ): Promise<void> {
-  console.log(`🔍 正在查詢 ${matchRecord.homeTeam} vs ${matchRecord.awayTeam} 球隊資訊...`)
-  const teamResearch = await fetchTeamResearch(matchRecord.homeTeam, matchRecord.awayTeam)
-  const historicalContext = teamResearch || await buildHistoricalContext([matchRecord])
+  const historicalContext = await buildHistoricalContext([matchRecord])
 
   const matchData = buildMatchForAnalysis(matchRecord)
 
@@ -130,9 +128,7 @@ export async function analyzeAndPost(
   )
 
   for (const match of sorted) {
-    console.log(`🔍 正在查詢 ${match.homeTeam} vs ${match.awayTeam} 球隊資訊...`)
-    const teamResearch = await fetchTeamResearch(match.homeTeam, match.awayTeam)
-    const historicalContext = teamResearch || await buildHistoricalContext([match])
+    const historicalContext = await buildHistoricalContext([match])
 
     const matchData = buildMatchForAnalysis(match)
 
