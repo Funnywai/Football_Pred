@@ -6,23 +6,6 @@ datasource db {
   provider = "sqlite"
 }
 
-model User {
-  id           String    @id @default(uuid())
-  discordId    String?   @unique
-  username     String    @unique
-  passwordHash String
-  role         String    @default("USER")   // ADMIN | USER
-  status       String    @default("active") // active | disabled
-  totalBets    Int       @default(0)
-  totalWon     Int       @default(0)
-  totalLost    Int       @default(0)
-  totalProfit  Float     @default(0)
-  createdAt    DateTime  @default(now())
-  lastLoginAt  DateTime?
-
-  bets Bet[]
-}
-
 model Match {
   id             String    @id @default(uuid())
   hkjcMatchId    String?   @unique
@@ -35,22 +18,4 @@ model Match {
   oddsData       Json?
   oddsUpdatedAt  DateTime?
   createdAt      DateTime  @default(now())
-
-  bets Bet[]
-}
-
-model Bet {
-  id         String   @id @default(uuid())
-  userId     String
-  matchId    String
-  amount     Float
-  odds       Float
-  betType    String   @default("HAD")   // HAD | HDC
-  prediction String
-  status     String   @default("pending") // pending, won, lost
-  refund     Float?
-  createdAt  DateTime @default(now())
-
-  user  User  @relation(fields: [userId], references: [id])
-  match Match @relation(fields: [matchId], references: [id])
 }

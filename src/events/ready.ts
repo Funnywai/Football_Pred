@@ -1,27 +1,8 @@
 import { Client, REST, Routes } from "discord.js"
-import { statCommand } from "../commands/stat"
-import { betCommand } from "../commands/bet"
-import { loginCommand } from "../commands/login"
-import { adminCommand } from "../commands/admin"
-import { rankCommand } from "../commands/rank"
-import { helpCommand } from "../commands/help"
 import { matchCommand } from "../commands/match"
 import { analystCommand } from "../commands/analyst"
-import { checkCommand } from "../commands/check"
-import { fixCommand } from "../commands/fix"
 
-const commands = [
-  loginCommand,
-  statCommand,
-  betCommand,
-  adminCommand,
-  rankCommand,
-  helpCommand,
-  matchCommand,
-  analystCommand,
-  checkCommand,
-  fixCommand,
-].map((cmd) => cmd.toJSON())
+const commands = [matchCommand, analystCommand].map((cmd) => cmd.toJSON())
 
 export async function registerCommands(client: Client): Promise<void> {
   const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!)
