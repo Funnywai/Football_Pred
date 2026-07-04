@@ -4,6 +4,13 @@ import prisma from "../db/prisma"
 import { fetchWorldCupMatches, fetchHistoricMatchResults, type HkjcMatchData } from "./hkjc"
 import { generateMatchAnalysis } from "./deepseek"
 import { Match } from "@prisma/client"
+import {
+  fetchExternalResults,
+  findTeamMatches,
+  findH2HMatches,
+  formatExternalResult,
+  teamNameMatches,
+} from "./externalResults"
 
 export function startDailyAnalysisCron(client: Client): void {
   const cronTime = process.env.CRON_TIME || "0 8 * * *"
@@ -256,19 +263,65 @@ function buildAnalysisEmbed(match: Match, analysis: string): EmbedBuilder {
 }
 
 async function buildHistoricalContext(matches: Match[]): Promise<string> {
-  const finishedMatches = await prisma.match.findMany({
-    where: { status: "finished", result: { not: null } },
-    orderBy: { startTime: "desc" },
-    take: 50,
-  })
-  if (finishedMatches.length === 0) return ""
-
   const lines: string[] = []
   const teamNames = new Set<string>()
   matches.forEach((m) => {
     teamNames.add(m.homeTeam)
     teamNames.add(m.awayTeam)
   })
+
+  // ── 優先使用外部 API (wheniskickoff.com) 的可靠比分 ──
+  let externalMatches: Awaited<ReturnType<typeof fetchExternalResults>> = []
+  try {
+    externalMatches = await fetchExternalResults()
+  } catch {
+    console.warn("⚠️ [HistoricalContext] 外部 API 不可用，降級至本地 DB")
+  }
+
+  if (externalMatches.length > 0) {
+    console.log(
+      `📊 [HistoricalContext] 使用外部 API 數據 (${externalMatches.length} 場) 建立歷史背景`
+    )
+
+    for (const team of teamNames) {
+      const recent = findTeamMatches(team, externalMatches).slice(0, 5)
+      if (recent.length > 0) {
+        const form = recent
+          .map((m) => {
+            const isHome = teamNameMatches(team, m.home_team.name)
+            const opponent = isHome ? m.away_team.name : m.home_team.name
+            const score = formatExternalResult(m)
+            return `${isHome ? "[主]" : "[客]"} ${opponent} (${score})`
+          })
+          .join(" → ")
+        lines.push(`${team} 近況: ${form}`)
+      }
+    }
+
+    for (const m of matches) {
+      const h2h = findH2HMatches(m.homeTeam, m.awayTeam, externalMatches)
+      if (h2h.length > 0) {
+        const h2hStr = h2h
+          .map(
+            (em) =>
+              `${em.home_team.name} ${formatExternalResult(em)} ${em.away_team.name}`
+          )
+          .join(" | ")
+        lines.push(`⚔ ${m.homeTeam} vs ${m.awayTeam} 往績: ${h2hStr}`)
+      }
+    }
+
+    return lines.join("\n")
+  }
+
+  // ── Fallback: 外部 API 無資料時降級至本地 DB ──
+  console.log("📦 [HistoricalContext] 外部 API 無資料，使用本地 DB")
+  const finishedMatches = await prisma.match.findMany({
+    where: { status: "finished", result: { not: null } },
+    orderBy: { startTime: "desc" },
+    take: 50,
+  })
+  if (finishedMatches.length === 0) return ""
 
   for (const team of teamNames) {
     const recent = finishedMatches
