@@ -1,7 +1,7 @@
 import cron from "node-cron"
 import { Client, EmbedBuilder, TextChannel } from "discord.js"
 import prisma from "../db/prisma"
-import { fetchWorldCupMatches, fetchHistoricMatchResults, type HkjcMatchData } from "./hkjc"
+import { fetchWorldCupMatches, type HkjcMatchData } from "./hkjc"
 import { generateMatchAnalysis } from "./deepseek"
 import { Match } from "@prisma/client"
 import {
@@ -10,7 +10,14 @@ import {
   findH2HMatches,
   formatExternalResult,
   teamNameMatches,
+  getMatchPhase,
+  resolveMatchStage,
+  resolvePhaseFromDate,
+  formatStageLabel,
+  getTeamWorldCupStats,
+  formatTeamWorldCupStats,
 } from "./externalResults"
+import type { ExternalMatch } from "./externalResults"
 
 export function startDailyAnalysisCron(client: Client): void {
   const cronTime = process.env.CRON_TIME || "0 8 * * *"
@@ -74,7 +81,6 @@ export async function upsertMatchesToDb(
           where: { id: existing.id },
           data: {
             status: m.status,
-            result: m.result || existing.result,
             oddsData: m.odds as unknown as object,
             oddsUpdatedAt: new Date(),
           },
@@ -85,10 +91,8 @@ export async function upsertMatchesToDb(
           hkjcMatchId: m.hkjcMatchId,
           homeTeam: m.homeTeam,
           awayTeam: m.awayTeam,
-          tournamentName: m.tournamentName,
           startTime: m.startTime,
           status: m.status,
-          result: m.result,
           oddsData: m.odds as unknown as object,
           oddsUpdatedAt: new Date(),
         },
@@ -101,9 +105,17 @@ export async function analyzeSingleMatch(
   matchRecord: Match,
   channel: TextChannel
 ): Promise<void> {
+  let externalMatches: ExternalMatch[] = []
+  try {
+    externalMatches = await fetchExternalResults()
+  } catch {
+    console.warn("⚠️ [analyzeSingleMatch] 外部 API 不可用，跳過階段/戰績解析")
+  }
+
+  const extra = resolveMatchExtra(matchRecord, externalMatches)
   const historicalContext = await buildHistoricalContext([matchRecord])
 
-  const matchData = buildMatchForAnalysis(matchRecord)
+  const matchData = buildMatchForAnalysis(matchRecord, extra)
 
   console.log(`🤖 正在分析 ${matchRecord.homeTeam} vs ${matchRecord.awayTeam}...`)
   const analysis = await generateMatchAnalysis([matchData], historicalContext)
@@ -134,10 +146,18 @@ export async function analyzeAndPost(
     (a, b) => a.startTime.getTime() - b.startTime.getTime()
   )
 
+  let externalMatches: ExternalMatch[] = []
+  try {
+    externalMatches = await fetchExternalResults()
+  } catch {
+    console.warn("⚠️ [analyzeAndPost] 外部 API 不可用，跳過階段/戰績解析")
+  }
+
   for (const match of sorted) {
+    const extra = resolveMatchExtra(match, externalMatches)
     const historicalContext = await buildHistoricalContext([match])
 
-    const matchData = buildMatchForAnalysis(match)
+    const matchData = buildMatchForAnalysis(match, extra)
 
     console.log(`🤖 正在分析 ${match.homeTeam} vs ${match.awayTeam}...`)
     const analysis = await generateMatchAnalysis([matchData], historicalContext)
@@ -148,7 +168,41 @@ export async function analyzeAndPost(
   console.log(`✅ 每日分析已發送 ${sorted.length} 場至頻道 ${channel.id}`)
 }
 
-function buildMatchForAnalysis(match: Match) {
+/**
+ * 從外部 API 解析單場比賽的階段、球隊戰績等額外資訊。
+ * 用於 buildMatchForAnalysis 提供結構化數據給 AI prompt。
+ */
+function resolveMatchExtra(
+  match: Match,
+  externalMatches: ExternalMatch[]
+): { stage?: string; homeTeamStats?: string; awayTeamStats?: string } {
+  const result: { stage?: string; homeTeamStats?: string; awayTeamStats?: string } = {}
+
+  const matchDate = formatDate(match.startTime)
+  const round = getMatchPhase(match.homeTeam, match.awayTeam, externalMatches, matchDate)
+    ?? resolvePhaseFromDate(match.startTime)
+  const stage = resolveMatchStage(round)
+  if (stage) {
+    result.stage = formatStageLabel(stage)
+  }
+
+  const homeStats = getTeamWorldCupStats(match.homeTeam, externalMatches)
+  if (homeStats.played > 0) {
+    result.homeTeamStats = formatTeamWorldCupStats(homeStats)
+  }
+
+  const awayStats = getTeamWorldCupStats(match.awayTeam, externalMatches)
+  if (awayStats.played > 0) {
+    result.awayTeamStats = formatTeamWorldCupStats(awayStats)
+  }
+
+  return result
+}
+
+function buildMatchForAnalysis(
+  match: Match,
+  extra?: { stage?: string; homeTeamStats?: string; awayTeamStats?: string }
+) {
   const oddsData = match.oddsData as Record<string, unknown> | null
   let oddsSummary = ""
   if (oddsData) {
@@ -234,6 +288,9 @@ function buildMatchForAnalysis(match: Match) {
     awayTeam: match.awayTeam,
     startTime: match.startTime,
     oddsSummary,
+    stage: extra?.stage,
+    homeTeamStats: extra?.homeTeamStats,
+    awayTeamStats: extra?.awayTeamStats,
   }
 }
 
@@ -270,12 +327,12 @@ async function buildHistoricalContext(matches: Match[]): Promise<string> {
     teamNames.add(m.awayTeam)
   })
 
-  // ── 優先使用外部 API (wheniskickoff.com) 的可靠比分 ──
+  // ── 優先使用外部 API (api-sports.io) 的可靠比分 ──
   let externalMatches: Awaited<ReturnType<typeof fetchExternalResults>> = []
   try {
     externalMatches = await fetchExternalResults()
   } catch {
-    console.warn("⚠️ [HistoricalContext] 外部 API 不可用，降級至本地 DB")
+    console.warn("⚠️ [HistoricalContext] 外部 API 不可用，降級至 DB 快取")
   }
 
   if (externalMatches.length > 0) {
@@ -288,8 +345,8 @@ async function buildHistoricalContext(matches: Match[]): Promise<string> {
       if (recent.length > 0) {
         const form = recent
           .map((m) => {
-            const isHome = teamNameMatches(team, m.home_team.name)
-            const opponent = isHome ? m.away_team.name : m.home_team.name
+            const isHome = teamNameMatches(team, m.home_name!)
+            const opponent = isHome ? m.away_name! : m.home_name!
             const score = formatExternalResult(m)
             return `${isHome ? "[主]" : "[客]"} ${opponent} (${score})`
           })
@@ -304,7 +361,7 @@ async function buildHistoricalContext(matches: Match[]): Promise<string> {
         const h2hStr = h2h
           .map(
             (em) =>
-              `${em.home_team.name} ${formatExternalResult(em)} ${em.away_team.name}`
+              `${em.home_name!} ${formatExternalResult(em)} ${em.away_name!}`
           )
           .join(" | ")
         lines.push(`⚔ ${m.homeTeam} vs ${m.awayTeam} 往績: ${h2hStr}`)
@@ -314,25 +371,30 @@ async function buildHistoricalContext(matches: Match[]): Promise<string> {
     return lines.join("\n")
   }
 
-  // ── Fallback: 外部 API 無資料時降級至本地 DB ──
-  console.log("📦 [HistoricalContext] 外部 API 無資料，使用本地 DB")
-  const finishedMatches = await prisma.match.findMany({
-    where: { status: "finished", result: { not: null } },
-    orderBy: { startTime: "desc" },
-    take: 50,
-  })
-  if (finishedMatches.length === 0) return ""
+  // ── Fallback: 外部 API 無資料時降級至 ExternalDataCache ──
+  console.log("📦 [HistoricalContext] 外部 API 無資料，降級至 ExternalDataCache")
+  try {
+    const dbCache = await prisma.externalDataCache.findFirst({
+      orderBy: { fetchedAt: "desc" },
+    })
+    if (dbCache) {
+      const cachedMatches = JSON.parse(dbCache.data) as ExternalMatch[]
+      externalMatches = cachedMatches
+    }
+  } catch {
+    console.warn("⚠️ [HistoricalContext] ExternalDataCache 不可用")
+  }
+
+  if (externalMatches.length === 0) return ""
 
   for (const team of teamNames) {
-    const recent = finishedMatches
-      .filter((m) => m.homeTeam === team || m.awayTeam === team)
-      .slice(0, 5)
+    const recent = findTeamMatches(team, externalMatches).slice(0, 5)
     if (recent.length > 0) {
       const form = recent
         .map((m) => {
-          const isHome = m.homeTeam === team
-          const opponent = isHome ? m.awayTeam : m.homeTeam
-          const score = m.result || "?"
+          const isHome = teamNameMatches(team, m.home_name!)
+          const opponent = isHome ? m.away_name! : m.home_name!
+          const score = formatExternalResult(m)
           return `${isHome ? "[主]" : "[客]"} ${opponent} (${score})`
         })
         .join(" → ")
@@ -341,14 +403,13 @@ async function buildHistoricalContext(matches: Match[]): Promise<string> {
   }
 
   for (const m of matches) {
-    const h2h = finishedMatches.filter(
-      (fm) =>
-        (fm.homeTeam === m.homeTeam && fm.awayTeam === m.awayTeam) ||
-        (fm.homeTeam === m.awayTeam && fm.awayTeam === m.homeTeam)
-    )
+    const h2h = findH2HMatches(m.homeTeam, m.awayTeam, externalMatches)
     if (h2h.length > 0) {
       const h2hStr = h2h
-        .map((fm) => `${fm.homeTeam} ${fm.result} ${fm.awayTeam}`)
+        .map(
+          (em) =>
+            `${em.home_name!} ${formatExternalResult(em)} ${em.away_name!}`
+        )
         .join(" | ")
       lines.push(`⚔ ${m.homeTeam} vs ${m.awayTeam} 往績: ${h2hStr}`)
     }
@@ -381,37 +442,14 @@ async function settleStaleMatches(): Promise<void> {
 
   console.log(`[${HK_TIME()}] 🧹 [Cron Fetch] 發現 ${stale.length} 場過期比賽，標記為 finished...`)
 
-  const dateSet = new Set<string>()
   for (const m of stale) {
-    dateSet.add(formatDate(m.startTime))
-  }
-
-  const resultsMap = new Map<string, string>()
-  for (const date of dateSet) {
-    try {
-      const hist = await fetchHistoricMatchResults(date, date)
-      for (const r of hist) {
-        resultsMap.set(r.hkjcMatchId, `${r.homeScore}:${r.awayScore}`)
-      }
-    } catch {
-      // 歷史 API 可能尚無資料
-    }
-  }
-
-  let fixedCount = 0
-  for (const m of stale) {
-    const finalResult = m.hkjcMatchId ? resultsMap.get(m.hkjcMatchId) ?? undefined : undefined
     await prisma.match.update({
       where: { id: m.id },
-      data: {
-        status: "finished",
-        ...(finalResult ? { result: finalResult } : {}),
-      },
+      data: { status: "finished" },
     })
-    if (finalResult) fixedCount++
   }
 
-  console.log(`[${HK_TIME()}] ✅ [Cron Fetch] 已標記 ${stale.length} 場 finished (${fixedCount} 場補上最終比分)`)
+  console.log(`[${HK_TIME()}] ✅ [Cron Fetch] 已標記 ${stale.length} 場 finished`)
 }
 
 export function startMatchFetchCron(): void {

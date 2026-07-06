@@ -7,11 +7,21 @@ const deepseek = new OpenAI({
   maxRetries: 2,
 })
 
+interface TeamStats {
+  summary: string
+}
+
 interface MatchForAnalysis {
   homeTeam: string
   awayTeam: string
   startTime: Date
   oddsSummary?: string
+  /** 比賽階段（小組賽／16強／8強／4強／季軍戰／決賽） */
+  stage?: string
+  /** 主隊本屆世界盃戰績摘要 */
+  homeTeamStats?: string
+  /** 客隊本屆世界盃戰績摘要 */
+  awayTeamStats?: string
 }
 
 /**
@@ -28,8 +38,20 @@ export async function generateMatchAnalysis(
   const matchList = matches
     .map((m, i) => {
       let line = `${i + 1}. ${m.homeTeam} vs ${m.awayTeam}（${m.startTime.toLocaleString("zh-TW", { timeZone: "Asia/Hong_Kong" })}）`
+      if (m.stage) {
+        line += `\n   🏟 比賽階段：${m.stage}`
+      }
       if (m.oddsSummary) {
         line += `\n   賠率參考：${m.oddsSummary}`
+      }
+      if (m.homeTeamStats || m.awayTeamStats) {
+        line += `\n   📊 本屆世界盃戰績（真實數據，請以此為準）：`
+        if (m.homeTeamStats) {
+          line += `\n   ${m.homeTeam}：${m.homeTeamStats}`
+        }
+        if (m.awayTeamStats) {
+          line += `\n   ${m.awayTeam}：${m.awayTeamStats}`
+        }
       }
       return line
     })
@@ -37,25 +59,33 @@ export async function generateMatchAnalysis(
 
   const isSingle = matches.length === 1
 
-  const systemPrompt = `你是一位專業的 2026 世界盃足球分析師，擅長結合盤口數據與球隊資訊進行博弈預測。
+  const systemPrompt = `你是一位專業的 2026 世界盃足球分析師，擅長結合盤口數據與實際比賽數據進行博弈預測。
 
 任務：對每場提供的比賽生成結構化分析報告。
 
-請在分析前，基於你的知識庫簡要整理以下資訊：
-1. 兩隊最新 FIFA 排名
-2. 兩隊 2026 世界盃至今戰績與進球/失球數據
-3. 兩隊過往歷史交鋒紀錄（若無則明確寫「無正式交鋒紀錄」）
-4. 各隊 2-3 名關鍵球員及其當前狀態
-5. 所在小組晉級形勢
+【重要】你將在下方收到以下結構化數據，請**嚴格基於這些數據進行分析**，不要憑空臆測：
+- 比賽階段（小組賽第N輪 或 淘汰賽階段）
+- 兩隊在本屆世界盃的**真實完整戰績**（含進球/失球/勝平負）
+- 兩隊近 5 場各項賽事表現
+- 歷史交鋒紀錄（若有）
+
+對於以下資訊，你可以結合自身知識補充：
+- FIFA 排名
+- 關鍵球員狀態
+- 戰術風格與對位分析
 
 報告格式（繁體中文，每節簡潔）：
 
 ## [主隊] vs [客隊]
 
 ### 對戰背景
-- FIFA 排名、本屆戰績、小組形勢
-- 近 5 場表現簡述
-- 歷史交鋒（若無則明確寫「無正式交鋒紀錄」）
+- **比賽階段**：明確寫出這是小組賽第幾輪／16強／8強／4強／季軍戰／決賽
+- **FIFA 排名**與**本屆世界盃戰績**（使用下方提供的實際數據，含進球/失球）
+- **晉級形勢**：
+  - 若為小組賽：分析小組排名與出線條件
+  - 若為淘汰賽：分析兩隊晉級路徑，以及本場勝者將面對的下一輪對手
+- 近 5 場各項賽事表現簡述
+- 歷史交鋒（若數據中無則明確寫「無正式交鋒紀錄」）
 - 各隊 2-3 名關鍵球員狀態
 
 ### 賠率解讀
@@ -78,7 +108,7 @@ export async function generateMatchAnalysis(
   const prefix = isSingle ? "請分析以下比賽" : `以下有 ${matches.length} 場比賽，請為每場產出完整分析`
   let userPrompt = `${prefix}（所有時間為香港時間）：\n\n${matchList}`
   if (historicalContext) {
-    userPrompt += `\n\n--- 歷史數據參考 ---\n${historicalContext}`
+    userPrompt += `\n\n--- 近況與往績參考 ---\n${historicalContext}`
   }
   userPrompt += `\n\n請為以上比賽生成完整分析報告。`
 
