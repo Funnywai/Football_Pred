@@ -6,16 +6,22 @@ datasource db {
   provider = "sqlite"
 }
 
+/// HKJC 賽事賠率（僅儲存 odds 相關欄位，比賽結果由 external API 提供）
 model Match {
-  id             String    @id @default(uuid())
-  hkjcMatchId    String?   @unique
-  homeTeam       String
-  awayTeam       String
-  tournamentName String?
-  startTime      DateTime
-  status         String    @default("scheduled")
-  result         String?
-  oddsData       Json?
-  oddsUpdatedAt  DateTime?
-  createdAt      DateTime  @default(now())
+  id            String    @id @default(uuid())
+  hkjcMatchId   String?   @unique
+  homeTeam      String
+  awayTeam      String
+  startTime     DateTime
+  status        String    @default("scheduled")
+  oddsData      Json?
+  oddsUpdatedAt DateTime?
+  createdAt     DateTime  @default(now())
+}
+
+/// api-sports.io 外部賽事資料快取（整包 JSON，避免重複 fetch）
+model ExternalDataCache {
+  id        String   @id @default(uuid())
+  data      String   /// JSON blob of ExternalMatch[]
+  fetchedAt DateTime @default(now())
 }
