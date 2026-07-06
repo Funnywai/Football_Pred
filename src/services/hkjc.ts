@@ -175,6 +175,45 @@ export async function fetchHistoricMatchResults(
   })
 }
 
+/** HKJC 歷史賽事完整資料（用於建立 ExternalMatch） */
+export interface HistoricMatchFull {
+  homeTeam: string
+  awayTeam: string
+  matchDate: string
+  homeScore: number
+  awayScore: number
+}
+
+/**
+ * 從 HKJC 歷史 API 獲取世界盃完整賽果（含隊名、日期、比分）。
+ * 用於建立 ExternalMatch 供戰績統計與 H2H 分析。
+ */
+export async function fetchAllWorldCupResults(): Promise<HistoricMatchFull[]> {
+  const matches = await api.getHistoricFootballMatches({
+    startDate: "2026-06-11",
+    endDate: "2026-07-19",
+  })
+
+  return matches
+    .filter((m) => {
+      const t = (m.tournament?.name_ch || "").toLowerCase()
+      return t.includes("世盃") || t.includes("world cup")
+    })
+    .flatMap((m) => {
+      const r = m.results?.[0]
+      if (!r) return []
+      return [
+        {
+          homeTeam: m.homeTeam.name_en,
+          awayTeam: m.awayTeam.name_en,
+          matchDate: m.matchDate,
+          homeScore: r.homeResult,
+          awayScore: r.awayResult,
+        },
+      ]
+    })
+}
+
 /**
  * 從 HKJC 獲取單場賽事各玩法的派彩結果（winOrd）。
  * 用於驗證結算或取得角球細項數據。
