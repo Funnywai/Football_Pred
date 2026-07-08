@@ -5,8 +5,41 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side, numbers
 from openpyxl.utils import get_column_letter
 from collections import defaultdict
+import random
 
 INPUT = '/Users/Kenny/OneDrive/WorldCup/documents/WorldCup.xlsx'
+
+def run_monte_carlo(ds_bets, n_simulations=10000):
+    """Simulate dynamic bankroll: bet 5% of current bankroll, order matters."""
+    placed = [b for b in ds_bets if b['wager'] > 0 and b['result'] != 0]
+    if not placed:
+        return {'median': 300, 'p5': 300, 'p95': 300, 'prob_profit': 0, 'prob_ruin': 0}
+    
+    results = []
+    for _ in range(n_simulations):
+        random.shuffle(placed)
+        bankroll = 300.0
+        for b in placed:
+            stake = round(bankroll * 0.05 / 10) * 10
+            if stake < 10:
+                stake = 10
+            if b['result'] == 1:
+                bankroll += stake * (b['odds'] - 1)
+            else:
+                bankroll -= stake
+            if bankroll < 10:
+                bankroll = 10
+        results.append(bankroll)
+    
+    results.sort()
+    return {
+        'median': results[len(results)//2],
+        'p5': results[int(len(results)*0.05)],
+        'p95': results[int(len(results)*0.95)],
+        'prob_profit': sum(1 for r in results if r > 300) / len(results),
+        'prob_ruin': sum(1 for r in results if r < 30) / len(results),
+        'avg': sum(results) / len(results),
+    }
 
 def compute_improved_kelly(odds, confidence, p5, p4, p3, bankroll=300):
     if odds is None or odds <= 1 or confidence is None:
@@ -308,64 +341,79 @@ def write_confidence_analysis(wb, ds, actual_wr):
     auto_width(ws)
 
 
-def write_strategy_comparison(wb):
+def write_strategy_comparison(wb, ds, wc):
     ws = wb.create_sheet("策略比較")
     
     ws.merge_cells('A1:G1')
     ws['A1'] = "策略回測比較"
     ws['A1'].font = TITLE_FONT
     
+    ds_placed = [b for b in ds if b['wager'] > 0]
+    ds_pnl = sum(b['pnl'] for b in ds_placed)
+    ds_stake = sum(b['wager'] for b in ds_placed)
+    ds_wins = sum(1 for b in ds_placed if b['result'] == 1)
+    
+    wc_pnl = sum(b['pnl'] for b in wc) + sum(b['cashout'] for b in wc)
+    wc_stake = sum(b['stake'] for b in wc)
+    wc_wins = sum(1 for b in wc if b['result'] == 1)
+    
+    all_ds = [b for b in ds if b['result'] != 0]
+    flat_pnl = sum((b['odds']-1)*20 if b['result']==1 else -20 for b in all_ds)
+    flat_stake = len(all_ds) * 20
+    flat_wins = sum(1 for b in all_ds if b['result']==1)
+    
     r = 3
     ws.cell(row=r, column=1, value="回測結果（基於 Deepseek 全量推薦）").font = SECTION_FONT
     r += 1
-    headers = ["策略", "總盈虧", "下注數", "勝率", "ROI", "最終本金", "Sharpe-like"]
+    headers = ["策略", "總盈虧", "下注數", "勝率", "ROI", "最終本金"]
     for c, h in enumerate(headers, 1):
         ws.cell(row=r, column=c, value=h)
-    style_header(ws, r, 7)
+    style_header(ws, r, 6)
     r += 1
     
     strategies = [
-        ("現有 Kelly (有後見偏誤)", 67.5, 45, 0.600, 0.057, 367.5, 0.42),
-        ("改良 Kelly (f=0.25, rolling p)", 60.0, 169, 0.574, 0.018, 360.0, 0.15),
-        ("固定注碼 $20", 60.0, 169, 0.574, 0.018, 360.0, 0.12),
-        ("固定注碼 $10", 30.0, 169, 0.574, 0.018, 330.0, 0.12),
-        ("手動投注 (你的實際)", -46.6, 46, 0.457, -0.082, 253.4, -0.35),
+        ("DS實際 (Excel公式)", ds_pnl, len(ds_placed),
+         ds_wins/len(ds_placed) if ds_placed else 0,
+         ds_pnl/ds_stake if ds_stake else 0, 300 + ds_pnl),
+        ("固定注碼 $20 (全推薦)", flat_pnl, len(all_ds),
+         flat_wins/len(all_ds) if all_ds else 0,
+         flat_pnl/flat_stake if flat_stake else 0, 300 + flat_pnl),
+        ("手動投注 (實際記錄)", wc_pnl, len(wc),
+         wc_wins/len(wc) if wc else 0,
+         wc_pnl/wc_stake if wc_stake else 0, 300 + wc_pnl),
     ]
     
     for s in strategies:
         for c, v in enumerate(s, 1):
             cell = ws.cell(row=r, column=c, value=v)
-            if c in (4, 5):  # 勝率, ROI
+            if c in (4, 5):
                 cell.number_format = '0.0%'
         row_fill = GREEN_FILL if s[1] > 0 else RED_FILL
-        style_row(ws, r, 7, fill=row_fill)
+        style_row(ws, r, 6, fill=row_fill)
         r += 1
     
+    # Monte Carlo
     r += 1
-    ws.cell(row=r, column=1, value="蒙地卡羅模擬（10,000 次隨機排序）").font = SECTION_FONT
+    ws.cell(row=r, column=1, value="蒙地卡羅模擬（10,000 次隨機排序 DS 實際下注）").font = SECTION_FONT
     r += 1
-    mc_headers = ["策略", "平均最終本金", "中位數", "最差 5%", "最佳 5%", "P(獲利)", "P(破產)"]
+    mc_headers = ["", "平均最終本金", "中位數", "最差 5%", "最佳 5%", "P(獲利)"]
     for c, h in enumerate(mc_headers, 1):
         ws.cell(row=r, column=c, value=h)
-    style_header(ws, r, 7)
+    style_header(ws, r, 6)
     r += 1
     
-    mc_data = [
-        ("現有 Kelly（後見偏誤）", 381.4, 382.1, 343.1, 417.3, "100.0%", "0.00%"),
-        ("改良 Kelly（rolling p）", 373.2, 395.4, 210.0, 531.0, "67.4%", "0.00%"),
-    ]
-    for d in mc_data:
-        for c, v in enumerate(d, 1):
-            ws.cell(row=r, column=c, value=v)
-        style_row(ws, r, 7)
-        r += 1
+    mc = run_monte_carlo(ds)
+    mc_row = ["DS策略 (路徑相依)", mc['avg'], mc['median'], mc['p5'], mc['p95'], mc['prob_profit']]
+    for c, v in enumerate(mc_row, 1):
+        cell = ws.cell(row=r, column=c, value=v)
+        if c == 6:
+            cell.number_format = '0.0%'
+    style_row(ws, r, 6)
+    r += 1
     
     r += 1
-    ws.cell(row=r, column=1, value="⚠️ 現有 Kelly 的 P(獲利)=100% 是因為 p 值用了全部數據回算（後見偏誤），不代表真實穩賺。改良 Kelly 的 67.4% 較接近真實。").font = Font(size=10, italic=True, color="CC0000")
-    
-    ws.column_dimensions['A'].width = 35
-    for c in 'BCDEFG':
-        ws.column_dimensions[c].width = 18
+    ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+    ws.cell(row=r, column=1, value="蒙地卡羅：將所有實際下注隨機打亂順序，觀察本金的最終分佈。反映不同下注順序對資金曲線的影響。").font = Font(size=10, italic=True, color="666666")
 
 
 def write_bet_type_analysis(wb, wc):
@@ -678,7 +726,7 @@ def main():
     
     write_summary(wb, ds, wc)
     write_confidence_analysis(wb, ds, actual_wr)
-    write_strategy_comparison(wb)
+    write_strategy_comparison(wb, ds, wc)
     write_bet_type_analysis(wb, wc)
     write_kelly_formula(wb)
     write_overlap_analysis(wb, ds, wc)
