@@ -24,12 +24,15 @@ def load_data(filepath):
     # --- Deepseek 分析 ---
     ws_ds = wb['Deepseek 分析']
     ds_bets = []
+    # Columns: A=日期 B=主隊 C=客隊 D=投注類別(新) E=注項(新)
+    #           F=推薦方向 G=倍率 H=信心指數 I=贏輸 J=(空) K=Weighted Bet L=盈虧
     for row in ws_ds.iter_rows(min_row=2, max_row=ws_ds.max_row, values_only=True):
         if row[0] is None:  # No date = empty row
             continue
-        date, home, away, direction, odds, confidence, result = row[0:7]
-        wager = row[8] if len(row) > 8 else None   # Column I
-        pnl = row[9] if len(row) > 9 else None      # Column J
+        date, home, away = row[0], row[1], row[2]
+        direction, odds, confidence, result = row[5], row[6], row[7], row[8]
+        wager = row[10] if len(row) > 10 else None   # Column K
+        pnl = row[11] if len(row) > 11 else None      # Column L
         ds_bets.append({
             'date': str(date)[:10] if date else None,
             'home': str(home).strip() if home else '',

@@ -106,16 +106,18 @@ def load_data():
     for row in ws.iter_rows(min_row=2, max_row=ws.max_row, values_only=True):
         if row[0] is None:
             continue
-        wager = float(row[8]) if row[8] else 0
-        pnl = float(row[9]) if row[9] else 0
+        # Columns: A=日期 B=主隊 C=客隊 D=投注類別(新) E=注項(新)
+        #           F=推薦方向 G=倍率 H=信心指數 I=贏輸 J=(空) K=Weighted Bet L=盈虧
+        wager = float(row[10]) if row[10] else 0
+        pnl = float(row[11]) if row[11] else 0
         ds_bets.append({
             'date': str(row[0])[:10],
             'home': str(row[1] or '').strip(),
             'away': str(row[2] or '').strip(),
-            'direction': str(row[3] or '').strip(),
-            'odds': float(row[4]) if row[4] else 0,
-            'confidence': int(row[5]) if row[5] else 0,
-            'result': int(row[6]) if row[6] else 0,
+            'direction': str(row[5] or '').strip(),
+            'odds': float(row[6]) if row[6] else 0,
+            'confidence': int(row[7]) if row[7] else 0,
+            'result': int(row[8]) if row[8] else 0,
             'wager': wager,
             'pnl': pnl,
         })
