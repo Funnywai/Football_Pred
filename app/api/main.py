@@ -8,6 +8,7 @@ from app.db.session import Database
 from app.providers.football_data.provider import FootballDataProvider
 from app.providers.hkjc.client import HkjcGraphQLClient
 from app.providers.hkjc.provider import HkjcProvider
+from app.scheduler import build_scheduler
 
 
 def create_app(settings: Settings | None = None, db: Database | None = None) -> FastAPI:
@@ -28,9 +29,21 @@ def create_app(settings: Settings | None = None, db: Database | None = None) -> 
         app.state.hkjc_client = hkjc_client
         app.state.hkjc_provider = HkjcProvider(hkjc_client)
         app.state.football_data_provider = FootballDataProvider(settings.football_data_base)
+        scheduler = None
+        if settings.enable_scheduler:
+            scheduler = build_scheduler(
+                settings,
+                app.state.db.session_factory,
+                app.state.hkjc_provider,
+                app.state.football_data_provider,
+            )
+            scheduler.start()
+        app.state.scheduler = scheduler
         try:
             yield
         finally:
+            if scheduler is not None:
+                scheduler.shutdown(wait=False)
             await hkjc_client.aclose()
             await app.state.football_data_provider.aclose()
             if db is None:
