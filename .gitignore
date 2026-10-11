@@ -7,4 +7,9 @@ dev.db
 *.xlsx
 analysis_summary.json
 .DS_Store
-__pycache__/*
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
