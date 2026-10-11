@@ -30,6 +30,11 @@ class _FakeProvider:
         return self._results
 
 
+class _RaisingProvider(_FakeProvider):
+    async def fetch_results(self, date_from, date_to):
+        raise RuntimeError("hkjc unavailable")
+
+
 async def _db(tmp_path) -> Database:
     db = Database(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     async with db.engine.begin() as conn:
@@ -54,6 +59,28 @@ async def _seed_match(db: Database, kickoff: datetime) -> int:
             hkjc_match_id="M-1001",
             kickoff_time=kickoff,
             status="finished",
+            home_team_id=home.id,
+            away_team_id=away.id,
+        )
+        session.add(match)
+        await session.commit()
+        return match.id
+
+
+async def _add_match(db: Database, kickoff: datetime, hkjc_match_id: str, status: str = "finished") -> int:
+    async with db.session_factory() as session:
+        league = (await session.execute(select(League).where(League.code == "EPL"))).scalar_one()
+        season = (await session.execute(select(Season))).scalars().first()
+        home = (
+            await session.execute(select(Team).where(Team.name_en == "Manchester United"))
+        ).scalar_one()
+        away = (await session.execute(select(Team).where(Team.name_en == "Liverpool"))).scalar_one()
+        match = Match(
+            season_id=season.id,
+            league_id=league.id,
+            hkjc_match_id=hkjc_match_id,
+            kickoff_time=kickoff,
+            status=status,
             home_team_id=home.id,
             away_team_id=away.id,
         )
@@ -222,5 +249,82 @@ async def test_fallback_upsert_skips_existing_hkjc_row(tmp_path):
             result = (await session.execute(select(Result))).scalar_one()
             assert result.source == "hkjc"
             assert result.home_score == 0
+    finally:
+        await db.dispose()
+
+
+async def test_hkjc_failure_does_not_block_fallback(tmp_path):
+    db = await _db(tmp_path)
+    try:
+        now = datetime(2026, 10, 12, 22, 0, tzinfo=UTC)
+        await _seed_match(db, datetime(2026, 10, 12, 11, 30, tzinfo=UTC))
+        fallback = _FakeProvider(
+            [
+                ResultRecord(
+                    match_date=date(2026, 10, 12),
+                    home_team_name="Man Utd",
+                    away_team_name="Liverpool",
+                    home_score=2,
+                    away_score=1,
+                    source="football_data",
+                )
+            ]
+        )
+        reconciler = ResultReconciler(
+            db.session_factory, _RaisingProvider([]), fallback, Settings(_env_file=None)
+        )
+        assert await reconciler.run(now=now) == 1
+        async with db.session_factory() as session:
+            result = (await session.execute(select(Result))).scalar_one()
+            assert result.source == "football_data"
+            assert result.home_score == 2
+    finally:
+        await db.dispose()
+
+
+async def test_unresolved_flag_is_deduplicated(tmp_path):
+    db = await _db(tmp_path)
+    try:
+        now = datetime(2026, 10, 15, 12, 0, tzinfo=UTC)
+        await _seed_match(db, datetime(2026, 10, 12, 11, 30, tzinfo=UTC))
+        reconciler = ResultReconciler(
+            db.session_factory, _FakeProvider([]), _FakeProvider([]), Settings(_env_file=None)
+        )
+        await reconciler.run(now=now)
+        await reconciler.run(now=now)
+        async with db.session_factory() as session:
+            runs = (
+                await session.execute(select(IngestionRun).where(IngestionRun.job == "manual_review"))
+            ).scalars().all()
+            assert len(runs) == 1
+        await _add_match(db, datetime(2026, 10, 12, 12, 30, tzinfo=UTC), "M-1002")
+        await reconciler.run(now=now)
+        async with db.session_factory() as session:
+            runs = (
+                await session.execute(select(IngestionRun).where(IngestionRun.job == "manual_review"))
+            ).scalars().all()
+            assert len(runs) == 2
+    finally:
+        await db.dispose()
+
+
+async def test_non_data_quality_status_is_not_flagged(tmp_path):
+    db = await _db(tmp_path)
+    try:
+        now = datetime(2026, 10, 15, 12, 0, tzinfo=UTC)
+        match_id = await _seed_match(db, datetime(2026, 10, 12, 11, 30, tzinfo=UTC))
+        async with db.session_factory() as session:
+            match = await session.get(Match, match_id)
+            match.status = "postponed"
+            await session.commit()
+        reconciler = ResultReconciler(
+            db.session_factory, _FakeProvider([]), _FakeProvider([]), Settings(_env_file=None)
+        )
+        await reconciler.run(now=now)
+        async with db.session_factory() as session:
+            runs = (
+                await session.execute(select(IngestionRun).where(IngestionRun.job == "manual_review"))
+            ).scalars().all()
+            assert runs == []
     finally:
         await db.dispose()

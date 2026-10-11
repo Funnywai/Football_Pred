@@ -1,18 +1,23 @@
+import json
+import logging
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
-from app.db.models import Match, Result, Team
+from app.db.models import IngestionRun, Match, Result, Team
 from app.providers.base import Provider, ResultRecord
 from app.services.alias import TeamMatcher
 from app.services.runs import flag_manual_review, track_run
+
+logger = logging.getLogger(__name__)
 
 HKJC_LOOKBACK_DAYS = 2
 FALLBACK_AFTER_HOURS = 4
 MANUAL_REVIEW_AFTER_HOURS = 48
 FALLBACK_LOOKBACK_DAYS = 7
+NON_DATA_QUALITY_STATUSES = ("postponed", "cancelled", "abandoned")
 
 
 class ResultReconciler:
@@ -32,9 +37,20 @@ class ResultReconciler:
 
     async def run(self, now: datetime | None = None) -> int:
         moment = now or datetime.now(UTC)
-        hkjc_count = await self._reconcile_hkjc(moment)
-        fallback_count = await self._reconcile_fallback(moment)
-        await self._flag_unresolved(moment)
+        hkjc_count = 0
+        fallback_count = 0
+        try:
+            hkjc_count = await self._reconcile_hkjc(moment)
+        except Exception:
+            logger.exception("HKJC reconciliation failed; continuing with fallback")
+        try:
+            fallback_count = await self._reconcile_fallback(moment)
+        except Exception:
+            logger.exception("Fallback reconciliation failed; continuing with manual review")
+        try:
+            await self._flag_unresolved(moment)
+        except Exception:
+            logger.exception("Manual-review flagging failed")
         return hkjc_count + fallback_count
 
     async def _reconcile_hkjc(self, now: datetime) -> int:
@@ -172,7 +188,27 @@ class ResultReconciler:
                 await session.execute(
                     select(Match.id)
                     .outerjoin(Result, Result.match_id == Match.id)
-                    .where(Result.id.is_(None), Match.kickoff_time < cutoff)
+                    .where(
+                        Result.id.is_(None),
+                        Match.kickoff_time < cutoff,
+                        Match.status.not_in(NON_DATA_QUALITY_STATUSES),
+                    )
                 )
             ).scalars().all()
+            latest = (
+                await session.execute(
+                    select(IngestionRun)
+                    .where(IngestionRun.job == "manual_review")
+                    .order_by(IngestionRun.id.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+        current_ids = set(unresolved)
+        if latest is not None and latest.error:
+            try:
+                stored_ids = set(json.loads(latest.error).get("unresolved_match_ids", []))
+            except (ValueError, TypeError, AttributeError):
+                stored_ids = None
+            if stored_ids is not None and stored_ids == current_ids:
+                return
         await flag_manual_review(self._session_factory, "manual_review", list(unresolved))
