@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.log
+dev.db
+.omo/
+*.xlsx
+analysis_summary.json
+.DS_Store
+__pycache__/*
