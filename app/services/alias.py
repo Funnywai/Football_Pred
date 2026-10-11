@@ -39,8 +39,13 @@ class TeamMatcher:
         for team in self._teams:
             candidates = [team.name_en, team.name_ch, *(team.aliases or [])]
             for candidate in candidates:
-                if candidate:
-                    self._by_key.setdefault(normalize_team_name(candidate), team)
+                if not candidate:
+                    continue
+                key = normalize_team_name(candidate)
+                self._by_key.setdefault(key, team)
+                canonical = self._alias_map.get(key)
+                if canonical:
+                    self._by_key.setdefault(normalize_team_name(canonical), team)
 
     def match(self, name: str) -> Any | None:
         key = normalize_team_name(name)

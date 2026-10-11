@@ -56,3 +56,10 @@ def test_match_fuzzy_typo():
 def test_match_returns_none_for_unknown():
     matcher = TeamMatcher(_teams())
     assert matcher.match("Real Madrid") is None
+
+
+def test_match_bridges_backfill_names_to_canonical():
+    matcher = TeamMatcher([_Team("Man City"), _Team("Man United"), _Team("Tottenham")])
+    assert matcher.match("Manchester City").name_en == "Man City"
+    assert matcher.match("Manchester United").name_en == "Man United"
+    assert matcher.match("Tottenham Hotspur").name_en == "Tottenham"
