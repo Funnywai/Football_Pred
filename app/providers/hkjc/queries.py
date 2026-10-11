@@ -1,0 +1,231 @@
+"""Exact HKJC GraphQL documents.
+
+Copied byte-for-byte from Bobosky2005/hkjc-api (src/query/footballMatchesQuery.ts,
+commit 142ecf4). HKJC rejects ad-hoc or reduced documents with WHITELIST_ERROR,
+so do not edit the field selections below.
+"""
+
+FOOTBALL_MATCHES_QUERY = """
+query matchList($startIndex: Int, $endIndex: Int,$startDate: String, $endDate: String, $matchIds: [String], $tournIds: [String], $fbOddsTypes: [FBOddsType]!, $fbOddsTypesM: [FBOddsType]!, $inplayOnly: Boolean, $featuredMatchesOnly: Boolean, $frontEndIds: [String], $earlySettlementOnly: Boolean, $showAllMatch: Boolean) {
+    matches(startIndex: $startIndex,endIndex: $endIndex, startDate: $startDate, endDate: $endDate, matchIds: $matchIds, tournIds: $tournIds, fbOddsTypes: $fbOddsTypesM, inplayOnly: $inplayOnly, featuredMatchesOnly: $featuredMatchesOnly, frontEndIds: $frontEndIds, earlySettlementOnly: $earlySettlementOnly, showAllMatch: $showAllMatch) {
+      id
+      frontEndId
+      matchDate
+      kickOffTime
+      status
+      updateAt
+      sequence
+      esIndicatorEnabled
+      homeTeam {
+        id
+        name_en
+        name_ch
+      }
+      awayTeam {
+        id
+        name_en
+        name_ch
+      }
+      tournament {
+        id
+        frontEndId
+        nameProfileId
+        isInteractiveServiceAvailable
+        code
+        name_en
+        name_ch
+      }
+      isInteractiveServiceAvailable
+      inplayDelay
+      venue {
+        code
+        name_en
+        name_ch
+      }
+      tvChannels {
+        code
+        name_en
+        name_ch
+      }
+      liveEvents {
+        id
+        code
+      }
+      featureStartTime
+      featureMatchSequence
+      poolInfo {
+        normalPools
+        inplayPools
+        sellingPools
+        ntsInfo
+        entInfo
+        definedPools
+      }
+      runningResult {
+        homeScore
+        awayScore
+        corner
+        homeCorner
+        awayCorner
+      }
+      runningResultExtra {
+        homeScore
+        awayScore
+        corner
+        homeCorner
+        awayCorner
+      }
+      adminOperation {
+        remark {
+          typ
+        }
+      }
+      foPools(fbOddsTypes: $fbOddsTypes) {
+        id
+        status
+        oddsType
+        instNo
+        inplay
+        name_ch
+        name_en
+        updateAt
+        expectedSuspendDateTime
+        lines {
+          lineId
+          status
+          condition
+          main
+          combinations {
+            combId
+            str
+            status
+            offerEarlySettlement
+            currentOdds
+            selections {
+              selId
+              str
+              name_ch
+              name_en
+            }
+          }
+        }
+      }
+    }
+  }
+"""
+
+HISTORIC_FOOTBALL_MATCHES_QUERY = """
+query matchResults($startDate: String, $endDate: String, $startIndex: Int,$endIndex: Int,$teamId: String) {
+    timeOffset {
+    fb
+    }
+    matchNumByDate(startDate: $startDate, endDate: $endDate, teamId: $teamId) {
+    total
+    }
+    matches: matchResult(startDate: $startDate, endDate: $endDate, startIndex: $startIndex,endIndex: $endIndex, teamId: $teamId) {
+    id
+    status
+    frontEndId
+    matchDayOfWeek
+    matchNumber
+    matchDate
+    kickOffTime
+    sequence
+    homeTeam {
+        id
+        name_en
+        name_ch
+    }
+    awayTeam {
+        id
+        name_en
+        name_ch
+    }
+    tournament {
+        code
+        name_en
+        name_ch
+    }
+    results {
+        homeResult
+        awayResult
+        ttlCornerResult
+        resultConfirmType
+        payoutConfirmed
+        stageId
+        resultType
+        sequence
+    }
+    poolInfo {
+        payoutRefundPools
+        refundPools
+        ntsInfo
+        entInfo
+        definedPools
+        ngsInfo {
+        str
+        name_en
+        name_ch
+        instNo
+        }
+        agsInfo {
+        str
+        name_en
+        name_ch
+        }
+    }
+    }
+}
+"""
+
+HISTORIC_FOOTBALL_MATCH_DETAILS_QUERY = """
+query matchResultDetails($matchId: String, $fbOddsTypes: [FBOddsType]!) {
+  matches: matchResult(matchId: $matchId) {
+    id
+    foPools(fbOddsTypes: $fbOddsTypes, resultOnly: true) {
+      id
+      status
+      oddsType
+      instNo
+      name_ch
+      name_en
+      lines(resultOnly: true) {
+        combinations {
+          str
+          status
+          winOrd
+          selections {
+            selId
+            str
+            name_ch
+            name_en
+          }
+        }
+      }
+    }
+    additionalResults {
+      resSetId
+      results {
+        awayResult
+        homeResult
+        ttlCornerResult
+        mask
+        payoutConfirmed
+        resultConfirmType
+        resultType
+        sequence
+        stageId
+      }
+    }
+  }
+}
+"""
+
+# The reference client's default set (4 types) is batch 1; batch 2 carries the
+# remaining spec odds types. Each call stays <= 4 types (verified per-call cap).
+DEFAULT_ODDS_TYPES: list[str] = ["HAD", "HDC", "HIL", "CRS"]
+
+ODDS_TYPE_BATCHES: list[list[str]] = [
+    ["HAD", "HDC", "HIL", "CRS"],
+    ["HHA", "CHD", "CHL"],
+]
