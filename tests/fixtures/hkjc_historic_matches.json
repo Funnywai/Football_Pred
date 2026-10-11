@@ -1,0 +1,76 @@
+{
+  "data": {
+    "timeOffset": {"fb": 8},
+    "matchNumByDate": {"total": 2},
+    "matches": [
+      {
+        "id": "M-1001",
+        "status": "FINISHED",
+        "frontEndId": "FB1001",
+        "matchDayOfWeek": "MON",
+        "matchNumber": 1,
+        "matchDate": "2026-10-12",
+        "kickOffTime": "2026-10-12T19:30:00+08:00",
+        "sequence": 1,
+        "homeTeam": {"id": "T-1", "name_en": "Manchester United", "name_ch": "曼聯"},
+        "awayTeam": {"id": "T-2", "name_en": "Liverpool", "name_ch": "利物浦"},
+        "tournament": {"code": "EPL", "name_en": "English Premier League", "name_ch": "英格蘭超級聯賽"},
+        "results": [
+          {
+            "homeResult": "0",
+            "awayResult": "0",
+            "ttlCornerResult": "9",
+            "resultConfirmType": "CONFIRMED",
+            "payoutConfirmed": true,
+            "stageId": null,
+            "resultType": "FINAL",
+            "sequence": 1
+          }
+        ],
+        "poolInfo": {
+          "payoutRefundPools": [],
+          "refundPools": [],
+          "ntsInfo": null,
+          "entInfo": null,
+          "definedPools": [],
+          "ngsInfo": null,
+          "agsInfo": null
+        }
+      },
+      {
+        "id": "M-1002",
+        "status": "FINISHED",
+        "frontEndId": "FB1002",
+        "matchDayOfWeek": "MON",
+        "matchNumber": 2,
+        "matchDate": "2026-10-12",
+        "kickOffTime": "2026-10-12T22:00:00+08:00",
+        "sequence": 2,
+        "homeTeam": {"id": "T-3", "name_en": "Arsenal", "name_ch": "阿仙奴"},
+        "awayTeam": {"id": "T-4", "name_en": "Chelsea", "name_ch": "車路士"},
+        "tournament": {"code": "EPL", "name_en": "English Premier League", "name_ch": "英格蘭超級聯賽"},
+        "results": [
+          {
+            "homeResult": "2",
+            "awayResult": "1",
+            "ttlCornerResult": "11",
+            "resultConfirmType": "CONFIRMED",
+            "payoutConfirmed": false,
+            "stageId": null,
+            "resultType": "FINAL",
+            "sequence": 1
+          }
+        ],
+        "poolInfo": {
+          "payoutRefundPools": [],
+          "refundPools": [],
+          "ntsInfo": null,
+          "entInfo": null,
+          "definedPools": [],
+          "ngsInfo": null,
+          "agsInfo": null
+        }
+      }
+    ]
+  }
+}

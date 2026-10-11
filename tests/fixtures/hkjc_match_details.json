@@ -1,0 +1,47 @@
+{
+  "data": {
+    "matches": {
+      "id": "M-1001",
+      "foPools": [
+        {
+          "id": "POOL-HAD-1",
+          "status": "SETTLED",
+          "oddsType": "HAD",
+          "instNo": 1,
+          "name_ch": "主客和",
+          "name_en": "Home/Away/Draw",
+          "lines": [
+            {
+              "combinations": [
+                {
+                  "str": "H",
+                  "status": "SETTLED",
+                  "winOrd": "H",
+                  "selections": [
+                    {"selId": "S1", "str": "H", "name_ch": "主", "name_en": "Home"}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "additionalResults": {
+        "resSetId": "RS-1",
+        "results": [
+          {
+            "awayResult": "0",
+            "homeResult": "0",
+            "ttlCornerResult": "9",
+            "mask": null,
+            "payoutConfirmed": true,
+            "resultConfirmType": "CONFIRMED",
+            "resultType": "FINAL",
+            "sequence": 1,
+            "stageId": null
+          }
+        ]
+      }
+    }
+  }
+}
