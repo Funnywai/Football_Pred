@@ -96,6 +96,9 @@ class HkjcGraphQLClient:
     @staticmethod
     def _decode_json(response: httpx.Response) -> dict[str, Any]:
         content = response.content
-        if content[:2] == b"\x1f\x8b":
-            content = gzip.decompress(content)
-        return json.loads(content.decode("utf-8"))
+        try:
+            if content[:2] == b"\x1f\x8b":
+                content = gzip.decompress(content)
+            return json.loads(content.decode("utf-8"))
+        except (gzip.BadGzipFile, OSError, ValueError) as exc:
+            raise HkjcGraphQLError(f"Failed to decode HKJC response: {exc}") from exc

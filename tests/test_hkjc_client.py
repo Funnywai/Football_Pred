@@ -50,6 +50,16 @@ async def test_execute_decodes_gzip_body_without_content_encoding_header():
     await client.aclose()
 
 
+async def test_execute_raises_on_non_json_200_body():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"<html>blocked</html>")
+
+    client = _client(handler)
+    with pytest.raises(HkjcGraphQLError):
+        await client.execute("query { x }", {})
+    await client.aclose()
+
+
 async def test_execute_retries_on_500_then_succeeds():
     calls = {"n": 0}
 
