@@ -1,3 +1,5 @@
+import hashlib
+
 from app.providers.hkjc.queries import (
     DEFAULT_ODDS_TYPES,
     FOOTBALL_MATCHES_QUERY,
@@ -5,6 +7,27 @@ from app.providers.hkjc.queries import (
     HISTORIC_FOOTBALL_MATCHES_QUERY,
     ODDS_TYPE_BATCHES,
 )
+
+EXPECTED_SHA256 = {
+    "FOOTBALL_MATCHES_QUERY": "e408e1391dac6267269b9022f2b30456fc5cd13ddeeb3825ec2913828a5df98d",
+    "HISTORIC_FOOTBALL_MATCHES_QUERY": "5885c2518c98cd5d764810b11706bc52205cf7856c69c19c8896ccaed1e83e74",
+    "HISTORIC_FOOTBALL_MATCH_DETAILS_QUERY": "1821fb00a2e6cc067afa33fa9cae1509e6a154c74d9f276ddd807d8ecd9e2262",
+}
+
+
+def test_query_documents_are_byte_exact():
+    assert (
+        hashlib.sha256(FOOTBALL_MATCHES_QUERY.encode()).hexdigest()
+        == EXPECTED_SHA256["FOOTBALL_MATCHES_QUERY"]
+    )
+    assert (
+        hashlib.sha256(HISTORIC_FOOTBALL_MATCHES_QUERY.encode()).hexdigest()
+        == EXPECTED_SHA256["HISTORIC_FOOTBALL_MATCHES_QUERY"]
+    )
+    assert (
+        hashlib.sha256(HISTORIC_FOOTBALL_MATCH_DETAILS_QUERY.encode()).hexdigest()
+        == EXPECTED_SHA256["HISTORIC_FOOTBALL_MATCH_DETAILS_QUERY"]
+    )
 
 
 def test_football_matches_query_shape():
