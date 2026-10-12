@@ -254,8 +254,8 @@ def _frame_for_split(match_ids: list[int], per_match: int) -> pd.DataFrame:
 
 
 def test_temporal_split_keeps_a_match_in_one_split():
-    frame = _frame_for_split(list(range(20)), per_match=2)   # 40 rows, 2 per match
+    frame = _frame_for_split(list(range(15)), per_match=2)   # 30 rows, 2 per match
     train, calibration, evaluation = temporal_split(frame)
     seen = [set(part["match_id"]) for part in (train, calibration, evaluation)]
     assert not (seen[0] & seen[1] or seen[0] & seen[2] or seen[1] & seen[2])
-    assert sorted(seen[0] | seen[1] | seen[2]) == list(range(20))
+    assert sorted(seen[0] | seen[1] | seen[2]) == list(range(15))
