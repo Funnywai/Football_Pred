@@ -35,10 +35,6 @@ class _HistoricalProvider(_FakeProvider):
     name = "football_data"
 
 
-class _HkjcProvider(_FakeProvider):
-    name = "hkjc"
-
-
 def _fixture() -> FixtureRecord:
     return FixtureRecord(
         source="fake",
@@ -141,35 +137,23 @@ async def test_prune_keeps_historical_training_snapshots(tmp_path):
         await db.dispose()
 
 
-async def test_prune_removes_old_hkjc_snapshots(tmp_path):
-    db = await _db(tmp_path)
-    try:
-        historical = datetime(2010, 8, 14, 12, 7, tzinfo=UTC)
-        provider = _HkjcProvider([_fixture()], _odds(historical))
-        await OddsSync(db.session_factory, provider, Settings(_env_file=None)).run(
-            date(2026, 10, 12), date(2026, 10, 15)
-        )
-        deleted = await prune_odds_snapshots(
-            db.session_factory, retention_days=120, now=datetime(2026, 10, 12, tzinfo=UTC)
-        )
-        assert deleted == 2
-        async with db.session_factory() as session:
-            assert (await session.execute(select(OddsSnapshot))).scalars().all() == []
-    finally:
-        await db.dispose()
-
-
 async def test_prune_odds_snapshots_removes_old_rows(tmp_path):
     db = await _db(tmp_path)
     try:
-        captured = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
-        provider = _FakeProvider([_fixture()], _odds(captured))
-        sync = OddsSync(db.session_factory, provider, Settings(_env_file=None))
-        await sync.run(date(2026, 10, 12), date(2026, 10, 15))
+        first = datetime(2026, 10, 12, 12, 0, tzinfo=UTC)
+        for minutes in (0, 10, 20, 30):
+            sync = OddsSync(
+                db.session_factory,
+                _FakeProvider([_fixture()], _odds(first + timedelta(minutes=minutes))),
+                Settings(_env_file=None),
+            )
+            await sync.run(date(2026, 10, 12), date(2026, 10, 15))
+        async with db.session_factory() as session:
+            assert len((await session.execute(select(OddsSnapshot))).scalars().all()) == 8
         deleted = await prune_odds_snapshots(
-            db.session_factory, retention_days=30, now=captured + timedelta(days=60)
+            db.session_factory, retention_days=30, now=first + timedelta(days=60)
         )
-        assert deleted == 2
+        assert deleted == 8
         async with db.session_factory() as session:
             assert (await session.execute(select(OddsSnapshot))).scalars().all() == []
     finally:

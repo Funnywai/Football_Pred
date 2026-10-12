@@ -1,6 +1,6 @@
 from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
@@ -82,27 +82,49 @@ class OddsSync:
         return count
 
 
-COMPACT_LOOKBACK_DAYS = 3
+COMPACT_KEEP_PER_GROUP = 3
 COMPACT_MIN_AGE_HOURS = 6
 DELETE_CHUNK = 500
+
+
+def _raw_groups(keep: int):
+    """``(match_id, odds_type, inplay)`` groups still holding a raw multi-row stream."""
+    return (
+        select(OddsSnapshot.match_id, OddsSnapshot.odds_type, OddsSnapshot.inplay)
+        .group_by(OddsSnapshot.match_id, OddsSnapshot.odds_type, OddsSnapshot.inplay)
+        .having(func.count() > keep)
+        .subquery()
+    )
+
+
+async def _delete_ids(session_factory: async_sessionmaker[AsyncSession], ids: list[int]) -> int:
+    if not ids:
+        return 0
+    deleted = 0
+    async with session_factory() as session:
+        for start in range(0, len(ids), DELETE_CHUNK):
+            chunk = ids[start : start + DELETE_CHUNK]
+            result = await session.execute(delete(OddsSnapshot).where(OddsSnapshot.id.in_(chunk)))
+            deleted += result.rowcount or 0
+        await session.commit()
+    return deleted
 
 
 async def compact_odds_snapshots(
     session_factory: async_sessionmaker[AsyncSession],
     lead_hours: int,
     now: datetime | None = None,
-    lookback_days: int = COMPACT_LOOKBACK_DAYS,
 ) -> int:
-    """Collapse finished matches' HKJC snapshots to the anchors the readers need.
+    """Collapse every finished match's HKJC snapshots to the anchors the readers need.
 
     Per ``(match_id, odds_type, inplay)`` it keeps the entry snapshot, the latest
     ``captured_at`` strictly before ``kickoff - lead_hours`` (the ML market prior)
     and the latest strictly before kickoff (the closing line CLV compares against).
-    Every other snapshot — over 99% of the rolling stream — is deleted, so re-running
-    is a no-op. Matches not yet finished (or older than ``lookback_days``, which the
-    retention prune covers) are left untouched.
+    Only groups still holding a raw stream are considered, so this is incremental
+    and re-running is a no-op; matches that have not finished are left untouched.
     """
     moment = now or datetime.now(UTC)
+    groups = _raw_groups(COMPACT_KEEP_PER_GROUP)
     async with session_factory() as session:
         rows = (
             await session.execute(
@@ -114,17 +136,24 @@ async def compact_odds_snapshots(
                     OddsSnapshot.captured_at,
                     Match.kickoff_time,
                 )
+                .join(
+                    groups,
+                    and_(
+                        groups.c.match_id == OddsSnapshot.match_id,
+                        groups.c.odds_type == OddsSnapshot.odds_type,
+                        groups.c.inplay == OddsSnapshot.inplay,
+                    ),
+                )
                 .join(Match, Match.id == OddsSnapshot.match_id)
                 .where(OddsSnapshot.source == "hkjc")
-                .where(Match.kickoff_time >= moment - timedelta(days=lookback_days))
                 .where(Match.kickoff_time < moment - timedelta(hours=COMPACT_MIN_AGE_HOURS))
             )
         ).all()
-    groups: dict[tuple[int, str, bool], list] = {}
+    by_group: dict[tuple[int, str, bool], list] = {}
     for row in rows:
-        groups.setdefault((row.match_id, row.odds_type, row.inplay), []).append(row)
+        by_group.setdefault((row.match_id, row.odds_type, row.inplay), []).append(row)
     keep: set[int] = set()
-    for group in groups.values():
+    for group in by_group.values():
         ordered = sorted(group, key=lambda row: row.captured_at)
         kickoff = ordered[0].kickoff_time
         prior_cutoff = kickoff - timedelta(hours=lead_hours)
@@ -132,17 +161,7 @@ async def compact_odds_snapshots(
         anchors += [row for row in ordered if row.captured_at < prior_cutoff][-1:]
         anchors += [row for row in ordered if row.captured_at < kickoff][-1:]
         keep.update(row.id for row in anchors)
-    obsolete = [row.id for row in rows if row.id not in keep]
-    if not obsolete:
-        return 0
-    deleted = 0
-    async with session_factory() as session:
-        for start in range(0, len(obsolete), DELETE_CHUNK):
-            chunk = obsolete[start : start + DELETE_CHUNK]
-            result = await session.execute(delete(OddsSnapshot).where(OddsSnapshot.id.in_(chunk)))
-            deleted += result.rowcount or 0
-        await session.commit()
-    return deleted
+    return await _delete_ids(session_factory, [row.id for row in rows if row.id not in keep])
 
 
 async def prune_odds_snapshots(
@@ -150,18 +169,29 @@ async def prune_odds_snapshots(
     retention_days: int,
     now: datetime | None = None,
 ) -> int:
-    """Delete rolling odds snapshots older than the retention window. Returns rows deleted.
+    """Delete leftover rolling captures older than the retention window.
 
-    Historical backfill captures (``source="football_data"``) are exempt: their
-    ``captured_at`` is the kickoff time, so they always fall outside any retention
-    window, yet they are the market priors the ML models train on.
+    Only rows whose ``(match_id, odds_type, inplay)`` group still holds a raw multi-row
+    stream are eligible, so the compaction anchors survive indefinitely and the
+    historical backfill (``source="football_data"``) stays untouched. This is a safety
+    net: while compaction keeps up, it deletes nothing.
     """
     cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
+    groups = _raw_groups(COMPACT_KEEP_PER_GROUP)
     async with session_factory() as session:
-        result = await session.execute(
-            delete(OddsSnapshot)
-            .where(OddsSnapshot.captured_at < cutoff)
-            .where(OddsSnapshot.source != "football_data")
-        )
-        await session.commit()
-        return result.rowcount or 0
+        ids = (
+            await session.execute(
+                select(OddsSnapshot.id)
+                .join(
+                    groups,
+                    and_(
+                        groups.c.match_id == OddsSnapshot.match_id,
+                        groups.c.odds_type == OddsSnapshot.odds_type,
+                        groups.c.inplay == OddsSnapshot.inplay,
+                    ),
+                )
+                .where(OddsSnapshot.captured_at < cutoff)
+                .where(OddsSnapshot.source != "football_data")
+            )
+        ).scalars().all()
+    return await _delete_ids(session_factory, list(ids))
