@@ -27,7 +27,8 @@
 
 ```bash
 # 在 repo 根目錄
-printf 'TUNNEL_TOKEN=貼上你的token\nCOMPOSE_PROFILES=tunnel\n' >> .env
+printf 'TUNNEL_TOKEN=<paste-token-here>\nCOMPOSE_PROFILES=tunnel\n' >> .env
+# 記得把 <paste-token-here> 換成 Zero Trust 給你的實際 token
 docker compose up -d          # 因為 COMPOSE_PROFILES=tunnel，cloudflared 會一起起來
 docker compose logs -f cloudflared   # 看到 "Registered tunnel connection" 即成功
 ```

@@ -32,7 +32,7 @@ APScheduler（app/scheduler.py）：賠率同步、賽果結算、ML 預測／�
 
 ```bash
 uv sync                                    # 安裝依賴（Python 3.11+，使用 uv）
-cp .env.example .env                       # 預設指向本機 Postgres
+cp .env.example .env                       # 編輯：填 DATABASE_URL 與 POSTGRES_PASSWORD（compose 必填）
 docker compose up -d postgres              # 只起資料庫（也可用你自己的 Postgres）
 uv run alembic upgrade head                # 建立所有表（0001 → 0002 → 0003）
 uv run python -m app.cli seed-leagues      # 種入白名單聯賽
