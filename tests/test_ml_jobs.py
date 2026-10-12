@@ -181,14 +181,14 @@ async def test_retrain_trains_handicap_when_only_its_labels_are_new(tmp_path) ->
                     home_score=2,
                     away_score=1,
                     had_payload=HAD,
-                    hdc_payload=HDC,
+                    hdc_payload=HDC if index >= 11 else None,
                     snapshot_at_offset_hours=-49,
                 )
             await session.commit()
         async with db.session_factory() as session:
             promoted = await retrain(
                 db.session_factory,
-                _settings(ml_min_train_rows=20, ml_artifact_dir=str(tmp_path / "artifacts")),
+                _settings(ml_min_train_rows=5, ml_artifact_dir=str(tmp_path / "artifacts")),
             )
         async with db.session_factory() as session:
             versions = (await session.execute(select(ModelVersion))).scalars().all()
