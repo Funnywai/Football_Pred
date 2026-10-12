@@ -78,6 +78,27 @@ async def test_fetch_historical_returns_odds():
     await provider.aclose()
 
 
+async def test_fetch_historical_parses_pinnacle():
+    csv_text = (
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,FTR,"
+        "PSH,PSD,PSA,PSCH,PSCD,PSCA\n"
+        "E0,21/08/2026,20:00,Arsenal,Coventry,3,0,H,2.1,3.5,3.9,2.15,3.4,4.0\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=csv_text.encode())
+
+    provider = FootballDataProvider(
+        BASE_URL, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)), divisions=["E0"]
+    )
+    records = await provider.fetch_historical(2026)
+    assert len(records) == 1
+    assert "PS" in records[0].odds
+    assert records[0].odds["PS"]["open"] == [2.1, 3.5, 3.9]
+    assert records[0].odds["PS"]["close"] == [2.15, 3.4, 4.0]
+    await provider.aclose()
+
+
 async def test_fetch_historical_returns_empty_for_missing_division():
     provider = FootballDataProvider(BASE_URL, client=_client(), divisions=["SP1"])
     assert await provider.fetch_historical(2026) == []

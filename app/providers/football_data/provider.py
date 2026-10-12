@@ -22,6 +22,7 @@ BOOKMAKERS: dict[str, tuple[str, str, str, str, str, str]] = {
     "PP": ("PPH", "PPD", "PPA", "PPCH", "PPCD", "PPCA"),
     "Max": ("MaxH", "MaxD", "MaxA", "MaxCH", "MaxCD", "MaxCA"),
     "Avg": ("AvgH", "AvgD", "AvgA", "AvgCH", "AvgCD", "AvgCA"),
+    "PS": ("PSH", "PSD", "PSA", "PSCH", "PSCD", "PSCA"),
 }
 
 
