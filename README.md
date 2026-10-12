@@ -83,6 +83,7 @@ docker compose up -d
 | `SYNC_ODDS_INTERVAL` / `SYNC_SETTLE_INTERVAL` | 600 / 900 | 賠率同步／賽果結算間隔（秒） |
 | `ML_ENABLE` | `false`（部署範本設 `true`） | 是否啟用 ML 預測／重訓排程 |
 | `ML_ARTIFACT_DIR` | `artifacts/ml` | 模型 artifact 目錄（需持久化） |
+| `ML_PRIOR_LEAD_HOURS` | 48 | 市場先驗對齊時點：訓練／評估／服務都用「開賽前 N 小時的最後一筆 HKJC 快照」（`0`＝舊行為：賽前最後一筆；CLV 恆用真實收盤） |
 | `ML_RETRAIN_INTERVAL` | 604800 | 重訓間隔（秒，預設每週） |
 | `LEDGER_ENABLE` | `true` | 是否啟用帳本排程 |
 | `LEDGER_INITIAL_BANKROLL` | `1000` | 模擬本金（HKD） |
