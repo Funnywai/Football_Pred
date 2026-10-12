@@ -9,9 +9,11 @@ from app.config import get_settings
 from app.data.leagues import seed_leagues
 from app.db.models import League, Match, OddsSnapshot, Season, Team
 from app.db.session import Database
+from app.ml.jobs import predict_upcoming, retrain
 from app.providers.football_data.provider import FootballDataProvider, HistoricalMatchRecord
 from app.services.alias import TeamMatcher
 from app.services.fixtures import season_bounds
+from app.services.ledger import ledger_update
 from app.services.runs import track_run
 
 DEFAULT_DIVISIONS = ["E0", "SP1", "I1", "D1", "F1"]
@@ -153,6 +155,36 @@ async def _run_seed_leagues() -> None:
         await db.dispose()
 
 
+async def _run_retrain() -> None:
+    settings = get_settings()
+    db = Database(settings.database_url)
+    try:
+        promoted = await retrain(db.session_factory, settings)
+        print(f"retrain complete: {promoted} champion(s) promoted")
+    finally:
+        await db.dispose()
+
+
+async def _run_predict() -> None:
+    settings = get_settings()
+    db = Database(settings.database_url)
+    try:
+        written = await predict_upcoming(db.session_factory, settings)
+        print(f"predict complete: {written} prediction(s) written")
+    finally:
+        await db.dispose()
+
+
+async def _run_ledger() -> None:
+    settings = get_settings()
+    db = Database(settings.database_url)
+    try:
+        processed = await ledger_update(db.session_factory, settings)
+        print(f"ledger complete: {processed} bet(s) settled or placed")
+    finally:
+        await db.dispose()
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="app.cli")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -167,12 +199,21 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     subparsers.add_parser("seed-leagues", help="Insert whitelisted leagues")
+    subparsers.add_parser("retrain", help="Train a challenger now and promote it if it passes the gate")
+    subparsers.add_parser("predict", help="Run the champion prediction pass now")
+    subparsers.add_parser("ledger", help="Run the paper-ledger settle+place pass now")
 
     args = parser.parse_args(argv)
     if args.command == "backfill":
         asyncio.run(_run_backfill(args))
     elif args.command == "seed-leagues":
         asyncio.run(_run_seed_leagues())
+    elif args.command == "retrain":
+        asyncio.run(_run_retrain())
+    elif args.command == "predict":
+        asyncio.run(_run_predict())
+    elif args.command == "ledger":
+        asyncio.run(_run_ledger())
 
 
 if __name__ == "__main__":
