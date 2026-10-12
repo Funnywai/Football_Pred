@@ -71,10 +71,16 @@ async def load_training_rows(
 
 
 async def _latest_hkjc_snapshots(
-    session: AsyncSession, rows: list[MatchRow], odds_type: str
+    session: AsyncSession, rows: list[MatchRow], odds_type: str, lead_hours: int = 0
 ) -> dict[int, OddsSnapshot]:
     if not rows:
         return {}
+    cutoff = None
+    if lead_hours > 0:
+        if session.get_bind().dialect.name == "sqlite":
+            cutoff = func.datetime(Match.kickoff_time, f"-{lead_hours} hours")
+        else:
+            cutoff = Match.kickoff_time - func.make_interval(0, 0, 0, 0, lead_hours)
     ranked = (
         select(
             OddsSnapshot.id.label("snapshot_id"),
@@ -90,7 +96,11 @@ async def _latest_hkjc_snapshots(
         .where(OddsSnapshot.odds_type == odds_type)
         .where(OddsSnapshot.source == "hkjc")
         .where(OddsSnapshot.inplay.is_(False))
-        .where(OddsSnapshot.captured_at < Match.kickoff_time)
+        .where(
+            OddsSnapshot.captured_at < cutoff
+            if cutoff is not None
+            else OddsSnapshot.captured_at < Match.kickoff_time
+        )
         .subquery()
     )
     stmt = (
@@ -115,10 +125,14 @@ async def _football_data_snapshots(
     return {snapshot.match_id: snapshot for snapshot in (await session.execute(stmt)).scalars()}
 
 
-async def load_hkjc_priors(session: AsyncSession, rows: list[MatchRow]) -> dict[int, MarketPrior]:
-    """HKJC-only de-vigged priors (used for CLV, which needs HKJC closes)."""
-    had = await _latest_hkjc_snapshots(session, rows, "HAD")
-    hdc = await _latest_hkjc_snapshots(session, rows, "HDC")
+async def load_hkjc_priors(
+    session: AsyncSession, rows: list[MatchRow], lead_hours: int = 0
+) -> dict[int, MarketPrior]:
+    """HKJC-only de-vigged priors. ``lead_hours > 0`` selects the last snapshot at
+    or before ``kickoff - lead_hours`` (the serving-time information set); 0 keeps
+    the legacy "latest snapshot strictly before kickoff" (used for CLV closes)."""
+    had = await _latest_hkjc_snapshots(session, rows, "HAD", lead_hours)
+    hdc = await _latest_hkjc_snapshots(session, rows, "HDC", lead_hours)
     priors: dict[int, MarketPrior] = {}
     for row in rows:
         had_probs = had_odds = None
@@ -147,9 +161,11 @@ async def load_hkjc_priors(session: AsyncSession, rows: list[MatchRow]) -> dict[
     return priors
 
 
-async def load_market_priors(session: AsyncSession, rows: list[MatchRow]) -> dict[int, MarketPrior]:
-    """HKJC priors where available, else football-data closing (Pinnacle first)."""
-    priors = await load_hkjc_priors(session, rows)
+async def load_market_priors(
+    session: AsyncSession, rows: list[MatchRow], lead_hours: int = 0
+) -> dict[int, MarketPrior]:
+    """HKJC priors where available (see ``load_hkjc_priors``), else football-data close."""
+    priors = await load_hkjc_priors(session, rows, lead_hours)
     missing = [row for row in rows if priors[row.match_id].had_probs is None]
     if not missing:
         return priors
@@ -226,6 +242,6 @@ async def build_dataset(session: AsyncSession, settings: Settings) -> Dataset:
     rows = await load_training_rows(session, settings)
     if not rows:
         raise ValueError("no confirmed results in the configured history window")
-    priors = await load_market_priors(session, rows)
+    priors = await load_market_priors(session, rows, settings.ml_prior_lead_hours)
     train, calibration, evaluation = temporal_split(_frame(rows, priors))
     return Dataset(train=train, calibration=calibration, eval=evaluation)

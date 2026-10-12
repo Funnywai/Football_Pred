@@ -74,7 +74,8 @@ async def _eval_closing_priors(
         )
         for record in dataset.eval.itertuples()
     ]
-    priors = await load_hkjc_priors(session, rows)
+    # CLV is measured against the true closing line, not the feature lead.
+    priors = await load_hkjc_priors(session, rows, 0)
     return {
         match_id: prior.had_probs
         for match_id, prior in priors.items()

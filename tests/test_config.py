@@ -49,6 +49,12 @@ def test_ml_env_override(monkeypatch) -> None:
     assert settings.ml_retrain_interval == 3600
 
 
+def test_ml_prior_lead_default_and_env(monkeypatch) -> None:
+    assert Settings(_env_file=None).ml_prior_lead_hours == 48
+    monkeypatch.setenv("ML_PRIOR_LEAD_HOURS", "0")
+    assert Settings(_env_file=None).ml_prior_lead_hours == 0
+
+
 def test_ledger_defaults() -> None:
     settings = Settings(_env_file=None)
     assert settings.ledger_enable is True

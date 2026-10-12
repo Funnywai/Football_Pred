@@ -122,6 +122,54 @@ async def test_market_prior_falls_back_to_football_data(tmp_path) -> None:
         await db.dispose()
 
 
+async def test_prior_lead_excludes_fresh_snapshots(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+                had_payload=HAD, hdc_payload=HDC, snapshot_at_offset_hours=-1,
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            match_id = rows[0].match_id
+            fresh = await load_market_priors(session, rows, 48)
+            assert fresh[match_id].had_probs is None      # -1h snapshot is too fresh
+            legacy = await load_market_priors(session, rows, 0)
+            assert legacy[match_id].had_probs is not None  # lead 0 keeps legacy behaviour
+    finally:
+        await db.dispose()
+
+
+async def test_prior_lead_includes_older_snapshots(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+                had_payload=HAD, hdc_payload=HDC, snapshot_at_offset_hours=-49,
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            priors = await load_market_priors(session, rows, 48)
+            assert priors[rows[0].match_id].had_probs is not None
+            assert priors[rows[0].match_id].hdc_line == -0.5
+    finally:
+        await db.dispose()
+
+
 async def test_build_dataset(tmp_path) -> None:
     db = await make_db(tmp_path)
     try:
