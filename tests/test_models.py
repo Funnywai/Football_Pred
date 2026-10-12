@@ -5,7 +5,16 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from app.db.base import Base
-from app.db.models import IngestionRun, League, Match, OddsSnapshot, Result, Season, Team
+from app.db.models import (
+    IngestionRun,
+    League,
+    Match,
+    ModelVersion,
+    OddsSnapshot,
+    Result,
+    Season,
+    Team,
+)
 from app.db.session import Database
 
 
@@ -144,6 +153,31 @@ async def test_result_unique_per_match(tmp_path):
             )
             with pytest.raises(IntegrityError):
                 await session.commit()
+    finally:
+        await db.dispose()
+
+
+async def test_ml_models_create_and_roundtrip(tmp_path) -> None:
+    db = Database(f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
+    try:
+        async with db.engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with db.session_factory() as session:
+            session.add(
+                ModelVersion(
+                    target="1x2",
+                    algorithm="lightgbm",
+                    params={"n": 1},
+                    metrics={"brier": 0.2},
+                    artifact_path="/tmp/m1.joblib",
+                    status="challenger",
+                )
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            version = (await session.execute(select(ModelVersion))).scalar_one()
+            assert version.status == "challenger"
+            assert version.metrics["brier"] == 0.2
     finally:
         await db.dispose()
 
