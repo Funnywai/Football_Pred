@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import get_settings
 from app.data.leagues import seed_leagues
-from app.db.models import League, Match, OddsSnapshot, Season, Team
+from app.db.models import League, Match, OddsSnapshot, Result, Season, Team
 from app.db.session import Database
 from app.ml.jobs import predict_upcoming, retrain
 from app.providers.football_data.provider import FootballDataProvider, HistoricalMatchRecord
@@ -86,6 +86,7 @@ async def _upsert_history(session: AsyncSession, records: list[HistoricalMatchRe
             )
             session.add(match)
             await session.flush()
+        await _upsert_result(session, match, record)
         existing = (
             await session.execute(
                 select(OddsSnapshot).where(
@@ -113,6 +114,34 @@ async def _upsert_history(session: AsyncSession, records: list[HistoricalMatchRe
             existing.payload = payload
         count += 1
     return count
+
+
+async def _upsert_result(
+    session: AsyncSession, match: Match, record: HistoricalMatchRecord
+) -> None:
+    existing = (
+        await session.execute(select(Result).where(Result.match_id == match.id))
+    ).scalar_one_or_none()
+    if existing is not None and existing.source == "hkjc":
+        return
+    if existing is None:
+        session.add(
+            Result(
+                match_id=match.id,
+                home_score=record.home_score,
+                away_score=record.away_score,
+                source="football_data",
+                confirmed=True,
+                confirmed_at=datetime.now(UTC),
+            )
+        )
+    else:
+        existing.home_score = record.home_score
+        existing.away_score = record.away_score
+        existing.source = "football_data"
+        existing.confirmed = True
+        existing.confirmed_at = datetime.now(UTC)
+    await session.flush()
 
 
 async def _resolve_team(session: AsyncSession, name: str) -> Team:
