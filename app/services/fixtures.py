@@ -1,3 +1,4 @@
+import logging
 from datetime import date, datetime
 
 from sqlalchemy import select
@@ -8,6 +9,8 @@ from app.db.models import League, Match, Season, Team
 from app.providers.base import FixtureRecord, Provider
 from app.services.alias import TeamMatcher, normalize_team_name
 from app.services.runs import track_run
+
+logger = logging.getLogger(__name__)
 
 
 def season_label_for(kickoff: datetime) -> str:
@@ -46,9 +49,12 @@ class FixtureSync:
 
     async def _upsert_all(self, session: AsyncSession, fixtures: list[FixtureRecord]) -> int:
         count = 0
+        dropped: dict[str, str] = {}
         for fixture in fixtures:
             league = await self._resolve_league(session, fixture)
             if league is None or league.code not in self._settings.league_whitelist:
+                if fixture.hkjc_tourn_id:
+                    dropped[fixture.hkjc_tourn_id] = fixture.league_name
                 continue
             season = await self._resolve_season(session, league, fixture.kickoff_time)
             home = await self._resolve_team(
@@ -65,6 +71,12 @@ class FixtureSync:
             )
             await self._upsert_match(session, fixture, league, season, home, away)
             count += 1
+        if dropped:
+            logger.info(
+                "%d HKJC tournaments outside the whitelist were dropped: %s",
+                len(dropped),
+                dropped,
+            )
         return count
 
     async def _resolve_league(self, session: AsyncSession, fixture: FixtureRecord) -> League | None:
