@@ -151,6 +151,7 @@ async def list_predictions(
     match_id: int | None = None,
     target: str | None = None,
     value_only: bool = False,
+    champion_only: bool = True,
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[PredictionOut]:
@@ -172,6 +173,10 @@ async def list_predictions(
         stmt = stmt.where(Prediction.target == target)
     if value_only:
         stmt = stmt.where(Prediction.recommended_fraction > 0)
+    if champion_only:
+        stmt = stmt.join(
+            ModelVersion, ModelVersion.id == Prediction.model_version_id
+        ).where(ModelVersion.status == "champion")
     rows = (await session.execute(stmt)).all()
     return [
         PredictionOut(
