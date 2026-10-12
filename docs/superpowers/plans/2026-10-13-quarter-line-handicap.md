@@ -436,11 +436,11 @@ def _frame_for_split(match_ids: list[int], per_match: int) -> pd.DataFrame:
 
 
 def test_temporal_split_keeps_a_match_in_one_split():
-    frame = _frame_for_split(list(range(20)), per_match=2)   # 40 rows, 2 per match
+    frame = _frame_for_split(list(range(15)), per_match=2)   # 30 rows, 2 per match
     train, calibration, evaluation = temporal_split(frame)
     seen = [set(part["match_id"]) for part in (train, calibration, evaluation)]
     assert not (seen[0] & seen[1] or seen[0] & seen[2] or seen[1] & seen[2])
-    assert sorted(seen[0] | seen[1] | seen[2]) == list(range(20))
+    assert sorted(seen[0] | seen[1] | seen[2]) == list(range(15))
 ```
 
 Ensure the file imports `timedelta` alongside `datetime`/`UTC` and `pandas as pd` (add the imports if missing).
@@ -448,7 +448,7 @@ Ensure the file imports `timedelta` alongside `datetime`/`UTC` and `pandas as pd
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `uv run pytest tests/test_ml_dataset.py::test_temporal_split_keeps_a_match_in_one_split -v`
-Expected: FAIL — with 40 rows the 70/10/20 boundaries land at rows 28 and 32, splitting matches 13/14 (train), 14/15 (calibration) and 15/17 (eval).
+Expected: FAIL — with 30 rows the old code's train slice is `rows[:21]`, so match 10 owns rows 20 and 21 and is split across train (row 20) and calibration (row 21). Use a match count where `int(0.2*m*per_match) + int(0.1*m*per_match)` is **not** a multiple of `per_match`, otherwise the fractional boundaries happen to land on match starts and the test cannot fail.
 
 - [ ] **Step 3: Implement**
 
