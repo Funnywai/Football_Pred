@@ -26,7 +26,7 @@ from app.db.models import (
 )
 from app.ml.dataset import load_market_priors
 from app.ml.features import MatchRow
-from app.ml.labels import handicap_label, label_1x2
+from app.ml.labels import handicap_label, is_whole_or_half, label_1x2
 from app.ml.models import TARGET_HANDICAP
 from app.ml.registry import STATUS_CHAMPION
 from app.services.runs import track_run
@@ -124,7 +124,9 @@ async def place_bets(session: AsyncSession, settings: Settings) -> int:
     Selection: the prediction must belong to the current champion
     (``ModelVersion.status = champion``), carry ``recommended_fraction > 0``,
     and have no bet for the same ``(match_id, target, outcome)`` in any
-    status. One batch shares one ``bankroll_batch_start``. Handicap bets lock
+    status. Matches must not have kicked off yet (kickoff strictly after now),
+    so skipped predictions are never retro-actively bet on finished matches.
+    One batch shares one ``bankroll_batch_start``. Handicap bets lock
     the champion's hdc_line recomputed via ``load_market_priors`` at placement
     time and are skipped when that line is unavailable. Returns bets placed.
     """
@@ -134,7 +136,9 @@ async def place_bets(session: AsyncSession, settings: Settings) -> int:
             await session.execute(
                 select(Prediction)
                 .join(ModelVersion, ModelVersion.id == Prediction.model_version_id)
+                .join(Match, Match.id == Prediction.match_id)
                 .where(ModelVersion.status == STATUS_CHAMPION)
+                .where(Match.kickoff_time > datetime.now(UTC))
                 .where(Prediction.recommended_fraction > 0)
                 .order_by(Prediction.match_id, Prediction.target, Prediction.outcome)
             )
@@ -189,9 +193,10 @@ async def place_bets(session: AsyncSession, settings: Settings) -> int:
             continue
         if prediction.target == TARGET_HANDICAP:
             line = lines.get(prediction.match_id)
-            if line is None:
+            if line is None or not is_whole_or_half(line):
                 logger.info(
-                    "skipping handicap bet on match %s: no hdc line", prediction.match_id
+                    "skipping handicap bet on match %s: no usable hdc line",
+                    prediction.match_id,
                 )
                 continue
         else:

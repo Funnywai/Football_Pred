@@ -4,10 +4,17 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from ml_helpers import make_db, seed_context, seed_finished_match, seed_team
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from app.config import Settings
-from app.db.models import LedgerBet, ModelVersion, OddsSnapshot, Prediction, Result
+from app.db.models import (
+    LedgerBet,
+    Match,
+    ModelVersion,
+    OddsSnapshot,
+    Prediction,
+    Result,
+)
 from app.services.ledger import _size_stake, place_bets, settle_bets
 
 KICKOFF = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
@@ -178,7 +185,7 @@ async def _seed_matches_with_champion(tmp_path, *, n: int = 2) -> tuple:
         for i in range(n):
             match = await seed_finished_match(
                 session, league, season, teams[i % 3], teams[(i + 1) % 3],
-                match_id_label=f"M{i}", kickoff=KICKOFF + timedelta(days=i),
+                match_id_label=f"M{i}", kickoff=datetime.now(UTC) + timedelta(days=30 + i),
                 home_score=2, away_score=1, had_payload=HAD, hdc_payload=HDC,
             )
             match_ids.append(match.id)
@@ -300,3 +307,44 @@ async def test_place_idempotent_and_non_champion_never_bet(tmp_path) -> None:
         assert await place_bets(session, _settings()) == 2
         await session.commit()
         assert await place_bets(session, _settings()) == 0
+
+
+async def test_place_rejects_stale_matches(tmp_path) -> None:
+    db, match_ids = await _seed_matches_with_champion(tmp_path, n=1)
+    version = await _champion_version_id(db)
+    async with db.session_factory() as session:
+        await session.execute(
+            update(Match)
+            .where(Match.id == match_ids[0])
+            .values(status="finished", kickoff_time=KICKOFF)
+        )
+        await session.commit()
+    await _add_prediction(db, match_ids[0], version)
+    async with db.session_factory() as session:
+        assert await place_bets(session, _settings()) == 0
+    async with db.session_factory() as session:
+        rows = (await session.execute(select(LedgerBet))).scalars().all()
+        assert rows == []
+
+
+async def test_place_skips_handicap_quarter_line(tmp_path) -> None:
+    db, match_ids = await _seed_matches_with_champion(tmp_path, n=1)
+    version = await _champion_version_id(db)
+    async with db.session_factory() as session:
+        snapshot = (
+            await session.execute(
+                select(OddsSnapshot).where(OddsSnapshot.odds_type == "HDC")
+            )
+        ).scalar_one()
+        snapshot.payload = {"lines": [{"condition": "-0.25", "main": True, "combinations": [
+            {"str": "H", "currentOdds": "2.0"}, {"str": "A", "currentOdds": "1.9"}]}]}
+        await session.commit()
+    await _add_prediction(
+        db, match_ids[0], version, target="handicap", outcome="A",
+        market_odds=1.9, fraction=0.08,
+    )
+    async with db.session_factory() as session:
+        assert await place_bets(session, _settings()) == 0
+    async with db.session_factory() as session:
+        rows = (await session.execute(select(LedgerBet))).scalars().all()
+        assert rows == []
