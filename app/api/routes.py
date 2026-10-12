@@ -6,8 +6,29 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.api.schemas import MatchOut, ModelOut, OddsOut, PredictionOut, ResultOut, TeamOut
-from app.db.models import League, Match, ModelVersion, OddsSnapshot, Prediction, Result, Team
+from app.api.schemas import (
+    BetOut,
+    BetSummary,
+    EquityPointOut,
+    MatchOut,
+    ModelOut,
+    OddsOut,
+    PredictionOut,
+    ResultOut,
+    TeamOut,
+)
+from app.db.models import (
+    League,
+    LedgerBet,
+    Match,
+    ModelVersion,
+    OddsSnapshot,
+    Prediction,
+    Result,
+    Team,
+)
+from app.services.ledger import equity_curve as ledger_equity_curve
+from app.services.ledger import summary as ledger_summary
 
 router = APIRouter()
 
@@ -216,3 +237,83 @@ async def list_models(session: SessionDep) -> list[ModelOut]:
         )
         for version in (await session.execute(stmt)).scalars()
     ]
+
+
+@router.get("/bets", response_model=list[BetOut])
+async def list_bets(
+    session: SessionDep,
+    status: str | None = None,
+    match_id: int | None = None,
+    target: str | None = None,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[BetOut]:
+    home = aliased(Team)
+    away = aliased(Team)
+    stmt = (
+        select(LedgerBet, Match.kickoff_time, League.code, home.name_en, away.name_en)
+        .join(Match, Match.id == LedgerBet.match_id)
+        .join(League, League.id == Match.league_id)
+        .join(home, home.id == Match.home_team_id)
+        .join(away, away.id == Match.away_team_id)
+        .order_by(LedgerBet.placed_at, LedgerBet.id)
+        .offset(offset)
+        .limit(limit)
+    )
+    if status is not None:
+        stmt = stmt.where(LedgerBet.status == status)
+    if match_id is not None:
+        stmt = stmt.where(LedgerBet.match_id == match_id)
+    if target is not None:
+        stmt = stmt.where(LedgerBet.target == target)
+    rows = (await session.execute(stmt)).all()
+    return [
+        BetOut(
+            id=bet.id,
+            match_id=bet.match_id,
+            target=bet.target,
+            outcome=bet.outcome,
+            model_version_id=bet.model_version_id,
+            line=bet.line,
+            odds=bet.odds,
+            stake=bet.stake,
+            bankroll_at_place=bet.bankroll_at_place,
+            edge=bet.edge,
+            kelly_multiplier=bet.kelly_multiplier,
+            status=bet.status,
+            placed_at=bet.placed_at,
+            settled_at=bet.settled_at,
+            payout=bet.payout,
+            profit=bet.profit,
+            kickoff_time=kickoff_time,
+            league_code=league_code,
+            home_team=home_name,
+            away_team=away_name,
+        )
+        for bet, kickoff_time, league_code, home_name, away_name in rows
+    ]
+
+
+@router.get("/bets/summary", response_model=BetSummary)
+async def bets_summary(session: SessionDep, request: Request) -> BetSummary:
+    values = await ledger_summary(session, request.app.state.settings)
+    return BetSummary(
+        initial_bankroll=values.initial_bankroll,
+        bankroll=values.bankroll,
+        n_bets=values.n_bets,
+        n_settled=values.n_settled,
+        n_open=values.n_open,
+        stakes_total=values.stakes_total,
+        open_stakes=values.open_stakes,
+        realized_profit=values.realized_profit,
+        roi=values.roi,
+        yield_pct=values.yield_pct,
+    )
+
+
+@router.get("/bets/equity-curve", response_model=list[EquityPointOut])
+async def bets_equity_curve(
+    session: SessionDep, request: Request
+) -> list[EquityPointOut]:
+    points = await ledger_equity_curve(session, request.app.state.settings)
+    return [EquityPointOut(t=p.t, bankroll=p.bankroll) for p in points]

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
+from typing import NamedTuple
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -236,3 +237,85 @@ async def ledger_update(
         return settled + placed
 
     return await track_run(session_factory, LEDGER_JOB_ID, work)
+
+
+class LedgerSummary(NamedTuple):
+    initial_bankroll: float
+    bankroll: float
+    n_bets: int
+    n_settled: int
+    n_open: int
+    stakes_total: float
+    open_stakes: float
+    realized_profit: float
+    roi: float
+    yield_pct: float
+
+
+async def summary(session: AsyncSession, settings: Settings) -> LedgerSummary:
+    """Aggregate every summary value from the bets table (single source of truth)."""
+    rows = (
+        await session.execute(select(LedgerBet.status, LedgerBet.stake, LedgerBet.profit))
+    ).all()
+    settled = [
+        (status, stake, profit) for status, stake, profit in rows if status != "pending"
+    ]
+    settled_stakes = sum(stake for _, stake, _ in settled)
+    open_stakes = sum(stake for status, stake, _ in rows if status == "pending")
+    realized = sum(profit if profit is not None else 0.0 for _, _, profit in settled)
+    stakes_total = settled_stakes + open_stakes
+    return LedgerSummary(
+        initial_bankroll=settings.ledger_initial_bankroll,
+        bankroll=settings.ledger_initial_bankroll + realized - open_stakes,
+        n_bets=len(rows),
+        n_settled=len(settled),
+        n_open=len(rows) - len(settled),
+        stakes_total=stakes_total,
+        open_stakes=open_stakes,
+        realized_profit=realized,
+        roi=realized / settled_stakes if settled_stakes else 0.0,
+        yield_pct=realized / stakes_total if stakes_total else 0.0,
+    )
+
+
+class EquityPoint(NamedTuple):
+    t: datetime | None
+    bankroll: float
+
+
+async def equity_curve(session: AsyncSession, settings: Settings) -> list[EquityPoint]:
+    """Realized-wealth points: the initial bankroll, one point per settlement, final = now.
+
+    At each settlement event the bankroll equals the initial bankroll plus
+    settled profit so far, minus the stakes that are open as of that event
+    (placed by then and settled strictly later, or never). Settlement events
+    with the same timestamp are ordered by bet id (deterministic).
+    """
+    bets = (
+        (
+            await session.execute(select(LedgerBet).order_by(LedgerBet.placed_at, LedgerBet.id))
+        )
+        .scalars()
+        .all()
+    )
+    settled = sorted(
+        [bet for bet in bets if bet.status != "pending"],
+        key=lambda bet: (bet.settled_at, bet.id),
+    )
+    points = [EquityPoint(t=None, bankroll=settings.ledger_initial_bankroll)]
+    realized = 0.0
+    for bet in settled:
+        realized += bet.profit if bet.profit is not None else 0.0
+        t_i = bet.settled_at
+        open_at = sum(
+            other.stake
+            for other in bets
+            if other.placed_at <= t_i and (other.settled_at is None or other.settled_at > t_i)
+        )
+        points.append(
+            EquityPoint(t=t_i, bankroll=settings.ledger_initial_bankroll + realized - open_at)
+        )
+    points.append(
+        EquityPoint(t=datetime.now(UTC), bankroll=await _bankroll_now(session, settings))
+    )
+    return points

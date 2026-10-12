@@ -52,5 +52,6 @@ def create_app(settings: Settings | None = None, db: Database | None = None) -> 
     app = FastAPI(title="Football Betting Agent — Data Layer", lifespan=lifespan)
     if db is not None:
         app.state.db = db
+    app.state.settings = settings
     app.include_router(router)
     return app
