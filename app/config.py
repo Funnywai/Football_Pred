@@ -32,6 +32,18 @@ class Settings(BaseSettings):
     odds_retention_days: int = 120
     enable_scheduler: bool = True
 
+    # ML prediction engine (sub-system B)
+    ml_enable: bool = False
+    ml_1x2_model: str = "lightgbm"
+    ml_handicap_model: str = "lightgbm"
+    ml_value_edge_threshold: float = 0.02
+    ml_retrain_interval: int = 604800
+    ml_predict_lookahead_hours: int = 48
+    ml_min_train_rows: int = 500
+    ml_artifact_dir: str = "artifacts/ml"
+    ml_champion_margin: float = 0.0
+    ml_history_from_year: int = 2010
+
     @field_validator("league_whitelist", mode="before")
     @classmethod
     def _parse_whitelist(cls, value: object) -> object:

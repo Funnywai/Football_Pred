@@ -23,3 +23,27 @@ def test_league_whitelist_accepts_json_list(monkeypatch):
     monkeypatch.setenv("LEAGUE_WHITELIST", '["EPL", "UCL"]')
     settings = Settings(_env_file=None)
     assert settings.league_whitelist == ["EPL", "UCL"]
+
+
+def test_ml_defaults() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.ml_enable is False
+    assert settings.ml_1x2_model == "lightgbm"
+    assert settings.ml_handicap_model == "lightgbm"
+    assert settings.ml_value_edge_threshold == 0.02
+    assert settings.ml_retrain_interval == 604800
+    assert settings.ml_predict_lookahead_hours == 48
+    assert settings.ml_min_train_rows == 500
+    assert settings.ml_artifact_dir == "artifacts/ml"
+    assert settings.ml_champion_margin == 0.0
+    assert settings.ml_history_from_year == 2010
+
+
+def test_ml_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("ML_ENABLE", "true")
+    monkeypatch.setenv("ML_VALUE_EDGE_THRESHOLD", "0.05")
+    monkeypatch.setenv("ML_RETRAIN_INTERVAL", "3600")
+    settings = Settings(_env_file=None)
+    assert settings.ml_enable is True
+    assert settings.ml_value_edge_threshold == 0.05
+    assert settings.ml_retrain_interval == 3600
