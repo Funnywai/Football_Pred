@@ -14,6 +14,7 @@ DATE_FORMAT = "%Y-%m-%d"
 FIXTURE_ODDS_TYPES = ["HAD"]
 RESULT_PAGE_SPAN = 20
 MAX_RESULT_PAGES = 25
+GOAL_STAGE_RESULT_TYPE = 1
 
 _STATUS_MAP = {
     "SCHEDULED": "scheduled",
@@ -22,6 +23,7 @@ _STATUS_MAP = {
     "FIRSTHALF": "live",
     "SECONDHALF": "live",
     "MATCHENDED": "finished",
+    "INPLAYMATCHENDED": "finished",
     "FINISHED": "finished",
     "POSTPONED": "postponed",
     "ABANDONED": "abandoned",
@@ -204,16 +206,21 @@ class HkjcProvider:
     def _to_result(self, item: dict[str, Any]) -> ResultRecord | None:
         """Settled full-time score, or None when HKJC has not settled the match.
 
-        HKJC's ``results`` array is a per-stage/pool log — in-play progressions
-        (``resultType`` 1), full-time pool entries (``resultType`` 2) and other pools
-        (``resultType`` 4, usually 0-0 placeholders) — so a score is taken only from a
-        settled match (``MATCHENDED``/``FINISHED``) and only from its full-time entry.
-        Everything else is left to the football-data fallback instead of risking a
-        wrong score.
+        ``results`` is a per-stage/pool log, not a score: ``resultType`` 1 is the goal
+        stage (its highest ``sequence`` entry IS the final score — cross-checked against
+        football-data's FT score for two EPL matches), 2 is the corner progression and 4
+        is another pool. A score is taken only from a match HKJC marks as ended
+        (``MATCHENDED``/``INPLAYMATCHENDED``/``FINISHED`` — the latter two carry the true
+        final score too); anything else is left to the football-data fallback rather than
+        risking a wrong score.
         """
         if _map_status(item.get("status")) != "finished":
             return None
-        entries = [entry for entry in item.get("results") or [] if entry.get("resultType") == 2]
+        entries = [
+            entry
+            for entry in item.get("results") or []
+            if entry.get("resultType") == GOAL_STAGE_RESULT_TYPE
+        ]
         if not entries:
             return None
         settled = max(entries, key=lambda entry: entry.get("sequence") or 0)

@@ -81,19 +81,23 @@ async def test_fetch_odds_uses_two_batches_and_parses_pools():
     assert records[0].match_hkjc_id == "50077246"
 
 
-async def test_fetch_results_ingests_only_settled_matches():
+async def test_fetch_results_scores_from_the_goal_stage_and_accepts_ended_matches():
     client = _FakeClient([_load("hkjc_historic_matches.json")["data"], {"matches": []}])
     provider = HkjcProvider(client)
-    records = await provider.fetch_results(date(2026, 10, 2), date(2026, 10, 2))
-    assert len(records) == 1
-    record = records[0]
-    assert record.match_hkjc_id == "50076326"
-    assert (record.home_score, record.away_score) == (3, 5)
-    assert record.confirmed is True
-    assert record.ttl_corner is None
+    records = await provider.fetch_results(date(2026, 9, 20), date(2026, 9, 20))
+    scores = {record.match_hkjc_id: (record.home_score, record.away_score) for record in records}
+    assert len(records) == 6
+    assert scores["50075503"] == (1, 1)
+    assert scores["50075491"] == (0, 4)
+    assert scores["50076214"] == (2, 0)
+    assert scores["50075486"] == (0, 1)
+    assert scores["50075487"] == (5, 0)
+    assert scores["50075507"] == (0, 1)
+    assert all(record.confirmed is True for record in records)
+    assert all(record.ttl_corner is None for record in records)
     _, variables = client.calls[0]
-    assert variables["startDate"] == "2026-10-02"
-    assert variables["endDate"] == "2026-10-02"
+    assert variables["startDate"] == "2026-09-20"
+    assert variables["endDate"] == "2026-09-20"
     assert variables["startIndex"] == 0
     assert variables["endIndex"] == 20
 
