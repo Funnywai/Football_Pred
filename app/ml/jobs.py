@@ -152,7 +152,7 @@ async def retrain(
             version = await register_challenger(
                 session,
                 target,
-                settings.ml_1x2_model,
+                settings.ml_1x2_model if target == TARGET_1X2 else settings.ml_handicap_model,
                 payload["params"],
                 payload["metrics"],
                 payload["path"],
