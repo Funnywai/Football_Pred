@@ -161,7 +161,7 @@ Expected: the three new dataset tests PASS; existing dataset/jobs tests still pa
 
 - [ ] **Step 5: Write the failing retrain test**
 
-Append to `tests/test_ml_jobs.py` (mirror that file's existing retrain test setup; seed HDC payloads so a handicap champion can exist):
+Append to `tests/test_ml_jobs.py` (mirror that file's existing retrain test setup; seed HDC payloads so a handicap champion can exist). HDC only for the newest matches (`index >= 11` → 29 labelled rows) with `ml_min_train_rows=5`: the per-target handicap frame then holds ≥20 labelled rows in `train`, which is what `train_handicap`'s own hardcoded `MIN_TRAIN_ROWS = 20` (`app/ml/models.py`) requires — with only 10 labelled rows the handicap model is skipped and the test cannot pass. The 29-row seed also keeps the test RED against the pre-change code (its single-frame split leaves only ~17 labelled rows in `train`):
 
 ```python
 async def test_retrain_trains_handicap_when_only_its_labels_are_new(tmp_path) -> None:
@@ -186,14 +186,14 @@ async def test_retrain_trains_handicap_when_only_its_labels_are_new(tmp_path) ->
                     home_score=2,
                     away_score=1,
                     had_payload=HAD,
-                    hdc_payload=HDC,
+                    hdc_payload=HDC if index >= 11 else None,
                     snapshot_at_offset_hours=-49,
                 )
             await session.commit()
         async with db.session_factory() as session:
             promoted = await retrain(
                 db.session_factory,
-                _settings(ml_min_train_rows=20, ml_artifact_dir=str(tmp_path / "artifacts")),
+                _settings(ml_min_train_rows=5, ml_artifact_dir=str(tmp_path / "artifacts")),
             )
         async with db.session_factory() as session:
             versions = (await session.execute(select(ModelVersion))).scalars().all()
