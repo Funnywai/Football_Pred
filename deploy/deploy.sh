@@ -65,6 +65,15 @@ env_value() {
   printf '%s' "$val"
 }
 
+# .env 權限字串（GNU `stat -f` 是 filesystem 模式且把 '%Lp' 當檔名 → 先試 -c 並驗證格式）
+env_file_mode() {
+  local m=""
+  m=$(stat -c '%a' "$ENV_FILE" 2>/dev/null) || m=$(stat -f '%Lp' "$ENV_FILE" 2>/dev/null) || m=""
+  [[ $m =~ ^[0-7]{3,4}$ ]] || m=""
+  printf '%s' "$m"
+  return 0
+}
+
 # ---------- 前置檢查 ----------
 preflight() {
   # a) 必須在 repo 根目錄
@@ -118,7 +127,7 @@ preflight() {
 
   # g) .env 權限
   local mode
-  mode=$(stat -f '%Lp' "$ENV_FILE" 2>/dev/null || stat -c '%a' "$ENV_FILE" 2>/dev/null || echo "")
+  mode=$(env_file_mode)
   if [[ -n $mode && $mode != "600" ]]; then
     if [[ $DRY_RUN -eq 1 ]]; then
       warn "$ENV_FILE 權限為 ${mode}（建議 600）：chmod 600 $ENV_FILE"
