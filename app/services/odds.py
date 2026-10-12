@@ -87,11 +87,18 @@ async def prune_odds_snapshots(
     retention_days: int,
     now: datetime | None = None,
 ) -> int:
-    """Delete odds snapshots older than the retention window. Returns rows deleted."""
+    """Delete rolling odds snapshots older than the retention window. Returns rows deleted.
+
+    Historical backfill captures (``source="football_data"``) are exempt: their
+    ``captured_at`` is the kickoff time, so they always fall outside any retention
+    window, yet they are the market priors the ML models train on.
+    """
     cutoff = (now or datetime.now(UTC)) - timedelta(days=retention_days)
     async with session_factory() as session:
         result = await session.execute(
-            delete(OddsSnapshot).where(OddsSnapshot.captured_at < cutoff)
+            delete(OddsSnapshot)
+            .where(OddsSnapshot.captured_at < cutoff)
+            .where(OddsSnapshot.source != "football_data")
         )
         await session.commit()
         return result.rowcount or 0
