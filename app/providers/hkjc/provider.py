@@ -1,4 +1,4 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from app.providers.base import FixtureRecord, LeagueRecord, OddsRecord, ResultRecord
@@ -11,11 +11,17 @@ from app.providers.hkjc.queries import (
 )
 
 DATE_FORMAT = "%Y-%m-%d"
-RESULT_PAGE_SIZE = 500
+FIXTURE_ODDS_TYPES = ["HAD"]
+RESULT_PAGE_SPAN = 20
+MAX_RESULT_PAGES = 25
 
 _STATUS_MAP = {
     "SCHEDULED": "scheduled",
+    "PREEVENT": "scheduled",
     "LIVE": "live",
+    "FIRSTHALF": "live",
+    "SECONDHALF": "live",
+    "MATCHENDED": "finished",
     "FINISHED": "finished",
     "POSTPONED": "postponed",
     "ABANDONED": "abandoned",
@@ -65,21 +71,35 @@ class HkjcProvider:
         return []
 
     async def fetch_fixtures(self, date_from: date, date_to: date) -> list[FixtureRecord]:
+        """Fetch the fixture list, then keep only ``date_from..date_to``.
+
+        HKJC rejects a date window or pagination on this field (a date range or
+        ``startIndex``/``endIndex`` yields an empty list or "Invalid queration
+        arguments"), so the request omits both — like the frontend does — and the
+        window is applied client-side on ``matchDate``.
+        """
         variables = {
-            "startDate": date_from.strftime(DATE_FORMAT),
-            "endDate": date_to.strftime(DATE_FORMAT),
+            "startDate": None,
+            "endDate": None,
             "matchIds": None,
             "tournIds": self._tourn_ids,
-            "fbOddsTypes": ["HAD"],
-            "fbOddsTypesM": ["HAD"],
+            "fbOddsTypes": FIXTURE_ODDS_TYPES,
+            "fbOddsTypesM": FIXTURE_ODDS_TYPES,
             "inplayOnly": False,
             "featuredMatchesOnly": False,
             "frontEndIds": None,
             "earlySettlementOnly": False,
             "showAllMatch": False,
+            "startIndex": None,
+            "endIndex": None,
         }
         data = await self._client.execute(FOOTBALL_MATCHES_QUERY, variables)
-        return [self._to_fixture(item) for item in data.get("matches") or []]
+        lower, upper = date_from.isoformat(), date_to.isoformat()
+        return [
+            self._to_fixture(item)
+            for item in data.get("matches") or []
+            if lower <= str(item.get("matchDate"))[:10] <= upper
+        ]
 
     def _to_fixture(self, item: dict[str, Any]) -> FixtureRecord:
         tournament = item.get("tournament") or {}
@@ -142,34 +162,73 @@ class HkjcProvider:
         return records
 
     async def fetch_results(self, date_from: date, date_to: date) -> list[ResultRecord]:
-        variables = {
-            "startDate": date_from.strftime(DATE_FORMAT),
-            "endDate": date_to.strftime(DATE_FORMAT),
-            "startIndex": 0,
-            "endIndex": RESULT_PAGE_SIZE,
-            "teamId": None,
-        }
-        data = await self._client.execute(HISTORIC_FOOTBALL_MATCHES_QUERY, variables)
+        """One day per call: HKJC returns an empty list for a multi-day window."""
         records: list[ResultRecord] = []
-        for item in data.get("matches") or []:
-            results = item.get("results") or []
-            if not results:
-                continue
-            result = results[0]
-            ttl = result.get("ttlCornerResult")
-            records.append(
-                ResultRecord(
-                    match_hkjc_id=_optional_str(item.get("id")),
-                    home_score=int(result["homeResult"]),
-                    away_score=int(result["awayResult"]),
-                    ttl_corner=int(ttl) if ttl is not None else None,
-                    source=self.name,
-                    confirmed=True,
-                    payout_confirmed=bool(result.get("payoutConfirmed")),
-                    raw=item,
-                )
-            )
+        seen: set[str | None] = set()
+        day = date_from
+        while day <= date_to:
+            for record in await self._fetch_results_for_day(day):
+                if record.match_hkjc_id in seen:
+                    continue
+                seen.add(record.match_hkjc_id)
+                records.append(record)
+            day += timedelta(days=1)
         return records
+
+    async def _fetch_results_for_day(self, day: date) -> list[ResultRecord]:
+        """A page span wider than ``RESULT_PAGE_SPAN`` also comes back empty."""
+        stamp = day.strftime(DATE_FORMAT)
+        records: list[ResultRecord] = []
+        start = 0
+        for _ in range(MAX_RESULT_PAGES):
+            data = await self._client.execute(
+                HISTORIC_FOOTBALL_MATCHES_QUERY,
+                {
+                    "startDate": stamp,
+                    "endDate": stamp,
+                    "startIndex": start,
+                    "endIndex": start + RESULT_PAGE_SPAN,
+                    "teamId": None,
+                },
+            )
+            items = data.get("matches") or []
+            if not items:
+                break
+            for item in items:
+                record = self._to_result(item)
+                if record is not None:
+                    records.append(record)
+            start += RESULT_PAGE_SPAN
+        return records
+
+    def _to_result(self, item: dict[str, Any]) -> ResultRecord | None:
+        """Settled full-time score, or None when HKJC has not settled the match.
+
+        HKJC's ``results`` array is a per-stage/pool log — in-play progressions
+        (``resultType`` 1), full-time pool entries (``resultType`` 2) and other pools
+        (``resultType`` 4, usually 0-0 placeholders) — so a score is taken only from a
+        settled match (``MATCHENDED``/``FINISHED``) and only from its full-time entry.
+        Everything else is left to the football-data fallback instead of risking a
+        wrong score.
+        """
+        if _map_status(item.get("status")) != "finished":
+            return None
+        entries = [entry for entry in item.get("results") or [] if entry.get("resultType") == 2]
+        if not entries:
+            return None
+        settled = max(entries, key=lambda entry: entry.get("sequence") or 0)
+        ttl = settled.get("ttlCornerResult")
+        corners = int(ttl) if ttl is not None else -1
+        return ResultRecord(
+            match_hkjc_id=_optional_str(item.get("id")),
+            home_score=int(settled["homeResult"]),
+            away_score=int(settled["awayResult"]),
+            ttl_corner=corners if corners >= 0 else None,
+            source=self.name,
+            confirmed=True,
+            payout_confirmed=bool(settled.get("payoutConfirmed")),
+            raw=item,
+        )
 
     async def fetch_result_details(self, match_id: str) -> dict[str, Any]:
         variables = {
