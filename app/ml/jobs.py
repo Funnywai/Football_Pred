@@ -129,52 +129,64 @@ def _fresh_champion_metrics(
 
 
 def _train_challenger_sync(
-    dataset: Dataset,
+    dataset_1x2: Dataset | None,
+    dataset_handicap: Dataset | None,
     closing_priors: dict[int, dict[str, float]],
     settings: Settings,
     champion_paths: dict[str, str],
 ) -> dict | None:
-    if len(dataset.train) < settings.ml_min_train_rows:
-        logger.warning(
-            "retrain skipped: %d train rows < %d", len(dataset.train), settings.ml_min_train_rows
-        )
-        return None
     artifact_dir = Path(settings.ml_artifact_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     result: dict = {}
-    try:
-        model_1x2 = train_1x2(dataset.train, dataset.calibration, dataset.eval)
-    except ValueError as exc:
-        logger.warning("1x2 training skipped: %s", exc)
-    else:
-        clv = clv_metrics(_model_probs_1x2(model_1x2, dataset.eval), closing_priors)
-        metrics = {**model_1x2.metrics, **clv}
-        path = artifact_dir / f"1x2-{stamp}.joblib"
-        save_artifact(model_1x2, path)
-        result[TARGET_1X2] = {
-            "path": str(path),
-            "params": {"num_trees": int(model_1x2.booster.num_trees())},
-            "metrics": metrics,
-            "champion_metrics": _fresh_champion_metrics(
-                TARGET_1X2, champion_paths.get(TARGET_1X2), dataset.eval, closing_priors
-            ),
-        }
-    try:
-        model_handicap = train_handicap(dataset.train, dataset.calibration, dataset.eval)
-    except ValueError as exc:
-        logger.warning("handicap training skipped: %s", exc)
-    else:
-        path = artifact_dir / f"handicap-{stamp}.joblib"
-        save_artifact(model_handicap, path)
-        result[TARGET_HANDICAP] = {
-            "path": str(path),
-            "params": {"num_trees": int(model_handicap.booster.num_trees())},
-            "metrics": model_handicap.metrics,
-            "champion_metrics": _fresh_champion_metrics(
-                TARGET_HANDICAP, champion_paths.get(TARGET_HANDICAP), dataset.eval, closing_priors
-            ),
-        }
+    if dataset_1x2 is not None and len(dataset_1x2.train) >= settings.ml_min_train_rows:
+        try:
+            model_1x2 = train_1x2(dataset_1x2.train, dataset_1x2.calibration, dataset_1x2.eval)
+        except ValueError as exc:
+            logger.warning("1x2 training skipped: %s", exc)
+        else:
+            clv = clv_metrics(_model_probs_1x2(model_1x2, dataset_1x2.eval), closing_priors)
+            metrics = {**model_1x2.metrics, **clv}
+            path = artifact_dir / f"1x2-{stamp}.joblib"
+            save_artifact(model_1x2, path)
+            result[TARGET_1X2] = {
+                "path": str(path),
+                "params": {"num_trees": int(model_1x2.booster.num_trees())},
+                "metrics": metrics,
+                "champion_metrics": _fresh_champion_metrics(
+                    TARGET_1X2, champion_paths.get(TARGET_1X2), dataset_1x2.eval, closing_priors
+                ),
+            }
+    elif dataset_1x2 is not None:
+        logger.warning(
+            "retrain skipped for 1x2: %d train rows < %d",
+            len(dataset_1x2.train),
+            settings.ml_min_train_rows,
+        )
+    if dataset_handicap is not None and len(dataset_handicap.train) >= settings.ml_min_train_rows:
+        try:
+            model_handicap = train_handicap(
+                dataset_handicap.train, dataset_handicap.calibration, dataset_handicap.eval
+            )
+        except ValueError as exc:
+            logger.warning("handicap training skipped: %s", exc)
+        else:
+            path = artifact_dir / f"handicap-{stamp}.joblib"
+            save_artifact(model_handicap, path)
+            result[TARGET_HANDICAP] = {
+                "path": str(path),
+                "params": {"num_trees": int(model_handicap.booster.num_trees())},
+                "metrics": model_handicap.metrics,
+                "champion_metrics": _fresh_champion_metrics(
+                    TARGET_HANDICAP, champion_paths.get(TARGET_HANDICAP), dataset_handicap.eval, closing_priors
+                ),
+            }
+    elif dataset_handicap is not None:
+        logger.warning(
+            "retrain skipped for handicap: %d train rows < %d",
+            len(dataset_handicap.train),
+            settings.ml_min_train_rows,
+        )
     return result
 
 
@@ -182,19 +194,32 @@ async def retrain(
     session_factory: async_sessionmaker[AsyncSession], settings: Settings
 ) -> int:
     async def work(session: AsyncSession) -> int:
-        try:
-            dataset = await build_dataset(session, settings)
-        except ValueError as exc:
-            logger.warning("retrain skipped: %s", exc)
+        datasets: dict[str, Dataset | None] = {}
+        for target in (TARGET_1X2, TARGET_HANDICAP):
+            try:
+                datasets[target] = await build_dataset(session, settings, target)
+            except ValueError as exc:
+                logger.warning("retrain skipped for %s: %s", target, exc)
+                datasets[target] = None
+        if all(dataset is None for dataset in datasets.values()):
             return 0
-        closing_priors = await _eval_closing_priors(session, dataset)
+        closing_priors = (
+            await _eval_closing_priors(session, datasets[TARGET_1X2])
+            if datasets[TARGET_1X2] is not None
+            else {}
+        )
         champion_paths: dict[str, str] = {}
         for target in (TARGET_1X2, TARGET_HANDICAP):
             champion = await get_champion(session, target)
             if champion is not None:
                 champion_paths[target] = champion.artifact_path
         result = await asyncio.to_thread(
-            _train_challenger_sync, dataset, closing_priors, settings, champion_paths
+            _train_challenger_sync,
+            datasets[TARGET_1X2],
+            datasets[TARGET_HANDICAP],
+            closing_priors,
+            settings,
+            champion_paths,
         )
         if not result:
             return 0
