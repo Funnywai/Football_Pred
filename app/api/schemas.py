@@ -49,3 +49,32 @@ class ResultOut(BaseModel):
     league_code: str
     home_team: TeamOut
     away_team: TeamOut
+
+
+class PredictionOut(BaseModel):
+    id: int
+    match_id: int
+    target: str
+    outcome: str
+    model_version_id: int
+    prob: float
+    implied_prob: float | None
+    edge: float | None
+    fair_odds: float
+    market_odds: float | None
+    recommended_fraction: float | None
+    kickoff_time: datetime
+    league_code: str
+    home_team: str
+    away_team: str
+
+
+class ModelOut(BaseModel):
+    id: int
+    target: str
+    algorithm: str
+    status: str
+    metrics: dict
+    artifact_path: str
+    created_at: datetime
+    promoted_at: datetime | None

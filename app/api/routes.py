@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
-from app.api.schemas import MatchOut, OddsOut, ResultOut, TeamOut
-from app.db.models import League, Match, OddsSnapshot, Result, Team
+from app.api.schemas import MatchOut, ModelOut, OddsOut, PredictionOut, ResultOut, TeamOut
+from app.db.models import League, Match, ModelVersion, OddsSnapshot, Prediction, Result, Team
 
 router = APIRouter()
 
@@ -142,4 +142,72 @@ async def list_results(
             away_team=TeamOut.model_validate(away_team),
         )
         for result, match, lg, home_team, away_team in rows
+    ]
+
+
+@router.get("/predictions", response_model=list[PredictionOut])
+async def list_predictions(
+    session: SessionDep,
+    match_id: int | None = None,
+    target: str | None = None,
+    value_only: bool = False,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[PredictionOut]:
+    home = aliased(Team)
+    away = aliased(Team)
+    stmt = (
+        select(Prediction, Match.kickoff_time, League.code, home.name_en, away.name_en)
+        .join(Match, Match.id == Prediction.match_id)
+        .join(League, League.id == Match.league_id)
+        .join(home, home.id == Match.home_team_id)
+        .join(away, away.id == Match.away_team_id)
+        .order_by(Match.kickoff_time, Prediction.target, Prediction.outcome)
+        .offset(offset)
+        .limit(limit)
+    )
+    if match_id is not None:
+        stmt = stmt.where(Prediction.match_id == match_id)
+    if target is not None:
+        stmt = stmt.where(Prediction.target == target)
+    if value_only:
+        stmt = stmt.where(Prediction.recommended_fraction > 0)
+    rows = (await session.execute(stmt)).all()
+    return [
+        PredictionOut(
+            id=prediction.id,
+            match_id=prediction.match_id,
+            target=prediction.target,
+            outcome=prediction.outcome,
+            model_version_id=prediction.model_version_id,
+            prob=prediction.prob,
+            implied_prob=prediction.implied_prob,
+            edge=prediction.edge,
+            fair_odds=prediction.fair_odds,
+            market_odds=prediction.market_odds,
+            recommended_fraction=prediction.recommended_fraction,
+            kickoff_time=kickoff_time,
+            league_code=league_code,
+            home_team=home_name,
+            away_team=away_name,
+        )
+        for prediction, kickoff_time, league_code, home_name, away_name in rows
+    ]
+
+
+@router.get("/models", response_model=list[ModelOut])
+async def list_models(session: SessionDep) -> list[ModelOut]:
+    stmt = select(ModelVersion).order_by(ModelVersion.target, ModelVersion.created_at.desc())
+    return [
+        ModelOut(
+            id=version.id,
+            target=version.target,
+            algorithm=version.algorithm,
+            status=version.status,
+            metrics=version.metrics,
+            artifact_path=version.artifact_path,
+            created_at=version.created_at,
+            promoted_at=version.promoted_at,
+        )
+        for version in (await session.execute(stmt)).scalars()
     ]
