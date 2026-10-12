@@ -176,7 +176,7 @@ def test_size_stake_fractional_kelly_and_cap() -> None:
 
 
 async def _seed_matches_with_champion(tmp_path, *, n: int = 2) -> tuple:
-    """n finished matches with HAD/HDC snapshots + one champion; return (db, match ids)."""
+    """n pre-kickoff matches (future kickoff) with HAD/HDC snapshots + one champion; return (db, match ids)."""
     db = await make_db(tmp_path)
     async with db.session_factory() as session:
         league, season = await seed_context(session)
@@ -316,7 +316,10 @@ async def test_place_rejects_stale_matches(tmp_path) -> None:
         await session.execute(
             update(Match)
             .where(Match.id == match_ids[0])
-            .values(status="finished", kickoff_time=KICKOFF)
+            .values(
+                status="finished",
+                kickoff_time=datetime.now(UTC) - timedelta(days=1),
+            )
         )
         await session.commit()
     await _add_prediction(db, match_ids[0], version)

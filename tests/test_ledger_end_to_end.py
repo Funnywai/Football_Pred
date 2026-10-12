@@ -58,7 +58,7 @@ async def test_end_to_end_predict_place_settle(tmp_path) -> None:
             ml_value_edge_threshold=0.0,
             ml_artifact_dir=str(tmp_path / "artifacts"),
         )
-        base = datetime(2026, 8, 1, 15, 0, tzinfo=UTC)
+        base = datetime.now(UTC) - timedelta(days=60)
         async with db.session_factory() as session:
             league, season = await seed_context(session)
             teams = [await seed_team(session, f"T{i}") for i in range(6)]
