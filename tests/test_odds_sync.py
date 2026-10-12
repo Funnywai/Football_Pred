@@ -31,6 +31,14 @@ class _FakeProvider:
         return []
 
 
+class _HistoricalProvider(_FakeProvider):
+    name = "football_data"
+
+
+class _HkjcProvider(_FakeProvider):
+    name = "hkjc"
+
+
 def _fixture() -> FixtureRecord:
     return FixtureRecord(
         source="fake",
@@ -111,6 +119,42 @@ async def test_odds_sync_new_bucket_adds_rows(tmp_path):
         await sync2.run(date(2026, 10, 12), date(2026, 10, 15))
         async with db.session_factory() as session:
             assert len((await session.execute(select(OddsSnapshot))).scalars().all()) == 4
+    finally:
+        await db.dispose()
+
+
+async def test_prune_keeps_historical_training_snapshots(tmp_path):
+    db = await _db(tmp_path)
+    try:
+        historical = datetime(2010, 8, 14, 12, 7, tzinfo=UTC)
+        provider = _HistoricalProvider([_fixture()], _odds(historical))
+        await OddsSync(db.session_factory, provider, Settings(_env_file=None)).run(
+            date(2026, 10, 12), date(2026, 10, 15)
+        )
+        deleted = await prune_odds_snapshots(
+            db.session_factory, retention_days=120, now=datetime(2026, 10, 12, tzinfo=UTC)
+        )
+        assert deleted == 0
+        async with db.session_factory() as session:
+            assert len((await session.execute(select(OddsSnapshot))).scalars().all()) == 2
+    finally:
+        await db.dispose()
+
+
+async def test_prune_removes_old_hkjc_snapshots(tmp_path):
+    db = await _db(tmp_path)
+    try:
+        historical = datetime(2010, 8, 14, 12, 7, tzinfo=UTC)
+        provider = _HkjcProvider([_fixture()], _odds(historical))
+        await OddsSync(db.session_factory, provider, Settings(_env_file=None)).run(
+            date(2026, 10, 12), date(2026, 10, 15)
+        )
+        deleted = await prune_odds_snapshots(
+            db.session_factory, retention_days=120, now=datetime(2026, 10, 12, tzinfo=UTC)
+        )
+        assert deleted == 2
+        async with db.session_factory() as session:
+            assert (await session.execute(select(OddsSnapshot))).scalars().all() == []
     finally:
         await db.dispose()
 
