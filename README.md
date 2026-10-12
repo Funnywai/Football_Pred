@@ -125,7 +125,7 @@ docker compose up -d
 ## 測試
 
 ```bash
-uv run pytest            # 152 passed（2 個 live 測試預設 deselected）
+uv run pytest            # 154 passed（2 個 live 測試預設 deselected）
 uv run ruff check .      # lint（line-length 100）
 ```
 
