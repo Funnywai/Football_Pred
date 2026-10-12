@@ -1182,7 +1182,7 @@ Expected: `1 passed`.
 If no local Postgres is running, start one with Docker:
 
 ```bash
-docker run -d --name football-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=football -p 5432:5432 postgres:16
+docker run -d --name football-pg -e POSTGRES_PASSWORD=<your-password> -e POSTGRES_DB=football -p 5432:5432 postgres:16
 ```
 
 Then, with `DATABASE_URL` set in `.env` (see `.env.example`):

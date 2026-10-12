@@ -27,7 +27,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-football}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-football}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
       POSTGRES_DB: ${POSTGRES_DB:-football}
       TZ: UTC
     volumes:
@@ -45,7 +45,7 @@ services:
     # `environment` wins over `env_file` for the same key, so DATABASE_URL always points at
     # the compose Postgres regardless of what the local .env contains.
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-football}:${POSTGRES_PASSWORD:-football}@postgres:5432/${POSTGRES_DB:-football}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-football}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}@postgres:5432/${POSTGRES_DB:-football}
       TZ: UTC
     env_file:
       - .env
