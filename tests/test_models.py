@@ -1,6 +1,7 @@
 from datetime import UTC, date, datetime
 
 import pytest
+from ml_helpers import make_db, seed_context, seed_finished_match, seed_team
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
@@ -8,6 +9,7 @@ from app.db.base import Base
 from app.db.models import (
     IngestionRun,
     League,
+    LedgerBet,
     Match,
     ModelVersion,
     OddsSnapshot,
@@ -198,5 +200,52 @@ async def test_ingestion_run_defaults(tmp_path):
             assert run.records_upserted == 0
             assert run.finished_at is None
             assert run.error is None
+    finally:
+        await db.dispose()
+
+
+async def test_ledger_bet_roundtrip(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            match = await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=datetime(2026, 8, 1, 12, 0, tzinfo=UTC),
+                home_score=2, away_score=1,
+            )
+            version = ModelVersion(
+                target="1x2",
+                algorithm="lightgbm",
+                params={},
+                metrics={},
+                artifact_path="/tmp/m1.joblib",
+                status="champion",
+            )
+            session.add(version)
+            await session.flush()
+            session.add(
+                LedgerBet(
+                    match_id=match.id,
+                    target="1x2",
+                    outcome="H",
+                    model_version_id=version.id,
+                    odds=2.1,
+                    stake=15.0,
+                    bankroll_at_place=1000.0,
+                    kelly_multiplier=0.5,
+                )
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            bet = (await session.execute(select(LedgerBet))).scalar_one()
+            assert bet.status == "pending"
+            assert bet.outcome == "H"
+            assert bet.line is None
+            assert bet.stake == 15.0
+            assert bet.payout is None
+            assert bet.profit is None
     finally:
         await db.dispose()

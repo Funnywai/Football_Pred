@@ -219,3 +219,32 @@ class MatchFeature(Base):
         UtcDateTime, nullable=False, server_default=func.now()
     )
     features: Mapped[dict] = mapped_column(_json_type(), nullable=False, default=dict)
+
+
+class LedgerBet(Base):
+    __tablename__ = "ledger_bets"
+    __table_args__ = (
+        UniqueConstraint("match_id", "target", "outcome", name="uq_ledger_bets_natural"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), nullable=False, index=True)
+    target: Mapped[str] = mapped_column(String(20), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(10), nullable=False)
+    model_version_id: Mapped[int] = mapped_column(
+        ForeignKey("model_versions.id"), nullable=False
+    )
+    line: Mapped[float | None] = mapped_column(Float, nullable=True)
+    odds: Mapped[float] = mapped_column(Float, nullable=False)
+    stake: Mapped[float] = mapped_column(Float, nullable=False)
+    bankroll_at_place: Mapped[float] = mapped_column(Float, nullable=False)
+    edge: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kelly_multiplier: Mapped[float] = mapped_column(Float, nullable=False)
+    result_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    placed_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, nullable=False, server_default=func.now()
+    )
+    settled_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    payout: Mapped[float | None] = mapped_column(Float, nullable=True)
+    profit: Mapped[float | None] = mapped_column(Float, nullable=True)
