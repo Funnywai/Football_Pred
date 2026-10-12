@@ -134,7 +134,7 @@ def _train_challenger_sync(
     closing_priors: dict[int, dict[str, float]],
     settings: Settings,
     champion_paths: dict[str, str],
-) -> dict | None:
+) -> dict:
     artifact_dir = Path(settings.ml_artifact_dir)
     artifact_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
@@ -178,7 +178,10 @@ def _train_challenger_sync(
                 "params": {"num_trees": int(model_handicap.booster.num_trees())},
                 "metrics": model_handicap.metrics,
                 "champion_metrics": _fresh_champion_metrics(
-                    TARGET_HANDICAP, champion_paths.get(TARGET_HANDICAP), dataset_handicap.eval, closing_priors
+                    TARGET_HANDICAP,
+                    champion_paths.get(TARGET_HANDICAP),
+                    dataset_handicap.eval,
+                    closing_priors,
                 ),
             }
     elif dataset_handicap is not None:
