@@ -1,0 +1,22 @@
+{
+  "Manchester United": ["Man Utd", "Man United", "曼聯", "曼联"],
+  "Manchester City": ["Man City", "曼城"],
+  "Liverpool": ["Liverpool FC", "利物浦"],
+  "Arsenal": ["Arsenal FC", "阿仙奴", "阿森纳"],
+  "Chelsea": ["Chelsea FC", "車路士", "切尔西"],
+  "Tottenham Hotspur": ["Tottenham", "Spurs", "熱刺", "热刺"],
+  "Newcastle United": ["Newcastle", "紐卡素", "纽卡斯尔"],
+  "Everton": ["Everton FC", "愛華頓", "埃弗顿"],
+  "Aston Villa": ["Villa", "阿士東維拉", "阿斯顿维拉"],
+  "West Ham United": ["West Ham", "韋斯咸", "西汉姆"],
+  "Brighton & Hove Albion": ["Brighton", "白禮頓", "布莱顿"],
+  "Real Madrid": ["皇馬", "皇家馬德里", "皇家马德里"],
+  "Barcelona": ["FC Barcelona", "巴塞隆拿", "巴塞罗那", "巴薩"],
+  "Atletico Madrid": ["Atlético Madrid", "馬德里體育會", "马德里竞技"],
+  "Bayern Munich": ["Bayern München", "拜仁慕尼黑", "拜仁"],
+  "Borussia Dortmund": ["Dortmund", "多蒙特", "多特蒙德"],
+  "Juventus": ["祖雲達斯", "尤文图斯"],
+  "Inter Milan": ["Inter", "國際米蘭", "国际米兰"],
+  "AC Milan": ["米蘭", "AC米蘭", "AC米兰"],
+  "Paris Saint-Germain": ["PSG", "巴黎聖日耳門", "巴黎圣日耳曼"]
+}

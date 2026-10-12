@@ -1,0 +1,181 @@
+{
+  "data": {
+    "matches": [
+      {
+        "id": "M-1001",
+        "frontEndId": "FB1001",
+        "matchDate": "2026-10-12",
+        "kickOffTime": "2026-10-12T19:30:00+08:00",
+        "status": "SCHEDULED",
+        "updateAt": "2026-10-12T09:00:00+08:00",
+        "sequence": 1,
+        "esIndicatorEnabled": false,
+        "homeTeam": {"id": "T-1", "name_en": "Manchester United", "name_ch": "曼聯"},
+        "awayTeam": {"id": "T-2", "name_en": "Liverpool", "name_ch": "利物浦"},
+        "tournament": {
+          "id": "TOURN-EPL",
+          "frontEndId": "EPL",
+          "nameProfileId": "1",
+          "isInteractiveServiceAvailable": true,
+          "code": "EPL",
+          "name_en": "English Premier League",
+          "name_ch": "英格蘭超級聯賽"
+        },
+        "isInteractiveServiceAvailable": true,
+        "inplayDelay": false,
+        "venue": {"code": "OT", "name_en": "Old Trafford", "name_ch": "奧脫福球場"},
+        "tvChannels": [],
+        "liveEvents": [],
+        "featureStartTime": null,
+        "featureMatchSequence": null,
+        "poolInfo": {
+          "normalPools": true,
+          "inplayPools": true,
+          "sellingPools": true,
+          "ntsInfo": null,
+          "entInfo": null,
+          "definedPools": []
+        },
+        "runningResult": null,
+        "runningResultExtra": null,
+        "adminOperation": null,
+        "foPools": [
+          {
+            "id": "POOL-HAD-1",
+            "status": "OPEN",
+            "oddsType": "HAD",
+            "instNo": 1,
+            "inplay": false,
+            "name_ch": "主客和",
+            "name_en": "Home/Away/Draw",
+            "updateAt": "2026-10-12T09:00:00+08:00",
+            "expectedSuspendDateTime": null,
+            "lines": [
+              {
+                "lineId": "L1",
+                "status": "OPEN",
+                "condition": null,
+                "main": true,
+                "combinations": [
+                  {
+                    "combId": "C1",
+                    "str": "H",
+                    "status": "OPEN",
+                    "offerEarlySettlement": false,
+                    "currentOdds": 2.1,
+                    "selections": [
+                      {"selId": "S1", "str": "H", "name_ch": "主", "name_en": "Home"}
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "id": "POOL-HDC-1",
+            "status": "OPEN",
+            "oddsType": "HDC",
+            "instNo": 2,
+            "inplay": false,
+            "name_ch": "讓球",
+            "name_en": "Handicap",
+            "updateAt": "2026-10-12T09:00:00+08:00",
+            "expectedSuspendDateTime": null,
+            "lines": [
+              {
+                "lineId": "L2",
+                "status": "OPEN",
+                "condition": "-1",
+                "main": true,
+                "combinations": [
+                  {
+                    "combId": "C2",
+                    "str": "H",
+                    "status": "OPEN",
+                    "offerEarlySettlement": false,
+                    "currentOdds": 1.85,
+                    "selections": [
+                      {"selId": "S2", "str": "H", "name_ch": "主", "name_en": "Home"}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "M-1002",
+        "frontEndId": "FB1002",
+        "matchDate": "2026-10-12",
+        "kickOffTime": "2026-10-12T22:00:00+08:00",
+        "status": "LIVE",
+        "updateAt": "2026-10-12T22:20:00+08:00",
+        "sequence": 2,
+        "esIndicatorEnabled": false,
+        "homeTeam": {"id": "T-3", "name_en": "Arsenal", "name_ch": "阿仙奴"},
+        "awayTeam": {"id": "T-4", "name_en": "Chelsea", "name_ch": "車路士"},
+        "tournament": {
+          "id": "TOURN-EPL",
+          "frontEndId": "EPL",
+          "nameProfileId": "1",
+          "isInteractiveServiceAvailable": true,
+          "code": "EPL",
+          "name_en": "English Premier League",
+          "name_ch": "英格蘭超級聯賽"
+        },
+        "isInteractiveServiceAvailable": true,
+        "inplayDelay": false,
+        "venue": {"code": "EM", "name_en": "Emirates Stadium", "name_ch": "酋長球場"},
+        "tvChannels": [],
+        "liveEvents": [],
+        "featureStartTime": null,
+        "featureMatchSequence": null,
+        "poolInfo": {
+          "normalPools": true,
+          "inplayPools": true,
+          "sellingPools": true,
+          "ntsInfo": null,
+          "entInfo": null,
+          "definedPools": []
+        },
+        "runningResult": {"homeScore": 1, "awayScore": 0, "corner": 3, "homeCorner": 2, "awayCorner": 1},
+        "runningResultExtra": null,
+        "adminOperation": null,
+        "foPools": [
+          {
+            "id": "POOL-HAD-2",
+            "status": "OPEN",
+            "oddsType": "HAD",
+            "instNo": 1,
+            "inplay": true,
+            "name_ch": "主客和",
+            "name_en": "Home/Away/Draw",
+            "updateAt": "2026-10-12T22:20:00+08:00",
+            "expectedSuspendDateTime": null,
+            "lines": [
+              {
+                "lineId": "L3",
+                "status": "OPEN",
+                "condition": null,
+                "main": true,
+                "combinations": [
+                  {
+                    "combId": "C3",
+                    "str": "H",
+                    "status": "OPEN",
+                    "offerEarlySettlement": false,
+                    "currentOdds": 1.55,
+                    "selections": [
+                      {"selId": "S3", "str": "H", "name_ch": "主", "name_en": "Home"}
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
