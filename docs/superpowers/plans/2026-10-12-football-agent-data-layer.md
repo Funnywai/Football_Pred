@@ -188,7 +188,7 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/football"
+    database_url: str = "postgresql+asyncpg://postgres:<your-password>@localhost:5432/football"
     hkjc_graphql_url: str = "https://info.cld.hkjc.com/graphql/base/"
     hkjc_referer: str = "https://bet.hkjc.com/"
     hkjc_origin: str = "https://bet.hkjc.com"
@@ -231,7 +231,7 @@ def get_settings() -> Settings:
 
 ```dotenv
 # PostgreSQL connection (async driver)
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/football
+DATABASE_URL=postgresql+asyncpg://postgres:<your-password>@localhost:5432/football
 
 # HKJC GraphQL endpoint + required request headers
 HKJC_GRAPHQL_URL=https://info.cld.hkjc.com/graphql/base/

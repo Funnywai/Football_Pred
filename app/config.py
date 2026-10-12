@@ -9,7 +9,8 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/football"
+    # Local-dev default only (password-less local Postgres). Set DATABASE_URL in `.env` for anything real.
+    database_url: str = "postgresql+asyncpg://postgres@localhost:5432/football"
     hkjc_graphql_url: str = "https://info.cld.hkjc.com/graphql/base/"
     hkjc_referer: str = "https://bet.hkjc.com/"
     hkjc_origin: str = "https://bet.hkjc.com"

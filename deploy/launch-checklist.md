@@ -19,7 +19,7 @@
 git clone <repo> WorldCup && cd WorldCup     # main 已含 A 資料層 + B ML 引擎 + C 帳本 + 部署包
 cp deploy/env.example .env
 chmod 600 .env
-# 至少修改：POSTGRES_PASSWORD
+# 至少修改：POSTGRES_PASSWORD 與 DATABASE_URL（host 必須是 compose 服務名 `postgres`，密碼與 POSTGRES_PASSWORD 一致）
 # 依需求：LEDGER_INITIAL_BANKROLL（本金）、LEDGER_MIN_STAKE（最低注，預設 10 HKD）、ML_ENABLE=true（範本已設）
 ```
 
@@ -107,7 +107,8 @@ curl -s localhost:8000/bets/summary
 
 | 症狀 | 處理 |
 |---|---|
-| app 起不來 / 一直 restart | `docker compose logs app`；多為 `.env` 缺 `POSTGRES_PASSWORD`，或 Postgres 尚未 healthy |
+| compose 直接報 `required variable … is missing a value` | `.env` 缺 `POSTGRES_PASSWORD` 或 `DATABASE_URL`（兩者都是必填；`DATABASE_URL` 的 host 要用服務名 `postgres`） |
+| app 起不來 / 一直 restart | `docker compose logs app`；多為 `.env` 的 DSN 帳密與 Postgres 不一致，或 Postgres 尚未 healthy |
 | `/models` 一直空 | 回填筆數不足或 `ML_MIN_TRAIN_ROWS` 過大 → 手動 `retrain` 看 `ingestion_runs` 的 failed 訊息 |
 | 完全沒有注單 | 正常條件未滿足：需「有 champion」+「未來 48h 有賽事」+「edge 超過 `ML_VALUE_EDGE_THRESHOLD`」；看 `/predictions` 的 `recommended_fraction` |
 | HKJC 拉不到資料 | 主機出口被擋 → 換 IP/區域；不要調小 `HKJC_THROTTLE_SECONDS` |
