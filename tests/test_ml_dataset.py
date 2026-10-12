@@ -236,3 +236,26 @@ def test_prior_cutoff_renders_dialect_specific_sql() -> None:
         )
     )
     assert "datetime(matches.kickoff_time, '-48 hours')" in lite_sql
+
+
+def _frame_for_split(match_ids: list[int], per_match: int) -> pd.DataFrame:
+    rows = []
+    for index, match_id in enumerate(match_ids):
+        for line in range(per_match):
+            rows.append(
+                {
+                    "match_id": match_id,
+                    "kickoff_time": datetime(2026, 1, 1, tzinfo=UTC) + timedelta(hours=index),
+                    "label_1x2": "H",
+                    "line": float(line),
+                }
+            )
+    return pd.DataFrame.from_records(rows)
+
+
+def test_temporal_split_keeps_a_match_in_one_split():
+    frame = _frame_for_split(list(range(20)), per_match=2)   # 40 rows, 2 per match
+    train, calibration, evaluation = temporal_split(frame)
+    seen = [set(part["match_id"]) for part in (train, calibration, evaluation)]
+    assert not (seen[0] & seen[1] or seen[0] & seen[2] or seen[1] & seen[2])
+    assert sorted(seen[0] | seen[1] | seen[2]) == list(range(20))
