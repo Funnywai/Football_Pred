@@ -50,6 +50,7 @@ EARLY_STOPPING_ROUNDS = 50
 VAL_FRACTION = 0.15
 MIN_ROWS_FOR_VAL = 10
 MIN_TRAIN_ROWS = 20
+CALIBRATION_EPSILON = 1e-6
 
 
 @dataclass
@@ -82,7 +83,11 @@ def _temporal_val_split(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame | 
 
 
 def _fit_isotonic_binary(raw: np.ndarray, labels: np.ndarray) -> list[IsotonicRegression]:
-    calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+    calibrator = IsotonicRegression(
+        out_of_bounds="clip",
+        y_min=CALIBRATION_EPSILON,
+        y_max=1.0 - CALIBRATION_EPSILON,
+    )
     calibrator.fit(raw, labels.astype(float))
     return [calibrator]
 
@@ -94,7 +99,11 @@ def _apply_isotonic_binary(calibrators: list[IsotonicRegression], raw: np.ndarra
 def _fit_isotonic_multiclass(raw: np.ndarray, labels: np.ndarray) -> list[IsotonicRegression]:
     calibrators: list[IsotonicRegression] = []
     for class_index in range(raw.shape[1]):
-        calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+        calibrator = IsotonicRegression(
+            out_of_bounds="clip",
+            y_min=CALIBRATION_EPSILON,
+            y_max=1.0 - CALIBRATION_EPSILON,
+        )
         calibrator.fit(raw[:, class_index], (labels == class_index).astype(float))
         calibrators.append(calibrator)
     return calibrators

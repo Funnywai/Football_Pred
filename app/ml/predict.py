@@ -13,7 +13,14 @@ from app.db.models import League, Match, MatchFeature, ModelVersion, Prediction,
 from app.ml.dataset import load_market_priors, load_training_rows
 from app.ml.features import FEATURE_VERSION, FeatureRow, MarketPrior, MatchRow, build_feature_rows
 from app.ml.labels import is_whole_or_half
-from app.ml.models import TARGET_1X2, TARGET_HANDICAP, TrainedModel, load_artifact, predict_proba
+from app.ml.models import (
+    CALIBRATION_EPSILON,
+    TARGET_1X2,
+    TARGET_HANDICAP,
+    TrainedModel,
+    load_artifact,
+    predict_proba,
+)
 from app.ml.registry import get_champion
 from app.ml.value import edge, fair_odds, is_value, kelly_fraction
 
@@ -101,7 +108,7 @@ def _rows_for(
                 prob=model_prob,
                 implied_prob=fair_prob,
                 edge=edge_value,
-                fair_odds=fair_odds(model_prob),
+                fair_odds=fair_odds(max(model_prob, CALIBRATION_EPSILON)),
                 market_odds=market_odds,
                 recommended_fraction=fraction,
             )

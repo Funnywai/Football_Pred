@@ -71,3 +71,17 @@ def test_train_requires_rows() -> None:
     empty = _frame(5, seed=3)
     with pytest.raises(ValueError):
         train_1x2(empty.iloc[:0], empty.iloc[:0], empty.iloc[:0])
+
+
+def test_calibrated_probs_stay_strictly_inside_unit_interval() -> None:
+    df = _frame(600, seed=4)
+    # The calibration slice contains no draws, so the "D" calibrator sees zero
+    # positives; without an epsilon floor it emits exact 0.0 probabilities.
+    calibration = df.iloc[420:480].copy()
+    calibration["label_1x2"] = np.where(
+        calibration["label_1x2"] == "D", "H", calibration["label_1x2"]
+    )
+    model = train_1x2(df.iloc[:420], calibration, df.iloc[480:])
+    probs = predict_proba(model, df.iloc[480:][FEATURE_COLUMNS].to_dict("records"))
+    assert (probs > 0.0).all()
+    assert (probs < 1.0).all()
