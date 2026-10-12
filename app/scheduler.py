@@ -8,7 +8,7 @@ from app.config import Settings
 from app.ml.jobs import build_ml_scheduler
 from app.providers.base import Provider
 from app.services.ledger import ledger_update
-from app.services.odds import OddsSync, prune_odds_snapshots
+from app.services.odds import OddsSync, compact_odds_snapshots, prune_odds_snapshots
 from app.services.results import ResultReconciler
 
 logger = logging.getLogger(__name__)
@@ -92,6 +92,10 @@ async def _prune_odds_job(
     settings: Settings,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
+    try:
+        await compact_odds_snapshots(session_factory, settings.ml_prior_lead_hours)
+    except Exception:
+        logger.exception("compact_odds job failed")
     try:
         await prune_odds_snapshots(session_factory, settings.odds_retention_days)
     except Exception:

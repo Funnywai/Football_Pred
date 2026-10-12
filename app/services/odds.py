@@ -82,6 +82,69 @@ class OddsSync:
         return count
 
 
+COMPACT_LOOKBACK_DAYS = 3
+COMPACT_MIN_AGE_HOURS = 6
+DELETE_CHUNK = 500
+
+
+async def compact_odds_snapshots(
+    session_factory: async_sessionmaker[AsyncSession],
+    lead_hours: int,
+    now: datetime | None = None,
+    lookback_days: int = COMPACT_LOOKBACK_DAYS,
+) -> int:
+    """Collapse finished matches' HKJC snapshots to the anchors the readers need.
+
+    Per ``(match_id, odds_type, inplay)`` it keeps the entry snapshot, the latest
+    ``captured_at`` strictly before ``kickoff - lead_hours`` (the ML market prior)
+    and the latest strictly before kickoff (the closing line CLV compares against).
+    Every other snapshot — over 99% of the rolling stream — is deleted, so re-running
+    is a no-op. Matches not yet finished (or older than ``lookback_days``, which the
+    retention prune covers) are left untouched.
+    """
+    moment = now or datetime.now(UTC)
+    async with session_factory() as session:
+        rows = (
+            await session.execute(
+                select(
+                    OddsSnapshot.id,
+                    OddsSnapshot.match_id,
+                    OddsSnapshot.odds_type,
+                    OddsSnapshot.inplay,
+                    OddsSnapshot.captured_at,
+                    Match.kickoff_time,
+                )
+                .join(Match, Match.id == OddsSnapshot.match_id)
+                .where(OddsSnapshot.source == "hkjc")
+                .where(Match.kickoff_time >= moment - timedelta(days=lookback_days))
+                .where(Match.kickoff_time < moment - timedelta(hours=COMPACT_MIN_AGE_HOURS))
+            )
+        ).all()
+    groups: dict[tuple[int, str, bool], list] = {}
+    for row in rows:
+        groups.setdefault((row.match_id, row.odds_type, row.inplay), []).append(row)
+    keep: set[int] = set()
+    for group in groups.values():
+        ordered = sorted(group, key=lambda row: row.captured_at)
+        kickoff = ordered[0].kickoff_time
+        prior_cutoff = kickoff - timedelta(hours=lead_hours)
+        anchors = [ordered[0]]
+        anchors += [row for row in ordered if row.captured_at < prior_cutoff][-1:]
+        anchors += [row for row in ordered if row.captured_at < kickoff][-1:]
+        keep.update(row.id for row in anchors)
+    obsolete = [row.id for row in rows if row.id not in keep]
+    if not obsolete:
+        return 0
+    deleted = 0
+    async with session_factory() as session:
+        for start in range(0, len(obsolete), DELETE_CHUNK):
+            chunk = obsolete[start : start + DELETE_CHUNK]
+            result = await session.execute(delete(OddsSnapshot).where(OddsSnapshot.id.in_(chunk)))
+            deleted += result.rowcount or 0
+        await session.commit()
+    return deleted
+
+
 async def prune_odds_snapshots(
     session_factory: async_sessionmaker[AsyncSession],
     retention_days: int,
