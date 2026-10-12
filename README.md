@@ -69,6 +69,7 @@ docker compose up -d
 - **artifact 持久化**：`artifacts` named volume 掛在 `/app/artifacts`（`ML_ARTIFACT_DIR=artifacts/ml`）。
   沒有它，重部署後 `model_versions.artifact_path` 會指向不存在的檔案。
 - **LightGBM**：image 已安裝 `libgomp1`（OpenMP runtime）。
+- **上線檢查單**：見 [`deploy/launch-checklist.md`](deploy/launch-checklist.md)（主機前置 → 啟動 → 回填 → 手動跑出第一個 champion → Tunnel，逐步打勾）。
 
 ## 環境變數
 
@@ -94,6 +95,9 @@ docker compose up -d
 | 情境 | 指令 |
 |---|---|
 | 套用資料庫遷移 | `docker compose run --rm app alembic upgrade head` |
+| 手動觸發重訓（不必等 7 天） | `docker compose run --rm app python -m app.cli retrain` |
+| 手動觸發預測 | `docker compose run --rm app python -m app.cli predict` |
+| 手動觸發帳本（結算＋下注） | `docker compose run --rm app python -m app.cli ledger` |
 | 看日誌 | `docker compose logs -f app cloudflared` |
 | 健康檢查 | `curl -s localhost:8000/health`（主機直連，繞過 Access） |
 | 備份資料庫 | `docker compose exec postgres pg_dump -U football football > backup.sql` |
@@ -101,7 +105,7 @@ docker compose up -d
 | 改 tunnel token／網域 | 改 `.env` 後 `docker compose up -d cloudflared` |
 | 更新程式碼 | `git pull && docker compose build && docker compose up -d` |
 
-重訓與預測由排程自動觸發（`ML_RETRAIN_INTERVAL`／每小時預測），不需人工。
+重訓與預測預設由排程自動觸發（`ML_RETRAIN_INTERVAL`／每小時）；也可隨時手動觸發：`retrain` / `predict` / `ledger`（見上表）。
 
 ## API 端點（唯讀）
 
