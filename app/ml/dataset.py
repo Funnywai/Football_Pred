@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
@@ -75,20 +75,30 @@ async def _latest_hkjc_snapshots(
 ) -> dict[int, OddsSnapshot]:
     if not rows:
         return {}
-    kickoffs = {row.match_id: row.kickoff_time for row in rows}
-    stmt = (
-        select(OddsSnapshot)
-        .where(OddsSnapshot.match_id.in_(list(kickoffs)))
+    ranked = (
+        select(
+            OddsSnapshot.id.label("snapshot_id"),
+            func.row_number()
+            .over(
+                partition_by=OddsSnapshot.match_id,
+                order_by=OddsSnapshot.captured_at.desc(),
+            )
+            .label("rn"),
+        )
+        .join(Match, Match.id == OddsSnapshot.match_id)
+        .where(OddsSnapshot.match_id.in_([row.match_id for row in rows]))
         .where(OddsSnapshot.odds_type == odds_type)
         .where(OddsSnapshot.source == "hkjc")
         .where(OddsSnapshot.inplay.is_(False))
-        .order_by(OddsSnapshot.captured_at)
+        .where(OddsSnapshot.captured_at < Match.kickoff_time)
+        .subquery()
     )
-    latest: dict[int, OddsSnapshot] = {}
-    for snapshot in (await session.execute(stmt)).scalars():
-        if snapshot.captured_at < kickoffs[snapshot.match_id]:
-            latest[snapshot.match_id] = snapshot
-    return latest
+    stmt = (
+        select(OddsSnapshot)
+        .join(ranked, ranked.c.snapshot_id == OddsSnapshot.id)
+        .where(ranked.c.rn == 1)
+    )
+    return {snapshot.match_id: snapshot for snapshot in (await session.execute(stmt)).scalars()}
 
 
 async def _football_data_snapshots(

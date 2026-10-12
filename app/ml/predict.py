@@ -196,6 +196,55 @@ async def upsert_feature(session: AsyncSession, match_id: int, features: dict[st
     await session.flush()
 
 
+async def predict_upcoming_matches(
+    session: AsyncSession,
+    upcoming: list[UpcomingMatch],
+    champion_1x2: Champion | None,
+    champion_handicap: Champion | None,
+    settings: Settings,
+) -> list[Prediction]:
+    """Predict every upcoming match from one history load and one feature pass.
+
+    ``build_feature_rows`` applies results only after each kickoff group, so a
+    match at kickoff k sees strictly-earlier state even though ``history`` was
+    loaded up to the latest upcoming kickoff.
+    """
+    if not upcoming:
+        return []
+    target_rows = [
+        MatchRow(
+            match_id=match.match_id,
+            kickoff_time=match.kickoff_time,
+            home_team_id=match.home_team_id,
+            away_team_id=match.away_team_id,
+            league_code=match.league_code,
+            season_label=match.season_label,
+        )
+        for match in upcoming
+    ]
+    max_kickoff = max(match.kickoff_time for match in upcoming)
+    history = await load_training_rows(session, settings, before=max_kickoff)
+    priors = await load_market_priors(session, target_rows)
+    feature_rows = {
+        row.match_id: row for row in build_feature_rows([*history, *target_rows], priors)
+    }
+    rows: list[Prediction] = []
+    for match in upcoming:
+        feature_row = feature_rows[match.match_id]
+        await upsert_feature(session, match.match_id, feature_row.features)
+        rows.extend(
+            build_prediction_rows(
+                match,
+                feature_row,
+                champion_1x2,
+                champion_handicap,
+                priors[match.match_id],
+                settings.ml_value_edge_threshold,
+            )
+        )
+    return rows
+
+
 async def predict_match(
     session: AsyncSession,
     upcoming: UpcomingMatch,

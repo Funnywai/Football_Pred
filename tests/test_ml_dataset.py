@@ -4,11 +4,18 @@ import pandas as pd
 from ml_helpers import make_db, seed_context, seed_finished_match, seed_team
 
 from app.config import Settings
+from app.db.models import OddsSnapshot
 from app.ml.dataset import build_dataset, load_market_priors, load_training_rows, temporal_split
 
 HAD = {"lines": [{"combinations": [
     {"str": "H", "currentOdds": "2.1"}, {"str": "D", "currentOdds": "3.4"},
     {"str": "A", "currentOdds": "3.8"}]}]}
+HAD_LATE = {"lines": [{"combinations": [
+    {"str": "H", "currentOdds": "2.5"}, {"str": "D", "currentOdds": "3.2"},
+    {"str": "A", "currentOdds": "3.0"}]}]}
+HAD_POST = {"lines": [{"combinations": [
+    {"str": "H", "currentOdds": "9.9"}, {"str": "D", "currentOdds": "9.9"},
+    {"str": "A", "currentOdds": "9.9"}]}]}
 HDC = {"lines": [{"condition": "-0.5", "main": True, "combinations": [
     {"str": "H", "currentOdds": "2.0"}, {"str": "A", "currentOdds": "1.9"}]}]}
 FD = {"odds": {"PS": {"open": [2.1, 3.5, 3.9], "close": [2.15, 3.4, 4.0]}}}
@@ -54,6 +61,40 @@ async def test_load_training_rows_and_market_priors(tmp_path) -> None:
             assert abs(sum(prior.had_probs.values()) - 1.0) < 1e-9
             assert prior.hdc_line == -0.5
             assert prior.source == "hkjc"
+    finally:
+        await db.dispose()
+
+
+async def test_latest_hkjc_snapshot_is_last_pre_kickoff(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            match = await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+            )
+            for offset_hours, payload in ((-48, HAD), (-1, HAD_LATE), (1, HAD_POST)):
+                captured = t + timedelta(hours=offset_hours)
+                session.add(
+                    OddsSnapshot(
+                        match_id=match.id,
+                        captured_at=captured,
+                        snapshot_bucket=captured,
+                        source="hkjc",
+                        inplay=False,
+                        odds_type="HAD",
+                        payload=payload,
+                    )
+                )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            priors = await load_market_priors(session, rows)
+            assert priors[rows[0].match_id].had_odds == {"H": 2.5, "D": 3.2, "A": 3.0}
     finally:
         await db.dispose()
 

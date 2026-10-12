@@ -25,7 +25,7 @@ from app.ml.models import (
 from app.ml.predict import (
     load_champion,
     load_upcoming_matches,
-    predict_match,
+    predict_upcoming_matches,
     upsert_predictions,
 )
 from app.ml.registry import maybe_promote, register_challenger
@@ -50,11 +50,10 @@ async def predict_upcoming(
             logger.info("no champion models yet; skipping prediction")
             return 0
         upcoming = await load_upcoming_matches(session, settings, now)
-        count = 0
-        for match in upcoming:
-            rows = await predict_match(session, match, champion_1x2, champion_handicap, settings)
-            count += await upsert_predictions(session, rows)
-        return count
+        rows = await predict_upcoming_matches(
+            session, upcoming, champion_1x2, champion_handicap, settings
+        )
+        return await upsert_predictions(session, rows)
 
     return await track_run(session_factory, PREDICT_JOB_ID, work)
 
