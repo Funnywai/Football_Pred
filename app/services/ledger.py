@@ -184,7 +184,7 @@ async def place_bets(session: AsyncSession, settings: Settings) -> int:
             )
             for m, code, label in fields
         ]
-        priors = await load_market_priors(session, target_rows)
+        priors = await load_market_priors(session, target_rows, settings.ml_prior_lead_hours)
         lines = {match_id: prior.hdc_line for match_id, prior in priors.items()}
     placed = 0
     for prediction in candidates:

@@ -122,6 +122,76 @@ async def test_market_prior_falls_back_to_football_data(tmp_path) -> None:
         await db.dispose()
 
 
+async def test_prior_lead_excludes_fresh_snapshots(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+                had_payload=HAD, hdc_payload=HDC, snapshot_at_offset_hours=-1,
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            match_id = rows[0].match_id
+            fresh = await load_market_priors(session, rows, 48)
+            assert fresh[match_id].had_probs is None      # -1h snapshot is too fresh
+            legacy = await load_market_priors(session, rows, 0)
+            assert legacy[match_id].had_probs is not None  # lead 0 keeps legacy behaviour
+    finally:
+        await db.dispose()
+
+
+async def test_prior_lead_includes_older_snapshots(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+                had_payload=HAD, hdc_payload=HDC, snapshot_at_offset_hours=-49,
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            priors = await load_market_priors(session, rows, 48)
+            assert priors[rows[0].match_id].had_probs is not None
+            assert priors[rows[0].match_id].hdc_line == -0.5
+    finally:
+        await db.dispose()
+
+
+async def test_prior_lead_excludes_snapshot_exactly_at_cutoff(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+                had_payload=HAD, hdc_payload=HDC, snapshot_at_offset_hours=-48,
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            priors = await load_market_priors(session, rows, 48)
+            assert priors[rows[0].match_id].had_probs is None  # strict <: T-48h excluded
+    finally:
+        await db.dispose()
+
+
 async def test_build_dataset(tmp_path) -> None:
     db = await make_db(tmp_path)
     try:
@@ -143,3 +213,26 @@ async def test_build_dataset(tmp_path) -> None:
             assert "label_1x2" in dataset.train.columns
     finally:
         await db.dispose()
+
+
+def test_prior_cutoff_renders_dialect_specific_sql() -> None:
+    from sqlalchemy.dialects import postgresql, sqlite
+
+    from app.db.models import Match
+    from app.ml.dataset import _prior_cutoff
+
+    assert _prior_cutoff(Match.kickoff_time, 0, "postgresql") is None
+    assert _prior_cutoff(Match.kickoff_time, -5, "sqlite") is None
+    pg_sql = str(
+        _prior_cutoff(Match.kickoff_time, 48, "postgresql").compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "make_interval(0, 0, 0, 0, 48)" in pg_sql
+
+    lite_sql = str(
+        _prior_cutoff(Match.kickoff_time, 48, "sqlite").compile(
+            dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+        )
+    )
+    assert "datetime(matches.kickoff_time, '-48 hours')" in lite_sql

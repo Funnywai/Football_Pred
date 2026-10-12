@@ -54,8 +54,13 @@ async def seed_finished_match(
     had_payload: dict | None = None,
     hdc_payload: dict | None = None,
     snapshot_source: str = "hkjc",
-    snapshot_at_offset_hours: int = -1,
+    snapshot_at_offset_hours: int = -49,
 ) -> Match:
+    """Seed a finished match with result and optional odds snapshots.
+
+    ``snapshot_at_offset_hours=-49`` mimics the serving-time lead
+    (``ML_PRIOR_LEAD_HOURS=48`` + 1h margin) so priors survive the lead filter.
+    """
     match = Match(
         season_id=season.id,
         league_id=league.id,

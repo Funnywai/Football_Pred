@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     ml_artifact_dir: str = "artifacts/ml"
     ml_champion_margin: float = 0.0
     ml_history_from_year: int = 2010
+    ml_prior_lead_hours: int = 48
 
     # Paper ledger (sub-system C)
     ledger_enable: bool = True

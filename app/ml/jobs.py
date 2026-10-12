@@ -17,6 +17,9 @@ from app.ml.features import FEATURE_COLUMNS, MatchRow
 from app.ml.models import (
     TARGET_1X2,
     TARGET_HANDICAP,
+    evaluate_1x2,
+    evaluate_handicap,
+    load_artifact,
     predict_proba,
     save_artifact,
     train_1x2,
@@ -28,7 +31,7 @@ from app.ml.predict import (
     predict_upcoming_matches,
     upsert_predictions,
 )
-from app.ml.registry import maybe_promote, register_challenger
+from app.ml.registry import get_champion, maybe_promote, register_challenger
 from app.ml.value import clv_metrics
 from app.services.runs import track_run
 
@@ -74,7 +77,8 @@ async def _eval_closing_priors(
         )
         for record in dataset.eval.itertuples()
     ]
-    priors = await load_hkjc_priors(session, rows)
+    # CLV is measured against the true closing line, not the feature lead.
+    priors = await load_hkjc_priors(session, rows, 0)
     return {
         match_id: prior.had_probs
         for match_id, prior in priors.items()
@@ -82,18 +86,53 @@ async def _eval_closing_priors(
     }
 
 
-def _model_probs_1x2(model, frame: pd.DataFrame) -> dict[int, dict[str, float]]:
-    probs = predict_proba(model, frame[FEATURE_COLUMNS].to_dict("records"))
+def _model_probs_1x2(model, frame: pd.DataFrame, probs=None) -> dict[int, dict[str, float]]:
+    if probs is None:
+        probs = predict_proba(model, frame[FEATURE_COLUMNS].to_dict("records"))
     return {
         int(match_id): {"H": float(row[0]), "D": float(row[1]), "A": float(row[2])}
         for match_id, row in zip(frame["match_id"].tolist(), probs, strict=True)
     }
 
 
+def _fresh_champion_metrics(
+    target: str, path: str | None, eval_df: pd.DataFrame, closing_priors: dict
+) -> dict | None:
+    """Re-evaluate a stored champion on the CURRENT eval window (fix #6).
+
+    Returns None when the champion cannot be evaluated (missing/corrupt artifact,
+    empty label subset) — the caller then falls back to the stored metrics.
+    """
+    if path is None:
+        return None
+    subset = "label_1x2" if target == TARGET_1X2 else "label_handicap"
+    try:
+        frame = eval_df.dropna(subset=[subset])
+        if frame.empty:
+            logger.warning(
+                "champion for %s has no %s rows in this eval window; "
+                "falling back to stored metrics",
+                target,
+                subset,
+            )
+            return None
+        model = load_artifact(path)
+        probs = predict_proba(model, frame[FEATURE_COLUMNS].to_dict("records"))
+        if target == TARGET_1X2:
+            metrics = evaluate_1x2(probs, frame["label_1x2"].tolist())
+            metrics.update(clv_metrics(_model_probs_1x2(model, frame, probs), closing_priors))
+            return metrics
+        return evaluate_handicap(probs, frame["label_handicap"].tolist())
+    except Exception as exc:  # a broken champion must not block retraining
+        logger.warning("could not re-evaluate champion for %s: %s", target, exc, exc_info=True)
+        return None
+
+
 def _train_challenger_sync(
     dataset: Dataset,
     closing_priors: dict[int, dict[str, float]],
     settings: Settings,
+    champion_paths: dict[str, str],
 ) -> dict | None:
     if len(dataset.train) < settings.ml_min_train_rows:
         logger.warning(
@@ -117,6 +156,9 @@ def _train_challenger_sync(
             "path": str(path),
             "params": {"num_trees": int(model_1x2.booster.num_trees())},
             "metrics": metrics,
+            "champion_metrics": _fresh_champion_metrics(
+                TARGET_1X2, champion_paths.get(TARGET_1X2), dataset.eval, closing_priors
+            ),
         }
     try:
         model_handicap = train_handicap(dataset.train, dataset.calibration, dataset.eval)
@@ -129,6 +171,9 @@ def _train_challenger_sync(
             "path": str(path),
             "params": {"num_trees": int(model_handicap.booster.num_trees())},
             "metrics": model_handicap.metrics,
+            "champion_metrics": _fresh_champion_metrics(
+                TARGET_HANDICAP, champion_paths.get(TARGET_HANDICAP), dataset.eval, closing_priors
+            ),
         }
     return result
 
@@ -143,7 +188,14 @@ async def retrain(
             logger.warning("retrain skipped: %s", exc)
             return 0
         closing_priors = await _eval_closing_priors(session, dataset)
-        result = await asyncio.to_thread(_train_challenger_sync, dataset, closing_priors, settings)
+        champion_paths: dict[str, str] = {}
+        for target in (TARGET_1X2, TARGET_HANDICAP):
+            champion = await get_champion(session, target)
+            if champion is not None:
+                champion_paths[target] = champion.artifact_path
+        result = await asyncio.to_thread(
+            _train_challenger_sync, dataset, closing_priors, settings, champion_paths
+        )
         if not result:
             return 0
         promoted = 0
@@ -156,7 +208,12 @@ async def retrain(
                 payload["metrics"],
                 payload["path"],
             )
-            if await maybe_promote(session, version, settings.ml_champion_margin):
+            if await maybe_promote(
+                session,
+                version,
+                settings.ml_champion_margin,
+                champion_metrics=payload.get("champion_metrics"),
+            ):
                 promoted += 1
         return promoted
 

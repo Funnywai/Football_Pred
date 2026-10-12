@@ -224,7 +224,7 @@ async def predict_upcoming_matches(
     ]
     max_kickoff = max(match.kickoff_time for match in upcoming)
     history = await load_training_rows(session, settings, before=max_kickoff)
-    priors = await load_market_priors(session, target_rows)
+    priors = await load_market_priors(session, target_rows, settings.ml_prior_lead_hours)
     feature_rows = {
         row.match_id: row for row in build_feature_rows([*history, *target_rows], priors)
     }
@@ -261,7 +261,9 @@ async def predict_match(
         season_label=upcoming.season_label,
     )
     history = await load_training_rows(session, settings, before=upcoming.kickoff_time)
-    prior = (await load_market_priors(session, [target_row]))[upcoming.match_id]
+    prior = (await load_market_priors(session, [target_row], settings.ml_prior_lead_hours))[
+        upcoming.match_id
+    ]
     feature_rows = build_feature_rows([*history, target_row], {upcoming.match_id: prior})
     feature_row = next(row for row in feature_rows if row.match_id == upcoming.match_id)
     await upsert_feature(session, upcoming.match_id, feature_row.features)
