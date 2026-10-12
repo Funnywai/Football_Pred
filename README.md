@@ -125,7 +125,7 @@ docker compose up -d
 ## 測試
 
 ```bash
-uv run pytest            # 143 passed（2 個 live 測試預設 deselected）
+uv run pytest            # 152 passed（2 個 live 測試預設 deselected）
 uv run ruff check .      # lint（line-length 100）
 ```
 
@@ -133,6 +133,8 @@ uv run ruff check .      # lint（line-length 100）
 
 - **ML（B）** 延後項：market Brier 基準線、CLV 只算 value bets、champion/challenger 同視窗重評、
   train/serve 先驗對齊（見 `docs/superpowers/specs/2026-10-12-football-agent-ml-engine-design.md`）。
+- **升級注意（ML_PRIOR_LEAD_HOURS）**：既有部署的 champion 是以 lead-0 先驗訓練的；升級後請先執行
+  `python -m app.cli retrain`（或等排程重訓完成）再信任 live 預測。
 - **Ledger（C）** follow-up：`status` DB 端 default、未知 `target` 防禦、cap rounding、
   API 篩選器測試覆蓋等（見 `docs/superpowers/specs/2026-10-12-paper-ledger-design.md`）。
 - **D／E／F**：Next.js Web UI、編排、自我改進循環升級——尚未開始。

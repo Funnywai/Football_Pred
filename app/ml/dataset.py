@@ -70,17 +70,21 @@ async def load_training_rows(
     ]
 
 
+def _prior_cutoff(kickoff_col, lead_hours: int, dialect: str):
+    """SQL for ``kickoff_col - lead_hours``, dialect-aware; ``None`` for the legacy path."""
+    if lead_hours <= 0:
+        return None
+    if dialect == "sqlite":
+        return func.datetime(kickoff_col, f"-{lead_hours} hours")
+    return kickoff_col - func.make_interval(0, 0, 0, 0, lead_hours)
+
+
 async def _latest_hkjc_snapshots(
     session: AsyncSession, rows: list[MatchRow], odds_type: str, lead_hours: int = 0
 ) -> dict[int, OddsSnapshot]:
     if not rows:
         return {}
-    cutoff = None
-    if lead_hours > 0:
-        if session.get_bind().dialect.name == "sqlite":
-            cutoff = func.datetime(Match.kickoff_time, f"-{lead_hours} hours")
-        else:
-            cutoff = Match.kickoff_time - func.make_interval(0, 0, 0, 0, lead_hours)
+    cutoff = _prior_cutoff(Match.kickoff_time, lead_hours, session.get_bind().dialect.name)
     ranked = (
         select(
             OddsSnapshot.id.label("snapshot_id"),
@@ -128,9 +132,9 @@ async def _football_data_snapshots(
 async def load_hkjc_priors(
     session: AsyncSession, rows: list[MatchRow], lead_hours: int = 0
 ) -> dict[int, MarketPrior]:
-    """HKJC-only de-vigged priors. ``lead_hours > 0`` selects the last snapshot at
-    or before ``kickoff - lead_hours`` (the serving-time information set); 0 keeps
-    the legacy "latest snapshot strictly before kickoff" (used for CLV closes)."""
+    """HKJC-only de-vigged priors. ``lead_hours > 0`` selects the last snapshot
+    strictly before ``kickoff - lead_hours`` (the serving-time information set); 0
+    keeps the legacy "latest snapshot strictly before kickoff" (used for CLV closes)."""
     had = await _latest_hkjc_snapshots(session, rows, "HAD", lead_hours)
     hdc = await _latest_hkjc_snapshots(session, rows, "HDC", lead_hours)
     priors: dict[int, MarketPrior] = {}

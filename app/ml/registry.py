@@ -80,9 +80,10 @@ async def maybe_promote(
 ) -> bool:
     """Promote the challenger when it beats the champion's benchmark.
 
-    ``champion_metrics`` overrides the champion's STORED metrics with a fresh
-    evaluation on the current holdout (fix #6) so the gate never compares two
-    different time windows; ``None`` keeps the legacy stored-metrics behaviour.
+    ``champion_metrics`` is the fix for cross-window comparison: the caller passes a
+    fresh evaluation of the champion on the current holdout so the gate compares like
+    with like. ``None`` (used when the champion cannot be re-evaluated) falls back to
+    the champion's STORED metrics, which may come from an older window.
     """
     champion = await get_champion(session, challenger.target)
     if champion is None:

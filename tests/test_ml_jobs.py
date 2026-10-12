@@ -98,6 +98,13 @@ async def test_retrain_gates_on_fresh_champion_metrics(tmp_path) -> None:
     fresh evaluation is catastrophic while its stored metrics are fake-great. With
     stored metrics (brier 0.001) any challenger would lose, so a promotion proves the
     gate used the fresh champion metrics from the current window.
+
+    This test proves the WIRING, not model quality: at 40 matches ``min_child_samples=30``
+    blocks every split, so both models are constant predictors. Odds payloads are
+    deliberately ABSENT: with them, the garbage champion's confident-wrong probs would
+    earn a large POSITIVE CLV mean edge, the gate's "CLV not worse" check would then
+    block the promotion, and the test would fail for the wrong reason. (The CLV branch
+    itself is covered by the registry gate unit tests.)
     """
     db = await make_db(tmp_path)
     try:

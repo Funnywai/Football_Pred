@@ -86,8 +86,9 @@ async def _eval_closing_priors(
     }
 
 
-def _model_probs_1x2(model, frame: pd.DataFrame) -> dict[int, dict[str, float]]:
-    probs = predict_proba(model, frame[FEATURE_COLUMNS].to_dict("records"))
+def _model_probs_1x2(model, frame: pd.DataFrame, probs=None) -> dict[int, dict[str, float]]:
+    if probs is None:
+        probs = predict_proba(model, frame[FEATURE_COLUMNS].to_dict("records"))
     return {
         int(match_id): {"H": float(row[0]), "D": float(row[1]), "A": float(row[2])}
         for match_id, row in zip(frame["match_id"].tolist(), probs, strict=True)
@@ -105,17 +106,23 @@ def _fresh_champion_metrics(
     if path is None:
         return None
     subset = "label_1x2" if target == TARGET_1X2 else "label_handicap"
-    frame = eval_df.dropna(subset=[subset])
-    if frame.empty:
-        return None
     try:
+        frame = eval_df.dropna(subset=[subset])
+        if frame.empty:
+            logger.warning(
+                "champion for %s has no %s rows in this eval window; "
+                "falling back to stored metrics",
+                target,
+                subset,
+            )
+            return None
         model = load_artifact(path)
-        features = frame[FEATURE_COLUMNS].to_dict("records")
+        probs = predict_proba(model, frame[FEATURE_COLUMNS].to_dict("records"))
         if target == TARGET_1X2:
-            metrics = evaluate_1x2(predict_proba(model, features), frame["label_1x2"].tolist())
-            metrics.update(clv_metrics(_model_probs_1x2(model, frame), closing_priors))
+            metrics = evaluate_1x2(probs, frame["label_1x2"].tolist())
+            metrics.update(clv_metrics(_model_probs_1x2(model, frame, probs), closing_priors))
             return metrics
-        return evaluate_handicap(predict_proba(model, features), frame["label_handicap"].tolist())
+        return evaluate_handicap(probs, frame["label_handicap"].tolist())
     except Exception as exc:  # a broken champion must not block retraining
         logger.warning("could not re-evaluate champion for %s: %s", target, exc, exc_info=True)
         return None

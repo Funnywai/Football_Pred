@@ -170,6 +170,28 @@ async def test_prior_lead_includes_older_snapshots(tmp_path) -> None:
         await db.dispose()
 
 
+async def test_prior_lead_excludes_snapshot_exactly_at_cutoff(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+                had_payload=HAD, hdc_payload=HDC, snapshot_at_offset_hours=-48,
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            priors = await load_market_priors(session, rows, 48)
+            assert priors[rows[0].match_id].had_probs is None  # strict <: T-48h excluded
+    finally:
+        await db.dispose()
+
+
 async def test_build_dataset(tmp_path) -> None:
     db = await make_db(tmp_path)
     try:
@@ -191,3 +213,21 @@ async def test_build_dataset(tmp_path) -> None:
             assert "label_1x2" in dataset.train.columns
     finally:
         await db.dispose()
+
+
+def test_prior_cutoff_renders_dialect_specific_sql() -> None:
+    from sqlalchemy.dialects import postgresql, sqlite
+
+    from app.db.models import Match
+    from app.ml.dataset import _prior_cutoff
+
+    assert _prior_cutoff(Match.kickoff_time, 0, "postgresql") is None
+    assert _prior_cutoff(Match.kickoff_time, -5, "sqlite") is None
+    pg_sql = str(
+        _prior_cutoff(Match.kickoff_time, 48, "postgresql").compile(dialect=postgresql.dialect())
+    )
+    assert "make_interval" in pg_sql
+    lite_sql = str(
+        _prior_cutoff(Match.kickoff_time, 48, "sqlite").compile(dialect=sqlite.dialect())
+    )
+    assert "datetime" in lite_sql

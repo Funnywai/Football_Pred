@@ -192,13 +192,17 @@ orchestration (E); full self-improvement loop upgrades (F).
   now **re-evaluated on the current eval window** (same rows, same closing priors) before the gate
   (`registry.maybe_promote(..., champion_metrics=…)`); if its artifact cannot be read the gate falls back to
   the stored metrics and logs a warning, so retraining is never blocked. The integration test proves the
-  wiring with a deliberately garbage champion (weak fresh Brier ≈ 1.5 vs challenger ≈ 0.94).
+  wiring with a deliberately garbage champion (observed in that test: weak fresh Brier ≈ 1.5 vs challenger
+  ≈ 0.94; the test itself only guards `weak > 1.0`, not those exact values).
 - ~~Train/serve skew: training uses closing odds, serving uses the latest pre-kickoff snapshot~~ → priors are
   aligned to `T − ML_PRIOR_LEAD_HOURS` (default **48 h**) for **training, evaluation and serving** alike
   (`dataset._latest_hkjc_snapshots` cutoff, dialect-aware SQL), while **CLV keeps the true closing line**
   (lead 0). Serving is now deterministic: a match's locked odds no longer depend on when the hourly job ran.
   Accepted residue: backfilled football-data closes stay lead-0 (no HKJC history exists for those seasons),
   so the market-prior distribution still differs slightly between the backfill era and the live era.
+  Live-era matches whose HKJC coverage begins inside the lead window have no prior at/before `T−48h`
+  (`source="none"`, market features NaN); the model tolerates NaN and the ledger skips handicap bets
+  without a line.
 
 Still deferred:
 
