@@ -117,7 +117,7 @@ yield            = realized_profit / Σ stake(all bets)
 4. **Skip below minimum**: if the capped stake `< ledger_min_stake` (HKD 10) → **skip the bet** (one info-level log line) — a stake is never raised up to the minimum; likewise skip when the cap itself `< ledger_min_stake` (bankroll below `ledger_min_stake / ledger_max_stake_fraction` = 200 HKD by default).
 5. All monetary amounts are **HKD** (paper currency — no FX, no unit conversion) and apply to every market the ledger bets on (HAD today, and the same minimum/units for any later market).
 
-Each inserted bet records: `odds = prediction.market_odds`, `edge = prediction.edge`, `kelly_multiplier`, `bankroll_at_place = bankroll_batch_start`, `line = the champion's hdc_line when target = handicap`. `placed_at = now`.
+Each inserted bet records: `odds = prediction.market_odds`, `edge = prediction.edge`, `kelly_multiplier`, `bankroll_at_place = bankroll_batch_start`, and `line = the champion's hdc_line recomputed at placement time via `load_market_priors` (a handicap bet is skipped when that recomputed line is unavailable — e.g. the HKJC snapshot is gone). `placed_at = now`.
 
 **Defaults (Settings, env `LEDGER_*`):**
 
