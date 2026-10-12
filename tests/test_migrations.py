@@ -37,3 +37,9 @@ def test_offline_migration_creates_ml_tables() -> None:
     assert "uq_predictions_natural" in script
     assert "uq_match_features_natural" in script
     assert "uq_model_versions_champion_target" in script
+
+
+def test_offline_migration_creates_ledger_bets() -> None:
+    script = generate_offline_sql()
+    assert "CREATE TABLE ledger_bets" in script
+    assert "uq_ledger_bets_natural" in script

@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     ml_champion_margin: float = 0.0
     ml_history_from_year: int = 2010
 
+    # Paper ledger (sub-system C)
+    ledger_enable: bool = True
+    ledger_update_interval: int = 3600
+    ledger_initial_bankroll: float = 1000.0
+    ledger_kelly_multiplier: float = 0.5
+    ledger_max_stake_fraction: float = 0.05
+    ledger_min_stake: float = 10.0
+
     @field_validator("league_whitelist", mode="before")
     @classmethod
     def _parse_whitelist(cls, value: object) -> object:

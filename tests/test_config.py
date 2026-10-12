@@ -47,3 +47,23 @@ def test_ml_env_override(monkeypatch) -> None:
     assert settings.ml_enable is True
     assert settings.ml_value_edge_threshold == 0.05
     assert settings.ml_retrain_interval == 3600
+
+
+def test_ledger_defaults() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.ledger_enable is True
+    assert settings.ledger_update_interval == 3600
+    assert settings.ledger_initial_bankroll == 1000.0
+    assert settings.ledger_kelly_multiplier == 0.5
+    assert settings.ledger_max_stake_fraction == 0.05
+    assert settings.ledger_min_stake == 10.0
+
+
+def test_ledger_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("LEDGER_ENABLE", "false")
+    monkeypatch.setenv("LEDGER_INITIAL_BANKROLL", "10000")
+    monkeypatch.setenv("LEDGER_KELLY_MULTIPLIER", "0.25")
+    settings = Settings(_env_file=None)
+    assert settings.ledger_enable is False
+    assert settings.ledger_initial_bankroll == 10000.0
+    assert settings.ledger_kelly_multiplier == 0.25
