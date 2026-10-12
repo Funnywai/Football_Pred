@@ -81,10 +81,12 @@ def _settle_handicap(bet: LedgerBet, home_score: int, away_score: int) -> tuple[
 async def settle_bets(session: AsyncSession) -> int:
     """Settle pending bets whose match has a confirmed result (A-layer authority).
 
-    Only ``Result`` rows with ``confirmed = True`` settle a bet. Handicap bets
-    settle via ``handicap_label``: the bet's direction wins; a whole-line push
-    (``None``) returns the stake. Idempotent: settled bets are never touched
-    again. Returns the number of bets settled.
+    Only ``Result`` rows with ``confirmed = True`` settle a bet. Whole/half
+    handicap lines settle via ``handicap_label`` (a whole-line push returns the
+    stake); quarter lines settle via ``_settle_handicap``, splitting the stake
+    across the two half-lines into ``won``/``half_won``/``half_lost``/``lost``.
+    Idempotent: settled bets are never touched again. Returns the number of bets
+    settled.
     """
     stmt = (
         select(LedgerBet, Result)
