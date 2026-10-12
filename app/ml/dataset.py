@@ -264,11 +264,29 @@ def _frame(rows: list[MatchRow], priors: dict[int, MarketPrior]) -> pd.DataFrame
     return pd.DataFrame.from_records(records)
 
 
-async def build_dataset(session: AsyncSession, settings: Settings) -> Dataset:
-    """Assemble the full training dataset from the database."""
+LABEL_COLUMNS: dict[str, str] = {"1x2": "label_1x2", "handicap": "label_handicap"}
+
+
+async def build_dataset(
+    session: AsyncSession, settings: Settings, target: str = "1x2"
+) -> Dataset:
+    """Assemble the training dataset for one target.
+
+    Rows are filtered to those carrying that target's label **before** the temporal
+    split: a target whose labels only exist in the newest window (handicap, once HKJC
+    HDC snapshots start) would otherwise fill `eval` alone and leave `train` and
+    `calibration` empty, so its model could never train.
+    """
+    label_column = LABEL_COLUMNS[target]
     rows = await load_training_rows(session, settings)
     if not rows:
         raise ValueError("no confirmed results in the configured history window")
     priors = await load_market_priors(session, rows, settings.ml_prior_lead_hours)
-    train, calibration, evaluation = temporal_split(_frame(rows, priors))
+    frame = _frame(rows, priors)
+    if label_column not in frame.columns:
+        raise ValueError(f"dataset has no {label_column} column")
+    frame = frame.dropna(subset=[label_column])
+    if frame.empty:
+        raise ValueError(f"no {target} training rows in the configured history window")
+    train, calibration, evaluation = temporal_split(frame)
     return Dataset(train=train, calibration=calibration, eval=evaluation)

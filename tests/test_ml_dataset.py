@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
+import pytest
 from ml_helpers import make_db, seed_context, seed_finished_match, seed_team
 
 from app.config import Settings
@@ -259,3 +260,76 @@ def test_temporal_split_keeps_a_match_in_one_split():
     seen = [set(part["match_id"]) for part in (train, calibration, evaluation)]
     assert not (seen[0] & seen[1] or seen[0] & seen[2] or seen[1] & seen[2])
     assert sorted(seen[0] | seen[1] | seen[2]) == list(range(15))
+
+
+async def test_build_dataset_per_target_puts_handicap_rows_in_every_slice(tmp_path) -> None:
+    """The Phase-2a blocker: handicap labels exist only in the newest window."""
+    db = await make_db(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            for index in range(40):
+                kickoff = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=index)
+                await seed_finished_match(
+                    session,
+                    league,
+                    season,
+                    home,
+                    away,
+                    match_id_label=f"M{index}",
+                    kickoff=kickoff,
+                    home_score=2,
+                    away_score=1,
+                    had_payload=HAD,
+                    hdc_payload=HDC if index >= 30 else None,
+                )
+            await session.commit()
+        async with db.session_factory() as session:
+            handicap = await build_dataset(session, _settings(), "handicap")
+            one_x_two = await build_dataset(session, _settings(), "1x2")
+        assert not handicap.train.empty
+        assert not handicap.calibration.empty
+        assert not handicap.eval.empty
+        assert handicap.train["label_handicap"].notna().all()
+        assert len(one_x_two.train) > len(handicap.train)
+    finally:
+        await db.dispose()
+
+
+async def test_build_dataset_unknown_target_raises(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            with pytest.raises(KeyError):
+                await build_dataset(session, _settings(), "corners")
+    finally:
+        await db.dispose()
+
+
+async def test_build_dataset_empty_target_raises(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            await seed_finished_match(
+                session,
+                league,
+                season,
+                home,
+                away,
+                match_id_label="M0",
+                kickoff=datetime(2026, 1, 1, tzinfo=UTC),
+                home_score=2,
+                away_score=1,
+                had_payload=HAD,
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            with pytest.raises(ValueError, match="no handicap training rows"):
+                await build_dataset(session, _settings(), "handicap")
+    finally:
+        await db.dispose()

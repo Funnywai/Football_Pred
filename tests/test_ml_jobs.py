@@ -157,3 +157,43 @@ async def test_retrain_gates_on_fresh_champion_metrics(tmp_path) -> None:
             assert retired is not None and retired.status == STATUS_RETIRED
     finally:
         await db.dispose()
+
+
+async def test_retrain_trains_handicap_when_only_its_labels_are_new(tmp_path) -> None:
+    """With per-target datasets the handicap model trains even though its labels
+    only sit in the newest slice; 1x2 must still be trained in the same run."""
+    db = await make_db(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            for index in range(40):
+                kickoff = datetime(2026, 1, 1, tzinfo=UTC) + timedelta(days=index)
+                await seed_finished_match(
+                    session,
+                    league,
+                    season,
+                    home,
+                    away,
+                    match_id_label=f"M{index}",
+                    kickoff=kickoff,
+                    home_score=2,
+                    away_score=1,
+                    had_payload=HAD,
+                    hdc_payload=HDC if index >= 11 else None,
+                    snapshot_at_offset_hours=-49,
+                )
+            await session.commit()
+        async with db.session_factory() as session:
+            promoted = await retrain(
+                db.session_factory,
+                _settings(ml_min_train_rows=5, ml_artifact_dir=str(tmp_path / "artifacts")),
+            )
+        async with db.session_factory() as session:
+            versions = (await session.execute(select(ModelVersion))).scalars().all()
+        assert promoted == 2
+        assert {version.target for version in versions} == {"1x2", "handicap"}
+        assert {version.status for version in versions} == {"champion"}
+    finally:
+        await db.dispose()
