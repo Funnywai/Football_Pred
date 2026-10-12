@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings
 from app.ml.jobs import build_ml_scheduler
 from app.providers.base import Provider
+from app.services.ledger import ledger_update
 from app.services.odds import OddsSync, prune_odds_snapshots
 from app.services.results import ResultReconciler
 
@@ -50,6 +51,16 @@ def build_scheduler(
     )
     if settings.ml_enable:
         build_ml_scheduler(settings, session_factory, scheduler=scheduler)
+    if settings.ledger_enable:
+        scheduler.add_job(
+            ledger_update,
+            "interval",
+            seconds=settings.ledger_update_interval,
+            args=[session_factory, settings],
+            id="ledger_update",
+            max_instances=1,
+            coalesce=True,
+        )
     return scheduler
 
 
