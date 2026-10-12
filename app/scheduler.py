@@ -5,6 +5,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
+from app.ml.jobs import build_ml_scheduler
 from app.providers.base import Provider
 from app.services.odds import OddsSync, prune_odds_snapshots
 from app.services.results import ResultReconciler
@@ -47,6 +48,8 @@ def build_scheduler(
         coalesce=True,
         args=[settings, session_factory],
     )
+    if settings.ml_enable:
+        build_ml_scheduler(settings, session_factory, scheduler=scheduler)
     return scheduler
 
 
