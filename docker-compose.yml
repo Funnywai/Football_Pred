@@ -1,0 +1,88 @@
+# Production stack: FastAPI app + Postgres + (optional) Cloudflare Tunnel.
+#
+# Single-writer warning: the APScheduler jobs run INSIDE the app process. Never scale the
+# `app` service beyond one replica / one uvicorn worker, or HKJC will be polled twice and
+# the ledger will be written twice.
+#
+# Quick start on the host:
+#   cp deploy/env.example .env            # then edit POSTGRES_PASSWORD / TUNNEL_TOKEN
+#   docker compose build
+#   docker compose up -d postgres
+#   docker compose run --rm app alembic upgrade head
+#   docker compose run --rm app python -m app.cli seed-leagues
+#   docker compose up -d
+#   # with a Cloudflare Tunnel:
+#   docker compose --profile tunnel up -d
+
+name: worldcup
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-football}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-football}
+      POSTGRES_DB: ${POSTGRES_DB:-football}
+      TZ: UTC
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-football} -d ${POSTGRES_DB:-football}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    logging: *default-logging
+
+  app:
+    build: .
+    # `environment` wins over `env_file` for the same key, so DATABASE_URL always points at
+    # the compose Postgres regardless of what the local .env contains.
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-football}:${POSTGRES_PASSWORD:-football}@postgres:5432/${POSTGRES_DB:-football}
+      TZ: UTC
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Bound to localhost only: remote access goes through the Cloudflare Tunnel.
+    # Change to "8000:8000" if you want LAN access too.
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # ML artifacts (.joblib) must survive redeploys, or model_versions.artifact_path dangles.
+      - artifacts:/app/artifacts
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    logging: *default-logging
+
+  # Opt-in: `docker compose --profile tunnel up -d` (or COMPOSE_PROFILES=tunnel in .env)
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
+volumes:
+  pgdata:
+  artifacts:
