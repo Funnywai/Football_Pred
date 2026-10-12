@@ -82,7 +82,7 @@ async def test_fixture_sync_creates_match_teams_and_season(tmp_path):
             teams = (await session.execute(select(Team))).scalars().all()
             assert {team.hkjc_team_id for team in teams} == {"T-1", "T-2"}
             league = (await session.execute(select(League).where(League.code == "EPL"))).scalar_one()
-            assert league.hkjc_tourn_id == "TOURN-EPL"
+            assert league.hkjc_tourn_id == "50071337"
     finally:
         await db.dispose()
 
@@ -111,6 +111,50 @@ async def test_fixture_sync_skips_non_whitelisted_league(tmp_path):
         assert await sync.run(date(2026, 10, 12), date(2026, 10, 15)) == 0
         async with db.session_factory() as session:
             assert (await session.execute(select(Match))).scalars().all() == []
+    finally:
+        await db.dispose()
+
+
+async def test_fixture_sync_matches_league_by_tourn_id_not_name(tmp_path):
+    db = await _db(tmp_path)
+    try:
+        provider = _FakeProvider(
+            [_fixture(league_name="Italian Division 1", hkjc_tourn_id="50072541")]
+        )
+        sync = FixtureSync(db.session_factory, provider, Settings(_env_file=None))
+        assert await sync.run(date(2026, 10, 12), date(2026, 10, 15)) == 1
+        async with db.session_factory() as session:
+            match = (await session.execute(select(Match))).scalar_one()
+            league = (
+                await session.execute(select(League).where(League.id == match.league_id))
+            ).scalar_one()
+            assert league.code == "SERIEA"
+    finally:
+        await db.dispose()
+
+
+async def test_seed_leagues_backfills_hkjc_tourn_id(tmp_path):
+    db = Database(f"sqlite+aiosqlite:///{tmp_path / 'seed.db'}")
+    async with db.engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with db.session_factory() as session:
+            session.add(
+                League(
+                    code="EPL",
+                    name_en="English Premier League",
+                    name_ch=None,
+                    country=None,
+                    active=True,
+                )
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            assert await seed_leagues(session) == 5
+            await session.commit()
+        async with db.session_factory() as session:
+            league = (await session.execute(select(League).where(League.code == "EPL"))).scalar_one()
+            assert league.hkjc_tourn_id == "50071337"
     finally:
         await db.dispose()
 
