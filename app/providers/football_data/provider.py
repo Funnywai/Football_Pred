@@ -108,7 +108,7 @@ class FootballDataProvider:
         divisions: list[str] | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
-        self._client = client or httpx.AsyncClient(timeout=30.0)
+        self._client = client or httpx.AsyncClient(timeout=30.0, follow_redirects=True)
         self._owns_client = client is None
         self._divisions = divisions or list(DIVISIONS)
 

@@ -105,6 +105,32 @@ async def test_fetch_historical_returns_empty_for_missing_division():
     await provider.aclose()
 
 
+async def test_default_client_follows_upstream_redirect(monkeypatch):
+    """Upstream now 302s www.football-data.co.uk -> football-data.co.uk; the default client must follow."""
+    csv_bytes = (FIXTURES / "football_data_E0_2627.csv").read_bytes()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.host == "www.football-data.co.uk":
+            return httpx.Response(
+                302, headers={"Location": f"https://football-data.co.uk{request.url.path}"}
+            )
+        return httpx.Response(200, content=csv_bytes)
+
+    real_client = httpx.AsyncClient
+
+    def factory(*args, **kwargs):
+        kwargs["transport"] = httpx.MockTransport(handler)
+        return real_client(*args, **kwargs)
+
+    monkeypatch.setattr(httpx, "AsyncClient", factory)
+    provider = FootballDataProvider(BASE_URL, divisions=["E0"])
+    try:
+        records = await provider.fetch_historical(2026)
+    finally:
+        await provider.aclose()
+    assert len(records) == 3
+
+
 @pytest.mark.live
 async def test_live_football_data_smoke():
     provider = FootballDataProvider(BASE_URL, divisions=["E0"])
