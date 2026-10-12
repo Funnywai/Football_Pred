@@ -101,10 +101,11 @@ async def test_retrain_gates_on_fresh_champion_metrics(tmp_path) -> None:
 
     This test proves the WIRING, not model quality: at 40 matches ``min_child_samples=30``
     blocks every split, so both models are constant predictors. Odds payloads are
-    deliberately ABSENT: with them, the garbage champion's confident-wrong probs would
-    earn a large POSITIVE CLV mean edge, the gate's "CLV not worse" check would then
-    block the promotion, and the test would fail for the wrong reason. (The CLV branch
-    itself is covered by the registry gate unit tests.)
+    deliberately ABSENT: with them, both sides' ``clv_mean_edge`` would be ≈0 (any
+    normalized predictor has mean edge ≈0 — both distributions sum to 1), so the gate's
+    "CLV not worse" check would compare floating-point noise and could block the
+    promotion arbitrarily — the test would be fragile rather than deterministic. (The
+    CLV-worse case itself is covered by ``tests/test_ml_registry.py::test_gate_passes``.)
     """
     db = await make_db(tmp_path)
     try:

@@ -224,10 +224,15 @@ def test_prior_cutoff_renders_dialect_specific_sql() -> None:
     assert _prior_cutoff(Match.kickoff_time, 0, "postgresql") is None
     assert _prior_cutoff(Match.kickoff_time, -5, "sqlite") is None
     pg_sql = str(
-        _prior_cutoff(Match.kickoff_time, 48, "postgresql").compile(dialect=postgresql.dialect())
+        _prior_cutoff(Match.kickoff_time, 48, "postgresql").compile(
+            dialect=postgresql.dialect(), compile_kwargs={"literal_binds": True}
+        )
     )
-    assert "make_interval" in pg_sql
+    assert "make_interval(0, 0, 0, 0, 48)" in pg_sql
+
     lite_sql = str(
-        _prior_cutoff(Match.kickoff_time, 48, "sqlite").compile(dialect=sqlite.dialect())
+        _prior_cutoff(Match.kickoff_time, 48, "sqlite").compile(
+            dialect=sqlite.dialect(), compile_kwargs={"literal_binds": True}
+        )
     )
-    assert "datetime" in lite_sql
+    assert "datetime(matches.kickoff_time, '-48 hours')" in lite_sql
