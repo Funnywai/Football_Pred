@@ -83,7 +83,7 @@ def test_no_future_leakage() -> None:
 def test_same_kickoff_does_not_leak() -> None:
     t = datetime(2026, 8, 1, tzinfo=UTC)
     a = _row(1, t, 1, 2, hs=3, as_=0)
-    b = _row(2, t, 3, 4, hs=0, as_=0)
+    b = _row(2, t, 1, 3, hs=0, as_=0)
     paired = {r.match_id: r.features for r in build_feature_rows([a, b])}
     solo = {r.match_id: r.features for r in build_feature_rows([b])}
     _equal(paired[2], solo[2])
