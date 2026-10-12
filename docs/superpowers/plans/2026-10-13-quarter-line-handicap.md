@@ -228,7 +228,7 @@ async def _seed_model_version(session) -> None:
         (-0.75, "A", 2, 1, "half_lost", STAKE / 2.0),
         (-0.75, "A", 1, 1, "won", STAKE * ODDS),
         (-0.75, "A", 3, 1, "lost", 0.0),
-        (0.25, "H", 0, 0, "half_lost", STAKE / 2.0),
+        (0.25, "H", 0, 0, "half_won", STAKE * (ODDS + 1.0) / 2.0),
         (0.25, "H", 1, 0, "won", STAKE * ODDS),
         (-1.0, "H", 2, 1, "push", STAKE),
         (-1.0, "H", 3, 1, "won", STAKE * ODDS),
