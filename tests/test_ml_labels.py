@@ -3,6 +3,7 @@ from app.ml.labels import (
     is_whole_or_half,
     label_1x2,
     parse_handicap_line,
+    quarter_halves,
 )
 
 
@@ -37,3 +38,30 @@ def test_handicap_label() -> None:
     assert handicap_label(3, 1, -1.0) == "H"
     assert handicap_label(2, 1, -1.0) is None  # push on a whole line
     assert handicap_label(2, 1, -1.25) is None  # quarter line skipped in v1
+
+
+def test_parse_handicap_line_keeps_whole_and_half_exact():
+    assert parse_handicap_line("-1") == -1.0
+    assert parse_handicap_line("+0.5") == 0.5
+    assert parse_handicap_line("0") == 0.0
+    assert parse_handicap_line("-1.5") == -1.5
+    assert parse_handicap_line("") is None
+    assert parse_handicap_line(None) is None
+    assert parse_handicap_line("abc") is None
+
+
+def test_parse_handicap_line_returns_quarter_midpoint():
+    assert parse_handicap_line("-0.5/-1.0") == -0.75
+    assert parse_handicap_line("-1.0/-0.5") == -0.75
+    assert parse_handicap_line("0.0/0.5") == 0.25
+    assert parse_handicap_line("-0.5/x") is None
+
+
+def test_quarter_halves():
+    assert quarter_halves(-0.75) == (-1.0, -0.5)
+    assert quarter_halves(-0.25) == (-0.5, 0.0)
+    assert quarter_halves(0.25) == (0.0, 0.5)
+    assert quarter_halves(1.75) == (1.5, 2.0)
+    assert quarter_halves(-1.0) is None
+    assert quarter_halves(0.0) is None
+    assert quarter_halves(0.5) is None
