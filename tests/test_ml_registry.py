@@ -46,3 +46,28 @@ async def test_promote_and_rollback(tmp_path) -> None:
             assert better.status == STATUS_RETIRED
     finally:
         await db.dispose()
+
+
+async def test_maybe_promote_uses_fresh_champion_metrics(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            # champion whose STORED brier looks unbeatable
+            first = await register_challenger(
+                session, "1x2", "lightgbm", {}, {"brier": 0.10}, "/a.joblib"
+            )
+            assert await maybe_promote(session, first, 0.0)
+            worse = await register_challenger(
+                session, "1x2", "lightgbm", {}, {"brier": 0.30}, "/b.joblib"
+            )
+            # stored metrics would reject (0.30 > 0.10); the FRESH window says 0.40 -> promote
+            assert await maybe_promote(session, worse, 0.0, champion_metrics={"brier": 0.40})
+            champion = await get_champion(session, "1x2")
+            assert champion is not None and champion.id == worse.id
+            # and with None the stored metrics still govern (legacy behaviour)
+            newer = await register_challenger(
+                session, "1x2", "lightgbm", {}, {"brier": 0.35}, "/c.joblib"
+            )
+            assert not await maybe_promote(session, newer, 0.0)
+    finally:
+        await db.dispose()

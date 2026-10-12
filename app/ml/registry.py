@@ -72,12 +72,24 @@ async def promote(session: AsyncSession, version: ModelVersion) -> None:
     await session.flush()
 
 
-async def maybe_promote(session: AsyncSession, challenger: ModelVersion, margin: float) -> bool:
+async def maybe_promote(
+    session: AsyncSession,
+    challenger: ModelVersion,
+    margin: float,
+    champion_metrics: dict | None = None,
+) -> bool:
+    """Promote the challenger when it beats the champion's benchmark.
+
+    ``champion_metrics`` overrides the champion's STORED metrics with a fresh
+    evaluation on the current holdout (fix #6) so the gate never compares two
+    different time windows; ``None`` keeps the legacy stored-metrics behaviour.
+    """
     champion = await get_champion(session, challenger.target)
     if champion is None:
         await promote(session, challenger)
         return True
-    if gate_passes(challenger.metrics, champion.metrics, margin):
+    baseline = champion.metrics if champion_metrics is None else champion_metrics
+    if gate_passes(challenger.metrics, baseline, margin):
         await promote(session, challenger)
         return True
     return False
