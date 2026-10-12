@@ -53,7 +53,7 @@ uv run python -m app.cli backfill --from 2010
 適用於「自有 Linux 主機」：單寫入者排程、artifact 本機磁碟、HKJC 出口 IP 乾淨。
 
 ```bash
-cp deploy/env.example .env        # 編輯 POSTGRES_PASSWORD（有網域時再填 TUNNEL_TOKEN）
+cp deploy/env.example .env        # 編輯 POSTGRES_PASSWORD 與 DATABASE_URL（host 用 postgres；有網域時再填 TUNNEL_TOKEN）
 docker compose build              # 在目標主機上 build（image 要對應主機 CPU 架構）
 docker compose up -d postgres
 docker compose run --rm app alembic upgrade head
