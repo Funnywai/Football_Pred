@@ -7,7 +7,7 @@ from sqlalchemy import select
 from app.db.models import OddsSnapshot
 from app.ml.dataset import load_market_priors
 from app.ml.features import MatchRow
-from app.services.odds import compact_odds_snapshots
+from app.services.odds import compact_odds_snapshots, prune_odds_snapshots
 from tests.ml_helpers import make_db, seed_context, seed_finished_match, seed_team
 
 KICKOFF = datetime(2026, 10, 10, 15, 0, tzinfo=UTC)
@@ -143,11 +143,59 @@ async def test_compaction_is_idempotent(tmp_path):
         await db.dispose()
 
 
+async def test_compaction_collapses_old_backlog(tmp_path):
+    db = await make_db(tmp_path)
+    try:
+        match_id, home_id, away_id = await _seeded_match(db, had_offsets=(-72, -60, -50, -48, -24, -1))
+        row = _row(match_id, home_id, away_id)
+        async with db.session_factory() as session:
+            before = await load_market_priors(session, [row], LEAD_HOURS)
+        deleted = await compact_odds_snapshots(
+            db.session_factory, LEAD_HOURS, now=KICKOFF + timedelta(days=200)
+        )
+        assert deleted == 3
+        async with db.session_factory() as session:
+            assert await load_market_priors(session, [row], LEAD_HOURS) == before
+    finally:
+        await db.dispose()
+
+
+async def test_prune_keeps_compacted_anchors(tmp_path):
+    db = await make_db(tmp_path)
+    try:
+        await _seeded_match(db, had_offsets=(-72, -60, -50, -48, -24, -1))
+        await compact_odds_snapshots(
+            db.session_factory, LEAD_HOURS, now=KICKOFF + timedelta(hours=12)
+        )
+        deleted = await prune_odds_snapshots(
+            db.session_factory, retention_days=120, now=KICKOFF + timedelta(days=400)
+        )
+        assert deleted == 0
+        async with db.session_factory() as session:
+            assert len((await session.execute(select(OddsSnapshot))).scalars().all()) == 4
+    finally:
+        await db.dispose()
+
+
+async def test_prune_removes_old_uncompacted_rows(tmp_path):
+    db = await make_db(tmp_path)
+    try:
+        await _seeded_match(db, had_offsets=(-72, -60, -50, -48, -24, -1))
+        deleted = await prune_odds_snapshots(
+            db.session_factory, retention_days=120, now=KICKOFF + timedelta(days=400)
+        )
+        assert deleted == 6
+        async with db.session_factory() as session:
+            remaining = (await session.execute(select(OddsSnapshot))).scalars().all()
+        assert [snapshot.odds_type for snapshot in remaining] == ["HDC"]
+    finally:
+        await db.dispose()
+
+
 async def test_compaction_leaves_running_matches_alone(tmp_path):
     db = await make_db(tmp_path)
-    offsets = (-72, -50, -24, -1)
     try:
-        _match_id, _, _ = await _seeded_match(db, had_offsets=offsets)
+        await _seeded_match(db, had_offsets=(-72, -50, -24, -1))
         deleted = await compact_odds_snapshots(
             db.session_factory, LEAD_HOURS, now=KICKOFF - timedelta(hours=1)
         )
