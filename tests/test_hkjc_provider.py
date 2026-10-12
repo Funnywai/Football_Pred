@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from app.ml.features import hkjc_had_odds, hkjc_hdc_main
-from app.ml.labels import parse_handicap_line
+from app.ml.labels import quarter_halves
 from app.providers.hkjc.provider import HkjcProvider
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -104,12 +104,12 @@ async def test_real_pools_and_quarter_line_main_line():
     had = hkjc_had_odds(pools["HAD"])
     assert had is not None
     assert set(had) == {"H", "D", "A"}
-    main_conditions = [
-        line["condition"] for line in pools["HDC"]["lines"] if line.get("main")
-    ]
-    assert main_conditions == ["-0.5/-1.0"]
-    assert parse_handicap_line(main_conditions[0]) is None
-    assert hkjc_hdc_main(pools["HDC"]) is None
+    main = hkjc_hdc_main(pools["HDC"])
+    assert main is not None
+    line, odds = main
+    assert line == -0.75
+    assert set(odds) == {"H", "A"}
+    assert quarter_halves(line) == (-1.0, -0.5)
 
 
 @pytest.mark.live

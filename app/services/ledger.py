@@ -26,7 +26,7 @@ from app.db.models import (
 )
 from app.ml.dataset import load_market_priors
 from app.ml.features import MatchRow
-from app.ml.labels import handicap_label, is_whole_or_half, label_1x2
+from app.ml.labels import handicap_label, is_whole_or_half, label_1x2, quarter_halves
 from app.ml.models import TARGET_HANDICAP
 from app.ml.registry import STATUS_CHAMPION
 from app.services.runs import track_run
@@ -36,13 +36,57 @@ logger = logging.getLogger(__name__)
 LEDGER_JOB_ID = "ledger_update"
 
 
+def _settle_handicap(bet: LedgerBet, home_score: int, away_score: int) -> tuple[str, float]:
+    """``(status, payout)`` for a handicap bet: whole/half line, or a quarter line.
+
+    A quarter line is two half-stakes on the two adjacent half-lines; when one half
+    pushes and the other wins/loses the bet is ``half_won``/``half_lost``.
+    """
+    halves = quarter_halves(bet.line) if bet.line is not None else None
+    if halves is None:
+        if bet.line is None:
+            return "push", bet.stake
+        cover = handicap_label(home_score, away_score, bet.line)
+        if cover is None:
+            return "push", bet.stake
+        return ("won", bet.stake * bet.odds) if cover == bet.outcome else ("lost", 0.0)
+
+    half_stake = bet.stake / 2.0
+    half_results: list[str] = []
+    payout = 0.0
+    for half_line in halves:
+        cover = handicap_label(home_score, away_score, half_line)
+        if cover is None:
+            half_results.append("push")
+            payout += half_stake
+        elif cover == bet.outcome:
+            half_results.append("won")
+            payout += half_stake * bet.odds
+        else:
+            half_results.append("lost")
+    settled_half = set(half_results)
+    if settled_half == {"won"}:
+        status = "won"
+    elif settled_half == {"lost"}:
+        status = "lost"
+    elif settled_half == {"push"}:
+        status = "push"
+    elif "won" in settled_half:
+        status = "half_won"
+    else:
+        status = "half_lost"
+    return status, payout
+
+
 async def settle_bets(session: AsyncSession) -> int:
     """Settle pending bets whose match has a confirmed result (A-layer authority).
 
-    Only ``Result`` rows with ``confirmed = True`` settle a bet. Handicap bets
-    settle via ``handicap_label``: the bet's direction wins; a whole-line push
-    (``None``) returns the stake. Idempotent: settled bets are never touched
-    again. Returns the number of bets settled.
+    Only ``Result`` rows with ``confirmed = True`` settle a bet. Whole/half
+    handicap lines settle via ``handicap_label`` (a whole-line push returns the
+    stake); quarter lines settle via ``_settle_handicap``, splitting the stake
+    across the two half-lines into ``won``/``half_won``/``half_lost``/``lost``.
+    Idempotent: settled bets are never touched again. Returns the number of bets
+    settled.
     """
     stmt = (
         select(LedgerBet, Result)
@@ -56,20 +100,9 @@ async def settle_bets(session: AsyncSession) -> int:
     for bet, result in rows:
         if bet.target == "handicap":
             if bet.line is None:
-                logger.warning(
-                    "handicap bet %s has no line; leaving it pending", bet.id
-                )
+                logger.warning("handicap bet %s has no line; leaving it pending", bet.id)
                 continue
-            cover = handicap_label(result.home_score, result.away_score, bet.line)
-            if cover is None:
-                bet.status = "push"
-                bet.payout = bet.stake
-            elif cover == bet.outcome:
-                bet.status = "won"
-                bet.payout = bet.stake * bet.odds
-            else:
-                bet.status = "lost"
-                bet.payout = 0.0
+            bet.status, bet.payout = _settle_handicap(bet, result.home_score, result.away_score)
         elif label_1x2(result.home_score, result.away_score) == bet.outcome:
             bet.status = "won"
             bet.payout = bet.stake * bet.odds

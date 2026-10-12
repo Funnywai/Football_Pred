@@ -194,26 +194,49 @@ async def load_market_priors(
     return priors
 
 
+def _match_starts(df: pd.DataFrame) -> list[int]:
+    """Row indices where a new ``match_id`` begins (df must be sorted by kickoff, match)."""
+    starts = [0]
+    previous = df["match_id"].iloc[0]
+    for index in range(1, len(df)):
+        if df["match_id"].iloc[index] != previous:
+            starts.append(index)
+            previous = df["match_id"].iloc[index]
+    return starts
+
+
+def _snap_up(boundaries: list[int], target: int, total: int) -> int:
+    for index in boundaries:
+        if index >= target:
+            return index
+    return total
+
+
 def temporal_split(
     df: pd.DataFrame,
     calibration_fraction: float = CALIBRATION_FRACTION,
     eval_fraction: float = EVAL_FRACTION,
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    """Chronological train/calibration/eval split (oldest -> newest)."""
+    """Chronological train/calibration/eval split that never splits a match.
+
+    A match can contribute more than one row (a quarter line decomposes into two
+    half-lines), so the fractional boundaries are snapped to the next match boundary:
+    no match is ever represented in two splits, which would leak its feature vector
+    into the evaluation window.
+    """
     ordered = df.sort_values(["kickoff_time", "match_id"]).reset_index(drop=True)
     n = len(ordered)
     if n < MIN_DATASET_ROWS:
         raise ValueError(f"need at least {MIN_DATASET_ROWS} rows, got {n}")
-    n_eval = max(1, int(n * eval_fraction))
-    n_cal = max(1, int(n * calibration_fraction))
-    n_train = n - n_eval - n_cal
-    if n_train < 1:
-        raise ValueError(f"split leaves no training rows (n={n})")
-    return (
-        ordered.iloc[:n_train].copy(),
-        ordered.iloc[n_train : n_train + n_cal].copy(),
-        ordered.iloc[n_train + n_cal :].copy(),
-    )
+    boundaries = _match_starts(ordered)
+    cut_cal = _snap_up(boundaries, max(1, n - max(1, int(n * eval_fraction)) - max(1, int(n * calibration_fraction))), n)
+    cut_eval = _snap_up(boundaries, max(cut_cal + 1, n - max(1, int(n * eval_fraction))), n)
+    train = ordered.iloc[:cut_cal].copy()
+    calibration = ordered.iloc[cut_cal:cut_eval].copy()
+    evaluation = ordered.iloc[cut_eval:].copy()
+    if train.empty or calibration.empty or evaluation.empty:
+        raise ValueError(f"split leaves an empty slice (n={n})")
+    return train, calibration, evaluation
 
 
 def _frame(rows: list[MatchRow], priors: dict[int, MarketPrior]) -> pd.DataFrame:

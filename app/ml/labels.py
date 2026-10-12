@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 QUARTER_EPSILON = 1e-9
+QUARTER_STEP = 0.25
 
 
 def label_1x2(home_score: int, away_score: int) -> str:
@@ -15,16 +16,44 @@ def label_1x2(home_score: int, away_score: int) -> str:
 
 
 def parse_handicap_line(condition: str | None) -> float | None:
-    """Parse an HKJC HDC ``condition`` string (e.g. "-1", "+0.5", "0") into a float."""
+    """Parse an HKJC HDC ``condition`` (e.g. "-1", "+0.5", "0") into a float.
+
+    Quarter lines ("-0.5/-1.0") return their **midpoint** (-0.75) so the value can be
+    stored as the ``hdc_line`` feature; ``quarter_halves`` recovers the two halves.
+    """
     if condition is None:
         return None
     text = condition.strip()
     if not text:
         return None
+    if "/" in text:
+        parts = text.split("/")
+        if len(parts) != 2:
+            return None
+        try:
+            first, second = float(parts[0]), float(parts[1])
+        except ValueError:
+            return None
+        return round((first + second) / 2.0, 10)
     try:
         return float(text)
     except ValueError:
         return None
+
+
+def quarter_halves(line: float) -> tuple[float, float] | None:
+    """The two half-lines a quarter line splits into, as ``(low, high)``.
+
+    ``-0.75 -> (-1.0, -0.5)``. Returns ``None`` for whole/half lines (they are not
+    quarter lines) and for values that are not odd multiples of 0.25.
+    """
+    if is_whole_or_half(line):
+        return None
+    low = round(line - QUARTER_STEP, 10)
+    high = round(line + QUARTER_STEP, 10)
+    if not (is_whole_or_half(low) and is_whole_or_half(high)):
+        return None
+    return low, high
 
 
 def is_whole_or_half(line: float) -> bool:
