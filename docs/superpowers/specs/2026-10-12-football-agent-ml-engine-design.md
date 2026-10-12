@@ -183,3 +183,12 @@ rolling vs fitted Dixon-Coles); whether the market prior is HKJC-only or include
 
 NN / unsupervised / RL; over-under + other markets; live in-play; real-money staking (C); UI (D); richer
 orchestration (E); full self-improvement loop upgrades (F).
+
+## v1 known limitations (deferred follow-ups)
+
+- Market Brier/log-loss baseline (§9) is not yet computed alongside the model metrics.
+- CLV is currently computed over all outcomes, not only flagged value bets (§9).
+- Champion/challenger is gated on stored vs fresh eval Brier across different windows (§10) — re-evaluate
+  the champion on the current holdout.
+- Train/serve skew: training uses closing odds, serving uses the latest pre-kickoff snapshot (≤48h lead) —
+  align the prior lead time or add a lead-time feature.
