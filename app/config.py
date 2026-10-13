@@ -1,4 +1,5 @@
 import json
+import logging
 from functools import lru_cache
 from typing import Annotated
 
@@ -32,6 +33,7 @@ class Settings(BaseSettings):
     hkjc_throttle_seconds: float = 1.5
     odds_retention_days: int = 120
     enable_scheduler: bool = True
+    log_level: str = "INFO"
 
     # ML prediction engine (sub-system B)
     ml_enable: bool = False
@@ -68,3 +70,16 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def configure_logging(level: str = "INFO") -> None:
+    """Send the app's own logs to stderr so `docker compose logs app` can see them.
+
+    Without this the root logger stays at WARNING and every ``logger.info`` (job
+    skips, dropped tournaments, promotion decisions) is silently discarded.
+    """
+    logging.basicConfig(
+        level=level.upper(),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    logging.getLogger().setLevel(level.upper())
