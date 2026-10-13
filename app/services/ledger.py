@@ -37,6 +37,18 @@ logger = logging.getLogger(__name__)
 LEDGER_JOB_ID = "ledger_update"
 
 
+DIVIDEND_ROUNDING_CENTS = 10
+
+
+def _round_dividend(amount: float) -> float:
+    """HKJC football Rule 2.19(a): a dividend is rounded to the nearest 10 cents.
+
+    Half-up, not Python's banker's rounding (``round(35.25, 1)`` gives 35.2). A returned
+    stake is not a dividend and is passed through unchanged.
+    """
+    return math.floor(amount * DIVIDEND_ROUNDING_CENTS + 0.5) / DIVIDEND_ROUNDING_CENTS
+
+
 def _settle_handicap(bet: LedgerBet, home_score: int, away_score: int) -> tuple[str, float]:
     """``(status, payout)`` for a handicap bet: whole/half line, or a quarter line.
 
@@ -50,7 +62,9 @@ def _settle_handicap(bet: LedgerBet, home_score: int, away_score: int) -> tuple[
         cover = handicap_label(home_score, away_score, bet.line)
         if cover is None:
             return "push", bet.stake
-        return ("won", bet.stake * bet.odds) if cover == bet.outcome else ("lost", 0.0)
+        if cover == bet.outcome:
+            return "won", _round_dividend(bet.stake * bet.odds)
+        return "lost", 0.0
 
     half_stake = bet.stake / 2.0
     half_results: list[str] = []
@@ -76,7 +90,7 @@ def _settle_handicap(bet: LedgerBet, home_score: int, away_score: int) -> tuple[
         status = "half_won"
     else:
         status = "half_lost"
-    return status, payout
+    return status, _round_dividend(payout)
 
 
 async def settle_bets(session: AsyncSession) -> int:
@@ -106,7 +120,7 @@ async def settle_bets(session: AsyncSession) -> int:
             bet.status, bet.payout = _settle_handicap(bet, result.home_score, result.away_score)
         elif label_1x2(result.home_score, result.away_score) == bet.outcome:
             bet.status = "won"
-            bet.payout = bet.stake * bet.odds
+            bet.payout = _round_dividend(bet.stake * bet.odds)
         else:
             bet.status = "lost"
             bet.payout = 0.0
