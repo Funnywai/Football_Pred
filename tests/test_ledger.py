@@ -15,7 +15,13 @@ from app.db.models import (
     Prediction,
     Result,
 )
-from app.services.ledger import _size_stake, place_bets, settle_bets
+from app.services.ledger import (
+    _round_dividend,
+    _settle_handicap,
+    _size_stake,
+    place_bets,
+    settle_bets,
+)
 
 KICKOFF = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
 
@@ -75,6 +81,44 @@ async def _add_bet(
 async def _the_bet(db) -> LedgerBet:
     async with db.session_factory() as session:
         return (await session.execute(select(LedgerBet))).scalar_one()
+
+
+@pytest.mark.parametrize(
+    ("stake", "odds", "expected_payout"),
+    [
+        (13.0, 2.48, 32.20),
+        (15.0, 2.35, 35.30),
+        (15.0, 2.34, 35.10),
+    ],
+)
+async def test_settle_rounds_payout_to_the_nearest_ten_cents(
+    tmp_path, stake, odds, expected_payout
+) -> None:
+    db, match_id = await _db_with_result(tmp_path, home_score=2, away_score=1)
+    await _add_bet(db, match_id, outcome="H", odds=odds, stake=stake)
+    async with db.session_factory() as session:
+        assert await settle_bets(session) == 1
+        await session.commit()
+    bet = await _the_bet(db)
+    assert bet.payout == pytest.approx(expected_payout)
+    assert bet.profit == pytest.approx(expected_payout - stake)
+
+
+def test_round_dividend_half_up_to_ten_cents() -> None:
+    assert _round_dividend(32.24) == pytest.approx(32.20)
+    assert _round_dividend(35.25) == pytest.approx(35.30)
+    assert _round_dividend(35.24) == pytest.approx(35.20)
+    assert _round_dividend(0.0) == 0.0
+
+
+def test_settle_handicap_rounds_the_quarter_total() -> None:
+    bet = LedgerBet(
+        match_id=1, target="handicap", outcome="H", model_version_id=1,
+        line=-0.75, odds=2.48, stake=13.0, bankroll_at_place=1000.0, kelly_multiplier=0.5,
+    )
+    status, payout = _settle_handicap(bet, 2, 1)
+    assert status == "half_won"
+    assert payout == pytest.approx(22.60)
 
 
 async def test_settle_won_1x2(tmp_path) -> None:
