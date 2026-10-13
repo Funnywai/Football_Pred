@@ -234,7 +234,10 @@ def test_size_stake_is_whole_hkd() -> None:
 
 
 async def _seed_matches_with_champion(tmp_path, *, n: int = 2) -> tuple:
-    """n pre-kickoff matches (future kickoff) with HAD/HDC snapshots + one champion; return (db, match ids)."""
+    """n pre-kickoff matches (future kickoff) with HAD/HDC snapshots + one champion.
+
+    Returns ``(db, match ids)``.
+    """
     db = await make_db(tmp_path)
     async with db.session_factory() as session:
         league, season = await seed_context(session)

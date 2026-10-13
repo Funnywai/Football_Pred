@@ -56,9 +56,9 @@ def clv_metrics(
             beats.append(1.0 if model_prob >= closing_prob else 0.0)
             edges.append(model_prob - closing_prob)
     if not beats:
-        return {"clv_fraction": None, "clv_mean_edge": None, "n": 0}
+        return {"clv_fraction": None, "clv_mean_edge": None, "clv_n": 0}
     return {
         "clv_fraction": sum(beats) / len(beats),
         "clv_mean_edge": sum(edges) / len(edges),
-        "n": len(beats),
+        "clv_n": len(beats),
     }

@@ -25,6 +25,11 @@ def test_clv_metrics() -> None:
     model = {1: {"H": 0.5, "D": 0.3, "A": 0.2}}
     closing = {1: {"H": 0.45, "D": 0.32, "A": 0.23}}
     metrics = clv_metrics(model, closing)
-    assert metrics["n"] == 3
+    assert metrics["clv_n"] == 3
     assert metrics["clv_fraction"] == pytest.approx(1 / 3)  # H beats, D/A don't
     assert clv_metrics({1: {"H": 0.5}}, {})["clv_fraction"] is None
+
+
+def test_clv_metrics_keys_do_not_collide_with_eval_metrics() -> None:
+    keys = set(clv_metrics({1: {"H": 0.5}}, {1: {"H": 0.5}})) | set(clv_metrics({}, {}))
+    assert keys & {"brier", "logloss", "n"} == set()

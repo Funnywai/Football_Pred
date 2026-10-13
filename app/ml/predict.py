@@ -146,7 +146,9 @@ def build_prediction_rows(
             home_prob = float(predict_proba(champion_handicap.model, [feature_row.features])[0])
             probs_handicap = {"H": home_prob, "A": 1.0 - home_prob}
         rows.extend(
-            _rows_for(upcoming, champion_handicap, TARGET_HANDICAP, probs_handicap, prior, threshold)
+            _rows_for(
+                upcoming, champion_handicap, TARGET_HANDICAP, probs_handicap, prior, threshold
+            )
         )
     return rows
 
