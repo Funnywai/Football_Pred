@@ -37,16 +37,17 @@ logger = logging.getLogger(__name__)
 LEDGER_JOB_ID = "ledger_update"
 
 
-DIVIDEND_ROUNDING_CENTS = 10
-
-
 def _round_dividend(amount: float) -> float:
     """HKJC football Rule 2.19(a): a dividend is rounded to the nearest 10 cents.
 
-    Half-up, not Python's banker's rounding (``round(35.25, 1)`` gives 35.2). A returned
-    stake is not a dividend and is passed through unchanged.
+    Rounded in whole cents, not on the float directly: a dividend is always
+    ``integer_stake × two-decimal_odds``, so ``amount * 100`` is within ~1e-10 of an
+    integer, and ``amount * 10 + 0.5`` is NOT reliable (``11 * 1.15`` is 12.649999999999999,
+    which used to round down to 12.6 instead of half-up 12.7). Ties go up; a returned stake
+    is not a dividend and is passed through unchanged.
     """
-    return math.floor(amount * DIVIDEND_ROUNDING_CENTS + 0.5) / DIVIDEND_ROUNDING_CENTS
+    cents = round(amount * 100)
+    return (cents + 5) // 10 / 10
 
 
 def _settle_handicap(bet: LedgerBet, home_score: int, away_score: int) -> tuple[str, float]:
