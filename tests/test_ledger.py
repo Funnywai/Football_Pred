@@ -111,6 +111,20 @@ def test_round_dividend_half_up_to_ten_cents() -> None:
     assert _round_dividend(0.0) == 0.0
 
 
+@pytest.mark.parametrize(
+    ("stake", "odds", "expected"),
+    [
+        (11, 1.15, 12.70),
+        (11, 2.05, 22.60),
+        (11, 8.45, 93.00),
+        (13, 2.48, 32.20),
+        (15, 2.35, 35.30),
+    ],
+)
+def test_round_dividend_rounds_decimal_ties_up(stake, odds, expected) -> None:
+    assert _round_dividend(stake * odds) == pytest.approx(expected)
+
+
 def test_settle_handicap_rounds_the_quarter_total() -> None:
     bet = LedgerBet(
         match_id=1, target="handicap", outcome="H", model_version_id=1,

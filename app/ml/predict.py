@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from math import isnan
+from math import isinf, isnan
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -181,10 +181,10 @@ async def upsert_predictions(session: AsyncSession, rows: list[Prediction]) -> i
 
 
 def _json_safe(features: dict[str, float]) -> dict[str, float | None]:
-    """Store NaN as null: JSON has no NaN token and Postgres rejects it for JSONB, while
-    the feature builder uses NaN to mark a missing market prior."""
+    """Store NaN/Inf as null: JSON has no NaN/Infinity token and Postgres rejects both
+    for JSONB, while the feature builder uses NaN to mark a missing market prior."""
     return {
-        key: None if isinstance(value, float) and isnan(value) else value
+        key: None if isinstance(value, float) and (isnan(value) or isinf(value)) else value
         for key, value in features.items()
     }
 
