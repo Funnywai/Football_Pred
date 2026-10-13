@@ -165,14 +165,28 @@ def test_size_stake_fractional_kelly_and_cap() -> None:
     settings = _settings()
     # 6% fraction × 0.5 multiplier on HKD 1000 = HKD 30
     assert _size_stake(1000.0, 0.06, settings) == pytest.approx(30.0)
-    # rounding to 2dp: 1234 × 0.05 × 0.5 = 30.85
-    assert _size_stake(1234.0, 0.05, settings) == pytest.approx(30.85)
+    # stakes are whole HKD (HKJC bet unit): 1234 × 0.05 × 0.5 = 30.85 → floored to 30
+    assert _size_stake(1234.0, 0.05, settings) == 30
     # cap is downward-only: 25% × 0.5 = 125 > cap 50 → capped at 50
     assert _size_stake(1000.0, 0.25, settings) == pytest.approx(50.0)
     # below the HKD 10 minimum → skipped (never raised to the minimum)
     assert _size_stake(1000.0, 0.01, settings) is None
     # cap itself below the minimum (100 × 5% = 5) → skipped
     assert _size_stake(100.0, 0.6, settings) is None
+
+
+def test_size_stake_is_whole_hkd() -> None:
+    settings = _settings()
+    for bankroll, fraction, expected in (
+        (10000.0, 0.002662, 13.0),
+        (777.0, 0.0333, 12.0),
+        (1234.0, 0.05, 30.0),
+        (99999.0, 0.017, 849.0),
+        (1000.0, 0.06, 30.0),
+    ):
+        stake = _size_stake(bankroll, fraction, settings)
+        assert stake == pytest.approx(expected), f"{bankroll} × {fraction} → {stake}"
+        assert float(stake).is_integer()
 
 
 async def _seed_matches_with_champion(tmp_path, *, n: int = 2) -> tuple:
@@ -238,6 +252,7 @@ async def test_place_sizes_and_locks_fields(tmp_path) -> None:
         await session.commit()
     bet = await _the_bet(db)
     assert bet.stake == pytest.approx(30.0)
+    assert float(bet.stake).is_integer()
     assert bet.odds == pytest.approx(2.1)
     assert bet.edge == pytest.approx(0.05)
     assert bet.kelly_multiplier == pytest.approx(0.5)
