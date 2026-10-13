@@ -8,6 +8,7 @@ then place new bets); both passes are idempotent.
 from __future__ import annotations
 
 import logging
+import math
 from datetime import UTC, datetime
 from typing import NamedTuple
 
@@ -135,17 +136,18 @@ def _size_stake(
     recommended_fraction: float,
     settings: Settings,
 ) -> float | None:
-    """Fractional-Kelly stake, capped downward only. None = below HKD 10 → skip.
+    """Fractional-Kelly stake in whole HKD, capped downward only. None = below the
+    minimum → skip.
 
-    Never raises a stake up to the minimum; the rule is uniform for every
-    market (HAD today; any later market the same).
+    HKJC takes whole dollars (``ledger_min_stake`` is its bet unit), so the stake is
+    floored — never rounded up, never raised to the minimum: the rule is uniform for
+    every market (HAD today; any later market the same).
     """
-    raw = round(
-        bankroll_batch_start * recommended_fraction * settings.ledger_kelly_multiplier,
-        2,
+    raw = math.floor(
+        bankroll_batch_start * recommended_fraction * settings.ledger_kelly_multiplier
     )
-    cap = settings.ledger_max_stake_fraction * bankroll_batch_start
-    stake = min(raw, cap)
+    cap = math.floor(settings.ledger_max_stake_fraction * bankroll_batch_start)
+    stake = float(min(raw, cap))
     if stake < settings.ledger_min_stake:
         return None
     return stake
