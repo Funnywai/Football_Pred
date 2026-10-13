@@ -1,4 +1,21 @@
-from app.config import Settings
+import logging
+
+from app.config import Settings, configure_logging
+
+
+def test_settings_log_level_defaults_to_info():
+    assert Settings(_env_file=None).log_level == "INFO"
+
+
+def test_configure_logging_makes_info_visible():
+    root = logging.getLogger()
+    previous = root.level
+    try:
+        configure_logging("INFO")
+        assert root.level == logging.INFO
+        assert logging.getLogger("app.services.fixtures").isEnabledFor(logging.INFO)
+    finally:
+        root.setLevel(previous)
 
 
 def test_defaults():

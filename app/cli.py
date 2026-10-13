@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.config import get_settings
+from app.config import configure_logging, get_settings
 from app.data.leagues import seed_leagues
 from app.db.models import League, Match, OddsSnapshot, Result, Season, Team
 from app.db.session import Database
@@ -215,6 +215,7 @@ async def _run_ledger() -> None:
 
 
 def main(argv: list[str] | None = None) -> None:
+    configure_logging(get_settings().log_level)
     parser = argparse.ArgumentParser(prog="app.cli")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

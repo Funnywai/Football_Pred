@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.api.routes import router
-from app.config import Settings, get_settings
+from app.config import Settings, configure_logging, get_settings
 from app.db.session import Database
 from app.providers.football_data.provider import FootballDataProvider
 from app.providers.hkjc.client import HkjcGraphQLClient
@@ -13,6 +13,7 @@ from app.scheduler import build_scheduler
 
 def create_app(settings: Settings | None = None, db: Database | None = None) -> FastAPI:
     settings = settings or get_settings()
+    configure_logging(settings.log_level)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
