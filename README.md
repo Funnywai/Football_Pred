@@ -79,6 +79,7 @@ docker compose up -d
 |---|---|---|
 | `DATABASE_URL` | `postgresql+asyncpg://…` | Postgres 連線（compose 會自動覆寫成服務名 `postgres`） |
 | `ENABLE_SCHEDULER` | `true` | 是否在 app process 內啟動 APScheduler |
+| `LOG_LEVEL` | `INFO` | app 日誌等級（`DEBUG` 更吵）。`app` 現在會把 INFO 以上送進 `docker compose logs app` |
 | `LEAGUE_WHITELIST` | EPL,LALIGA,SERIEA,BUNDESLIGA,LIGUE1,UCL | 要收錄的聯賽 |
 | `SYNC_ODDS_INTERVAL` / `SYNC_SETTLE_INTERVAL` | 600 / 900 | 賠率同步／賽果結算間隔（秒） |
 | `ML_ENABLE` | `false`（部署範本設 `true`） | 是否啟用 ML 預測／重訓排程 |
@@ -108,6 +109,35 @@ docker compose up -d
 
 重訓與預測預設由排程自動觸發（`ML_RETRAIN_INTERVAL`／每小時）；也可隨時手動觸發：`retrain` / `predict` / `ledger`（見上表）。
 
+### CLI 子命令
+
+```bash
+docker compose run --rm app python -m app.cli <子命令> [參數]
+```
+
+| 子命令 | 作用 | 排程對應 |
+|---|---|---|
+| `backfill --from 2010` | 從 football-data.co.uk 灌歷史賽果／賠率 | 無（一次性） |
+| `seed-leagues` | 種入 `LEAGUE_WHITELIST` 聯賽，並回填 `hkjc_tourn_id`（只補 NULL） | 無（一次性） |
+| `retrain` | 立刻訓練 challenger，過閘即升 champion | `ML_RETRAIN_INTERVAL`（7 天） |
+| `predict` | 立刻跑一次冠軍預測（寫 `predictions` / `match_features`） | 每小時 |
+| `ledger` | 立刻結算＋下注 | 每小時 |
+
+- 建表／遷移**不是** CLI：用 `docker compose run --rm app alembic upgrade head`
+- 手動觸發**用 `run` 不要用 `exec`**：`run` 開新容器一定會讀到最新 `.env`；`exec` 沿用舊容器的環境變數
+- 避開整點（排程每小時跑 `predict` / `ledger`），避免兩個 process 同時處理同一批資料
+
+### 改 `.env` 之後，確認「真的生效」
+
+```bash
+sed -i 's/^LEDGER_INITIAL_BANKROLL=.*/LEDGER_INITIAL_BANKROLL=10000/' .env
+docker compose up -d app                                            # 看到 Started / Recreated = 生效
+docker compose exec app printenv LEDGER_INITIAL_BANKROLL             # 容器內的真相
+```
+
+> 不要用 `grep -q KEY .env || echo "KEY=…" >> .env`：鍵已存在時 `grep` 成功、`echo` 被跳過 → **靜默失敗**。
+> `docker compose up -d` 只顯示 `Running` 就是「環境變數沒變」的訊號。
+
 ## API 端點（唯讀）
 
 | 端點 | 說明 |
@@ -125,9 +155,38 @@ docker compose up -d
 ## 測試
 
 ```bash
-uv run pytest            # 154 passed（2 個 live 測試預設 deselected）
+uv run pytest            # 195 passed（2 個 live 測試預設 deselected）
 uv run ruff check .      # lint（line-length 100）
 ```
+
+## 資料生命週期（HKJC 賠率快照）
+
+HKJC 賠率每 `SYNC_ODDS_INTERVAL`（預設 600 秒）抓一次，但**不會無限累積**：
+
+| 階段 | 觸發 | 動作 |
+|---|---|---|
+| 原始流 | 每次同步 | 每 `(match × odds_type × inplay)` 每 10 分鐘一筆 |
+| **壓縮** | 每天 04:00 UTC（`prune_odds` 排程；只處理開踢超過 6 小時的比賽） | 每組只留 **3 個 anchor**：入場價、`kickoff − ML_PRIOR_LEAD_HOURS`（預設 48h）之前的**最後一筆**（＝ ML 市場先驗）、開踢前的**最後一筆**（＝ 收盤價，CLV 用） |
+| **清除** | 每天 04:00 UTC（同上） | 只刪「**還沒被壓縮**的殘渣」（>3 筆的組）且 `captured_at` 早於 `ODDS_RETENTION_DAYS`（120 天）者 |
+
+- **壓縮後的 3 個 anchors 永久保存**；`source='football_data'` 的歷史收盤價也永不被壓縮或清除
+- 所以**開踢 6 小時後就無法重建「賠率漂移路徑」**：未來若要做盤口移動特徵，需先調 `COMPACT_KEEP_PER_GROUP`（`app/services/odds.py`）
+- **停機風險**：開踢前後 app 沒跑 → 該場收盤快照永久缺失 → CLV 永久缺失（HKJC 不提供賽後賠率）
+
+## 怎麼看績效（帳本）
+
+| 欄位 | 意義 | 陷阱 |
+|---|---|---|
+| `prob` | 模型機率 | — |
+| `implied_prob` | HKJC 賠率**去水後**的市場機率 | 不是 `1/賠率`（含約 12% 水錢） |
+| `edge` | `prob − implied_prob` | **對「公平價」**，天生比真實可下注邊際大 3～5 倍 |
+| `market_odds` | 實際可下注賠率 | `NULL` ＝ 尚無市場先驗 → 不能下注 |
+| `recommended_fraction` | 半凱利建議比例（`kelly_fraction(prob, market_odds) × LEDGER_KELLY_MULTIPLIER`） | 用**真實賠率**算 → 扣水錢後的邊際才是真的 |
+| `stake` | 注碼（**整元**，向下取整；低於 `LEDGER_MIN_STAKE` 不下注） | — |
+| `payout` | 派彩（**四捨五入至 0.1 元**，依 HKJC 足球博彩規例 2.19(a)） | 退本金（push）不是彩金 → 原樣退回 |
+
+- 驗收看 **CLV**（我們取的價 vs 收盤價，`/models` 的 `clv_*` metrics），**不要看 ROI**：統計上要分辨 1% 等級的邊際需要上萬注
+- 讓球（HDC）每注最低投注總額為 **HK$200**（數碼平台 1X2 才 HK$10）——Phase 2b 上線讓球時需 per-target 最低注
 
 ## 已知限制與後續
 
@@ -137,6 +196,9 @@ uv run ruff check .      # lint（line-length 100）
   `python -m app.cli retrain`（或等排程重訓完成）再信任 live 預測。
 - **Ledger（C）** follow-up：`status` DB 端 default、未知 `target` 防禦、cap rounding、
   API 篩選器測試覆蓋等（見 `docs/superpowers/specs/2026-10-12-paper-ledger-design.md`）。
+- **HKJC 賽果只回看 2 天**（`HKJC_LOOKBACK_DAYS=2`）：停機超過 2 天會永久漏掉那幾天的賽果
+  （football-data.co.uk 的 CSV 有落後，補不到最近幾週）。
+- **讓球最低注 HK$200**：目前 `LEDGER_MIN_STAKE` 是全域 10（對 1X2 正確）；Phase 2b 上線讓球前需 per-target。
 - **D／E／F**：Next.js Web UI、編排、自我改進循環升級——尚未開始。
 
 ## 舊專案對照
