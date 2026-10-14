@@ -312,10 +312,12 @@ async def test_place_sizes_and_locks_fields(tmp_path) -> None:
         assert await place_bets(session, _settings()) == 1
         await session.commit()
     bet = await _the_bet(db)
-    assert bet.stake == pytest.approx(30.0)
+    # Execution-price change: stake = floor(1000 * kelly(0.5, 2.1) * 0.5) = 22, not the
+    # 30 that the stored prior fraction 0.06 used to give; `edge` uses the same price.
+    assert bet.stake == pytest.approx(22.0)
     assert float(bet.stake).is_integer()
     assert bet.odds == pytest.approx(2.1)
-    assert bet.edge == pytest.approx(0.05)
+    assert bet.edge == pytest.approx(0.0392, abs=1e-4)
     assert bet.kelly_multiplier == pytest.approx(0.5)
     assert bet.bankroll_at_place == pytest.approx(1000.0)
     assert bet.status == "pending"
@@ -404,6 +406,88 @@ async def test_place_rejects_stale_matches(tmp_path) -> None:
     async with db.session_factory() as session:
         rows = (await session.execute(select(LedgerBet))).scalars().all()
         assert rows == []
+
+
+EXEC_BETTER = {"lines": [{"combinations": [
+    {"str": "H", "currentOdds": "2.2"}, {"str": "D", "currentOdds": "3.4"},
+    {"str": "A", "currentOdds": "3.8"}]}]}
+EXEC_WORSE = {"lines": [{"combinations": [
+    {"str": "H", "currentOdds": "1.9"}, {"str": "D", "currentOdds": "3.4"},
+    {"str": "A", "currentOdds": "3.8"}]}]}
+EXEC_NO_H = {"lines": [{"combinations": [
+    {"str": "D", "currentOdds": "3.4"}, {"str": "A", "currentOdds": "3.8"}]}]}
+
+
+async def _add_exec_snapshot(db, match_id: int, payload: dict, *, hours_before_kickoff: int) -> None:
+    """Add a fresher HKJC HAD snapshot captured just before kickoff (the executable price)."""
+    async with db.session_factory() as session:
+        kickoff = (
+            await session.execute(select(Match.kickoff_time).where(Match.id == match_id))
+        ).scalar_one()
+        captured = kickoff - timedelta(hours=hours_before_kickoff)
+        session.add(
+            OddsSnapshot(
+                match_id=match_id,
+                captured_at=captured,
+                snapshot_bucket=captured,
+                source="hkjc",
+                inplay=False,
+                odds_type="HAD",
+                payload=payload,
+            )
+        )
+        await session.commit()
+
+
+async def test_place_records_the_execution_price_and_sizes_from_it(tmp_path) -> None:
+    """The bet is recorded at the price obtainable now (latest HKJC snapshot before
+    kickoff), and sized from the Kelly fraction at THAT price — not at the prior's price.
+    """
+    db, match_ids = await _seed_matches_with_champion(tmp_path, n=1)
+    version = await _champion_version_id(db)
+    await _add_exec_snapshot(db, match_ids[0], EXEC_BETTER, hours_before_kickoff=2)
+    await _add_prediction(db, match_ids[0], version)  # prior: market_odds=2.1, fraction=0.06
+    async with db.session_factory() as session:
+        assert await place_bets(session, _settings()) == 1
+        await session.commit()
+    bet = await _the_bet(db)
+    assert bet.odds == pytest.approx(2.2)  # execution price, not the prior's 2.1
+    assert bet.stake == pytest.approx(41.0)  # floor(1000 * kelly(0.5, 2.2) * 0.5)
+    assert bet.edge == pytest.approx(0.0508, abs=1e-4)  # 0.5 - devig_H(2.2, 3.4, 3.8)
+
+
+async def test_place_skips_when_value_is_gone_at_the_execution_price(tmp_path) -> None:
+    """Price moved against us (2.1 -> 1.9): Kelly for p=0.5 turns negative → no bet."""
+    db, match_ids = await _seed_matches_with_champion(tmp_path, n=1)
+    version = await _champion_version_id(db)
+    await _add_exec_snapshot(db, match_ids[0], EXEC_WORSE, hours_before_kickoff=2)
+    await _add_prediction(db, match_ids[0], version)
+    async with db.session_factory() as session:
+        assert await place_bets(session, _settings()) == 0
+    async with db.session_factory() as session:
+        assert (await session.execute(select(LedgerBet))).scalars().all() == []
+
+
+async def test_place_skips_without_a_pre_kickoff_hkjc_snapshot(tmp_path) -> None:
+    """No HKJC HAD snapshot before kickoff → no executable price → no bet (never fabricate)."""
+    db, match_ids = await _seed_matches_with_champion(tmp_path, n=1)
+    version = await _champion_version_id(db)
+    async with db.session_factory() as session:
+        await session.execute(delete(OddsSnapshot).where(OddsSnapshot.odds_type == "HAD"))
+        await session.commit()
+    await _add_prediction(db, match_ids[0], version)
+    async with db.session_factory() as session:
+        assert await place_bets(session, _settings()) == 0
+
+
+async def test_place_skips_when_snapshot_lacks_the_outcome(tmp_path) -> None:
+    """A snapshot without this outcome yields no price for it → no bet."""
+    db, match_ids = await _seed_matches_with_champion(tmp_path, n=1)
+    version = await _champion_version_id(db)
+    await _add_exec_snapshot(db, match_ids[0], EXEC_NO_H, hours_before_kickoff=2)
+    await _add_prediction(db, match_ids[0], version)  # outcome H; the snapshot has no H
+    async with db.session_factory() as session:
+        assert await place_bets(session, _settings()) == 0
 
 
 async def test_place_skips_handicap_quarter_line(tmp_path) -> None:
