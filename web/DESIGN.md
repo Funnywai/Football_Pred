@@ -272,6 +272,9 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 - **Spacing**: `--space-3` tab padding.
 - **States**: default, hover, active (indicator in `--accent-signal`), focus (focus ring).
 - **Accessibility**: `role="tablist"` / `role="tab"` / `role="tabpanel"`, arrow-key navigation.
+  The two tabs are real routes (`/performance`, `/technical`), so each tab is an anchor and
+  the page's `<main>` carries `role="tabpanel"` with `aria-labelledby` pointing at the active
+  tab; arrow keys move focus between tabs.
 - **Motion**: the active indicator slides between tabs over 200ms ease-in-out.
 
 ### LogLine
@@ -282,6 +285,19 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 - **States**: default, hover (background to `--surface-raised`).
 - **Accessibility**: the level is a text tag, not colour alone.
 - **Motion**: none. The stream scrolls; lines do not animate in.
+
+### SectionShell
+
+- **Structure**: a `Panel` whose header carries the section title and a `queued` `StatusPill`
+  reading "pending — next increment", and whose body carries the section's one-line purpose
+  and its source route(s).
+- **Variants**: none.
+- **Spacing**: `--space-6` panel padding, `--space-2` purpose-to-source gap.
+- **States**: pending only (this is the walking-skeleton placeholder for a section that a
+  later increment fills in).
+- **Accessibility**: the title is the panel's `aria-labelledby` target; the pending state is
+  carried by the pill's text label, not colour alone.
+- **Motion**: none.
 
 ---
 

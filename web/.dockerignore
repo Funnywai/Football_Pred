@@ -1,0 +1,15 @@
+node_modules
+.next
+out
+build
+coverage
+.git
+.gitignore
+.env
+.env.*
+Dockerfile
+.dockerignore
+README.md
+*.log
+.DS_Store
+.react-doctor-report.json
