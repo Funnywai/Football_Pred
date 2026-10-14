@@ -6,7 +6,7 @@
 #
 # Quick start on the host:
 #   cp deploy/env.example .env            # then edit POSTGRES_PASSWORD / TUNNEL_TOKEN
-#   docker compose build
+#   GIT_SHA=$(git rev-parse --short HEAD) docker compose build   # or set GIT_SHA in .env
 #   docker compose up -d postgres
 #   docker compose run --rm app alembic upgrade head
 #   docker compose run --rm app python -m app.cli seed-leagues

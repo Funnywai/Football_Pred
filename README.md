@@ -54,7 +54,7 @@ uv run python -m app.cli backfill --from 2010
 
 ```bash
 cp deploy/env.example .env        # 編輯 POSTGRES_PASSWORD 與 DATABASE_URL（host 用 postgres；有網域時再填 TUNNEL_TOKEN）
-docker compose build              # 在目標主機上 build（image 要對應主機 CPU 架構）
+GIT_SHA=$(git rev-parse --short HEAD) docker compose build   # 在目標主機上 build（image 要對應主機 CPU 架構；GIT_SHA 顯示於 /ops/status）
 docker compose up -d postgres
 docker compose run --rm app alembic upgrade head
 docker compose run --rm app python -m app.cli seed-leagues
@@ -68,6 +68,8 @@ docker compose up -d
   APScheduler 在 process 內，否則 HKJC 會被重複輪詢、帳本會被重複寫入。
 - **artifact 持久化**：`artifacts` named volume 掛在 `/app/artifacts`（`ML_ARTIFACT_DIR=artifacts/ml`）。
   沒有它，重部署後 `model_versions.artifact_path` 會指向不存在的檔案。
+- **GIT_SHA**：build 時帶 `GIT_SHA=$(git rev-parse --short HEAD)`（或把 `GIT_SHA` 寫進 `.env`，compose 會自動代入），
+  否則 `/ops/status.git_sha` 會是 `unknown`。
 - **LightGBM**：image 已安裝 `libgomp1`（OpenMP runtime）。
 - **上線檢查單**：見 [`deploy/launch-checklist.md`](deploy/launch-checklist.md)（主機前置 → 啟動 → 回填 → 手動跑出第一個 champion → Tunnel，逐步打勾）。
 
@@ -105,7 +107,7 @@ docker compose up -d
 | 備份資料庫 | `docker compose exec postgres pg_dump -U football football > backup.sql` |
 | 還原資料庫 | `cat backup.sql \| docker compose exec -T postgres psql -U football football` |
 | 改 tunnel token／網域 | 改 `.env` 後 `docker compose up -d cloudflared` |
-| 更新程式碼 | `git pull && docker compose build && docker compose up -d` |
+| 更新程式碼 | `git pull && GIT_SHA=$(git rev-parse --short HEAD) docker compose build && docker compose up -d` |
 
 重訓與預測預設由排程自動觸發（`ML_RETRAIN_INTERVAL`／每小時）；也可隨時手動觸發：`retrain` / `predict` / `ledger`（見上表）。
 
@@ -160,7 +162,7 @@ docker compose exec app printenv LEDGER_INITIAL_BANKROLL             # 容器內
 ## 測試
 
 ```bash
-uv run pytest            # 195 passed（2 個 live 測試預設 deselected）
+uv run pytest            # 224 passed（2 個 live 測試預設 deselected）
 uv run ruff check .      # lint（line-length 100）
 ```
 

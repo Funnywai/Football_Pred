@@ -28,7 +28,7 @@ chmod 600 .env
 ## 2. 建置與啟動
 
 ```bash
-docker compose build            # ★ 一定要在「目標主機」上 build（映像要對應 CPU 架構）
+GIT_SHA=$(git rev-parse --short HEAD) docker compose build   # ★ 一定要在「目標主機」上 build（映像要對應 CPU 架構；GIT_SHA 顯示於 /ops/status）
 docker compose up -d postgres
 docker compose run --rm app alembic upgrade head
 docker compose run --rm app python -m app.cli seed-leagues
@@ -101,7 +101,7 @@ curl -s localhost:8000/bets/summary
 - [ ] 每週：看 `/models`（champion 是否被更優 challenger 取代）、`/bets/summary`（ROI / yield / 未結算注碼）
 - [ ] 每日備份：`docker compose exec postgres pg_dump -U football football > backup-$(date +%F).sql`
 - [ ] 磁碟與日誌：compose 已設 log rotation（10MB × 3）；留意 `artifacts` volume 用量
-- [ ] 更新程式：`git pull && docker compose build && docker compose up -d`
+- [ ] 更新程式：`git pull && GIT_SHA=$(git rev-parse --short HEAD) docker compose build && docker compose up -d`
 
 ## 9. 常見問題
 

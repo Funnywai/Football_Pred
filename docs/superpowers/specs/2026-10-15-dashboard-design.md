@@ -91,7 +91,7 @@ are **not** part of this spec's implementation scope; this spec only consumes th
 
 | Route | Supplies |
 | --- | --- |
-| `GET /ops/status` | app version, git SHA, alembic revision, DB connectivity, scheduler heartbeat |
+| `GET /ops/status` | app version, git SHA, alembic revision, DB connectivity |
 | `GET /ops/jobs` | each scheduled job: interval/trigger, `next_run_time`, last status, `finished_at`, `records_upserted`, error |
 | `GET /ops/runs` | ingestion run history (timeline), including failures |
 | `GET /ops/logs` | recent log lines with level, for the live log stream |
@@ -128,11 +128,14 @@ A single sticky header, dense, one row on wide screens. It carries:
 
 - **Money**: bankroll, realised profit, open exposure (from `/bets/summary`:
   `bankroll`, `realized_profit`, `open_stakes`).
-- **Scheduler heartbeat dot**: green/amber/red from `/ops/status` (heartbeat freshness).
+- **Scheduler heartbeat dot**: green/amber/red derived from `/ops/jobs` (`next_run_time` per
+  job) and `/ops/runs` (recency of the newest `finished_at`, plus any `failed`/`flagged`/stuck
+  `running` rows).
 - **Build identity**: git SHA and the champion model's `target` and `status` (from
   `/ops/status` and `/models`).
-- **Data freshness**: last data arrival (last snapshot / result / prediction), from
-  `/ops/data` and the newest `captured_at` / `confirmed_at` / prediction timestamps.
+- **Data freshness**: last data arrival, from `/ops/data` (`last_arrived.odds_captured_at`,
+  `features_built_at`, `results_confirmed_at`) and the newest `ml_predict` row in `/ops/runs`
+  for prediction freshness.
 - **System-thinking indicator**: which pipeline stage is currently active, derived from
   `/ops/jobs` and `/ops/runs` (see 5.2c).
 
@@ -160,9 +163,9 @@ fetches both lists and merges them in memory by the keys above. Both lists are p
 | a | **Live log stream**: level filter, auto-refresh, pause | `/ops/logs` |
 | b | **Scheduler table**: each job's interval/trigger, `next_run_time`, last status, `finished_at`, `records_upserted`, error | `/ops/jobs` |
 | c | **Ingestion runs timeline**, failures highlighted | `/ops/runs` |
-| d | **Data freshness panel**: last snapshot / result / prediction arrival, ageing red past threshold | `/ops/data` + newest timestamps from `/matches/{id}/odds`, `/results`, `/predictions` |
+| d | **Data freshness panel**: last snapshot / feature / result / prediction arrival, ageing red past threshold | `/ops/data` (`last_arrived`) + newest `ml_predict` row in `/ops/runs` |
 | e | **DB size table**: row counts per table, `odds_snapshot` counts by source/odds_type, post-compaction anchors | `/ops/data` |
-| f | **Model version timeline**: champion/challenger, `promoted_at`, `metrics`, `artifact_path`, params | `/models` |
+| f | **Model version timeline**: champion/challenger, `promoted_at`, `metrics`, `artifact_path`, params | `/models` + `/ops/data` (`params`) |
 | g | **Environment**: app version, git SHA, alembic revision, DB connectivity. **Never any secret or env value.** | `/ops/status` |
 
 ## 6. Visual and style spec (the design thesis)
@@ -273,9 +276,9 @@ competing design doctrines; loading both produces contradictory direction.
 | Page section | Route(s) | Fields used |
 | --- | --- | --- |
 | Header money | `/bets/summary` | `bankroll, realized_profit, open_stakes` |
-| Header heartbeat | `/ops/status` | heartbeat timestamp |
+| Header heartbeat | `/ops/jobs`, `/ops/runs` | `next_run_time` per job; newest `finished_at`; `failed`/`flagged`/stuck `running` rows |
 | Header build identity | `/ops/status`, `/models` | git SHA; champion `target`, `status` |
-| Header freshness | `/ops/data`, `/matches/{id}/odds`, `/results`, `/predictions` | newest `captured_at`, `confirmed_at`, prediction time |
+| Header freshness | `/ops/data`, `/ops/runs` | `last_arrived.odds_captured_at`, `features_built_at`, `results_confirmed_at`; newest `ml_predict` run `finished_at` |
 | Header thinking indicator | `/ops/jobs`, `/ops/runs` | active job, latest run stage |
 | 1a KPI strip | `/bets/summary`, `/bets` | `bankroll, realized_profit, roi, yield_pct, open_stakes, n_bets`; win rate from settled `status` |
 | 1b Equity curve | `/bets/equity-curve` | `t, bankroll` |
@@ -288,9 +291,9 @@ competing design doctrines; loading both produces contradictory direction.
 | 2a Log stream | `/ops/logs` | level, message, timestamp |
 | 2b Scheduler table | `/ops/jobs` | interval/trigger, `next_run_time`, status, `finished_at`, `records_upserted`, error |
 | 2c Ingestion timeline | `/ops/runs` | run start/end, status, failure |
-| 2d Freshness panel | `/ops/data`, `/matches/{id}/odds`, `/results`, `/predictions` | arrival timestamps |
+| 2d Freshness panel | `/ops/data`, `/ops/runs` | `last_arrived` timestamps; newest `ml_predict` run |
 | 2e DB size | `/ops/data` | row counts, `odds_snapshot` counts by source/odds_type, anchors |
-| 2f Model timeline | `/models` | `status, promoted_at, metrics, artifact_path` |
+| 2f Model timeline | `/models`, `/ops/data` | `status, promoted_at, metrics, artifact_path`; `params` from `/ops/data` |
 | 2g Environment | `/ops/status` | app version, git SHA, alembic revision, DB connectivity |
 
 ## 9. Proposed file and module layout for the `web` service

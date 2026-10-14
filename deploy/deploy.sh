@@ -81,7 +81,7 @@ preflight() {
     || die "請在 repo 根目錄執行本腳本（找不到 docker-compose.yml / deploy/env.example）"
 
   # b) 必要指令
-  for cmd in docker curl; do
+  for cmd in docker curl git; do
     command -v "$cmd" >/dev/null || die "找不到指令 ${cmd}，請先安裝"
   done
   docker --version >/dev/null 2>&1 || die "docker 無法執行"
@@ -205,7 +205,8 @@ step 1 "前置檢查"
 preflight
 
 step 2 "建置映像（務必在目標主機上執行）"
-run docker compose build
+GIT_SHA="$(git rev-parse --short HEAD)"
+run env GIT_SHA="$GIT_SHA" docker compose build
 
 step 3 "啟動資料庫"
 run docker compose up -d postgres
