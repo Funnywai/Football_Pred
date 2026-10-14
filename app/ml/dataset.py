@@ -82,6 +82,15 @@ def _prior_cutoff(kickoff_col, lead_hours: int, dialect: str):
 async def _latest_hkjc_snapshots(
     session: AsyncSession, rows: list[MatchRow], odds_type: str, lead_hours: int = 0
 ) -> dict[int, OddsSnapshot]:
+    """Latest HKJC snapshot per match that is still pre-match.
+
+    "Pre-match" is decided by time only: ``captured_at < kickoff`` (or
+    ``kickoff - lead_hours`` when a lead is given). ``OddsSnapshot.inplay`` is NOT a time
+    filter: it records HKJC's pool-level flag meaning "this market is open for in-play
+    betting" (verified against the live API: matches with ``status=PREEVENT`` carry
+    ``inplay=True`` too). Filtering on it would drop the prior of exactly those matches
+    HKJC offers live betting on, i.e. the popular ones.
+    """
     if not rows:
         return {}
     cutoff = _prior_cutoff(Match.kickoff_time, lead_hours, session.get_bind().dialect.name)
@@ -99,7 +108,6 @@ async def _latest_hkjc_snapshots(
         .where(OddsSnapshot.match_id.in_([row.match_id for row in rows]))
         .where(OddsSnapshot.odds_type == odds_type)
         .where(OddsSnapshot.source == "hkjc")
-        .where(OddsSnapshot.inplay.is_(False))
         .where(
             OddsSnapshot.captured_at < cutoff
             if cutoff is not None

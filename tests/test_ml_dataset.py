@@ -193,6 +193,80 @@ async def test_prior_lead_excludes_snapshot_exactly_at_cutoff(tmp_path) -> None:
         await db.dispose()
 
 
+async def test_prior_lead_accepts_inplay_flagged_pre_match_snapshot(tmp_path) -> None:
+    """HKJC's pool-level ``inplay`` means "this market is open for in-play betting", not
+    "this snapshot was taken during play" (verified live: pre-event matches carry it too),
+    so it must not disqualify an otherwise valid pre-match prior.
+    """
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            match = await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+            )
+            captured = t - timedelta(hours=49)  # older than kickoff - 48h
+            session.add(
+                OddsSnapshot(
+                    match_id=match.id,
+                    captured_at=captured,
+                    snapshot_bucket=captured,
+                    source="hkjc",
+                    inplay=True,
+                    odds_type="HAD",
+                    payload=HAD,
+                )
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            priors = await load_market_priors(session, rows, 48)
+            assert priors[rows[0].match_id].had_odds == {"H": 2.1, "D": 3.4, "A": 3.8}
+    finally:
+        await db.dispose()
+
+
+async def test_inplay_flagged_post_kickoff_snapshot_is_never_used(tmp_path) -> None:
+    """Dropping the pool-flag filter must not admit in-play data: the kickoff-time
+    condition is what keeps both the prior and the closing price pre-match.
+    """
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            match = await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+            )
+            captured = t + timedelta(hours=1)  # after kickoff: a genuinely in-play snapshot
+            session.add(
+                OddsSnapshot(
+                    match_id=match.id,
+                    captured_at=captured,
+                    snapshot_bucket=captured,
+                    source="hkjc",
+                    inplay=True,
+                    odds_type="HAD",
+                    payload=HAD_POST,
+                )
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            match_id = rows[0].match_id
+            assert (await load_market_priors(session, rows, 48))[match_id].had_probs is None
+            assert (await load_market_priors(session, rows, 0))[match_id].had_odds is None
+    finally:
+        await db.dispose()
+
+
 async def test_build_dataset(tmp_path) -> None:
     db = await make_db(tmp_path)
     try:

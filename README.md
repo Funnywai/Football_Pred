@@ -170,6 +170,9 @@ HKJC 賠率每 `SYNC_ODDS_INTERVAL`（預設 600 秒）抓一次，但**不會�
 | **清除** | 每天 04:00 UTC（同上） | 只刪「**還沒被壓縮**的殘渣」（>3 筆的組）且 `captured_at` 早於 `ODDS_RETENTION_DAYS`（120 天）者 |
 
 - **壓縮後的 3 個 anchors 永久保存**；`source='football_data'` 的歷史收盤價也永不被壓縮或清除
+- ⚠️ `odds_snapshots.inplay` 是 **HKJC 的盤口屬性**（＝該盤口可即時投注；實測連未開賽的 `PREEVENT` 比賽也是 `true`），**不是**「此快照為賽中」的時序標記。
+  先驗與 CLV 一律用**時間**判斷賽前（`captured_at < 開踢`，先驗再加 `− ML_PRIOR_LEAD_HOURS`），**不得**再用這個欄位過濾
+  （2026-10-14 修正：原本誤用該旗標 → 所有「馬會有開即時投注」的熱門比賽永久取不到先驗、永不入帳）
 - 所以**開踢 6 小時後就無法重建「賠率漂移路徑」**：未來若要做盤口移動特徵，需先調 `COMPACT_KEEP_PER_GROUP`（`app/services/odds.py`）
 - **停機風險**：開踢前後 app 沒跑 → 該場收盤快照永久缺失 → CLV 永久缺失（HKJC 不提供賽後賠率）
 
@@ -180,7 +183,7 @@ HKJC 賠率每 `SYNC_ODDS_INTERVAL`（預設 600 秒）抓一次，但**不會�
 | `prob` | 模型機率 | — |
 | `implied_prob` | HKJC 賠率**去水後**的市場機率 | 不是 `1/賠率`（含約 12% 水錢） |
 | `edge` | `prob − implied_prob` | **對「公平價」**，天生比真實可下注邊際大 3～5 倍 |
-| `market_odds` | 實際可下注賠率 | `NULL` ＝ 尚無市場先驗 → 不能下注 |
+| `market_odds` | 實際可下注賠率 | `NULL` ＝ 尚無市場先驗 → 不能下注。若馬會明明有開盤，先查 `odds_snapshots` 有沒有 `source='hkjc'`、`odds_type='HAD'`、且 `captured_at < 開踢 − ML_PRIOR_LEAD_HOURS` 的快照 |
 | `recommended_fraction` | 半凱利建議比例（`kelly_fraction(prob, market_odds) × LEDGER_KELLY_MULTIPLIER`） | 用**真實賠率**算 → 扣水錢後的邊際才是真的 |
 | `stake` | 注碼（**整元**，向下取整；低於 `LEDGER_MIN_STAKE` 不下注） | — |
 | `payout` | 派彩（**四捨五入至 0.1 元**，依 HKJC 足球博彩規例 2.19(a)） | 退本金（push）不是彩金 → 原樣退回 |
