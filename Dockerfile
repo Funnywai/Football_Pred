@@ -30,6 +30,10 @@ RUN useradd --create-home --uid 10001 appuser \
     && mkdir -p /app/artifacts \
     && chown -R appuser:appuser /app
 
+# Git SHA baked at build time (`.git` is not in the image); defaults to "unknown".
+ARG GIT_SHA=unknown
+ENV GIT_SHA=$GIT_SHA
+
 USER appuser
 
 EXPOSE 8000
