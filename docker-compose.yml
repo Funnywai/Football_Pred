@@ -41,7 +41,10 @@ services:
     logging: *default-logging
 
   app:
-    build: .
+    build:
+      context: .
+      args:
+        GIT_SHA: ${GIT_SHA:-unknown}
     # DATABASE_URL must come from `.env` (single source): no connection string is assembled here,
     # so this file never contains a credential-shaped URL. Host must be the compose service `postgres`.
     environment:

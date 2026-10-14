@@ -6,6 +6,8 @@ from typing import Annotated
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+from app import log_buffer
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -83,3 +85,4 @@ def configure_logging(level: str = "INFO") -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
     logging.getLogger().setLevel(level.upper())
+    log_buffer.install(level)

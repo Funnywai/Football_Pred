@@ -151,6 +151,11 @@ docker compose exec app printenv LEDGER_INITIAL_BANKROLL             # 容器內
 | `GET /bets` | 帳本注單（`status`/`match_id`/`target` 篩選） |
 | `GET /bets/summary` | 本金、ROI、yield、已／未結算注碼等 |
 | `GET /bets/equity-curve` | 資金曲線（初始 → 各次結算事件 → 現值） |
+| `GET /ops/status` | 運維狀態：版本、git SHA、DB 連線、排程開關 |
+| `GET /ops/jobs` | 排程任務清單與各任務最近一次執行紀錄 |
+| `GET /ops/runs` | 最近 `ingestion_runs`（`limit` 預設 50、上限 200） |
+| `GET /ops/logs` | 記憶體內日誌尾巴（`limit` 預設 100、上限 500；`level` 最低等級篩選） |
+| `GET /ops/data` | 資料表筆數、資料新鮮度、模型 params、alembic revision |
 
 ## 測試
 
@@ -189,9 +194,9 @@ HKJC 賠率每 `SYNC_ODDS_INTERVAL`（預設 600 秒）抓一次，但**不會�
 | `payout` | 派彩（**四捨五入至 0.1 元**，依 HKJC 足球博彩規例 2.19(a)） | 退本金（push）不是彩金 → 原樣退回 |
 
 - 驗收看 **CLV**（我們取的價 vs 收盤價，`/models` 的 `clv_*` metrics），**不要看 ROI**：統計上要分辨 1% 等級的邊際需要上萬注
-- **帳本成交價（`ledger_bets.odds`）＝「下注當刻、開踢前的最新一筆 HKJC HAD 快照」**，注碼由 `kelly_fraction(prob, 該價)` 重算（2026-10-14 起；在此之前記的是「開踢前 48h 的先驗價」✗）
-  → `ledger_bets.edge` 的語意因此改變：**新注單＝對「可下注賠率」的邊際** ✓，舊注單＝對「先驗價」的邊際 ✗。沒有回填 ✓ → 跨期比較績效時必須看下注日期
-- 找不到「開踢前的 HKJC 價」、或該價算出的 Kelly 已 ≤ 0 → **不下注** ✓（價格跑到對面＝價值沒了 ✓）
+- **帳本成交價（`ledger_bets.odds`）＝「下注當刻、開踢前的最新一筆 HKJC HAD 快照」**，注碼由 `kelly_fraction(prob, 該價)` 重算（2026-10-14 起；在此之前記的是「開踢前 48h 的先驗價」）
+  → `ledger_bets.edge` 的語意因此改變：**新注單＝對「可下注賠率」的邊際**，舊注單＝對「先驗價」的邊際；沒有回填，跨期比較績效時必須看下注日期
+- 找不到「開踢前的 HKJC 價」、或該價算出的 Kelly 已 ≤ 0 → **不下注**（價格跑到對面＝價值沒了）
 - 讓球（HDC）每注最低投注總額為 **HK$200**（數碼平台 1X2 才 HK$10）——Phase 2b 上線讓球時需 per-target 最低注
 
 ## 已知限制與後續

@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.api.ops import router as ops_router
 from app.api.routes import router
 from app.config import Settings, configure_logging, get_settings
 from app.db.session import Database
@@ -55,4 +56,5 @@ def create_app(settings: Settings | None = None, db: Database | None = None) -> 
         app.state.db = db
     app.state.settings = settings
     app.include_router(router)
+    app.include_router(ops_router)
     return app
