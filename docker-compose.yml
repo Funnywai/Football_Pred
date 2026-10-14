@@ -75,6 +75,20 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+  # Read-only Next.js dashboard (sub-system D). Calls the API server-side at app:8000;
+  # the browser never talks to the API. No host port: the Cloudflare Tunnel reaches
+  # web:3000 over the compose network.
+  web:
+    build: ./web
+    environment:
+      API_BASE_URL: http://app:8000
+      NODE_ENV: production
+    depends_on:
+      app:
+        condition: service_healthy
+    restart: unless-stopped
+    logging: *default-logging
+
   # Opt-in: `docker compose --profile tunnel up -d` (or COMPOSE_PROFILES=tunnel in .env)
   cloudflared:
     image: cloudflare/cloudflared:latest

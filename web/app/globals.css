@@ -1,0 +1,182 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   WorldCup Mission Control — design tokens
+   Single source of truth: web/DESIGN.md. Every value below traces to a token
+   defined there (Section 2 colour, Section 3 type, Section 4 spacing,
+   Section 6 motion, Section 7 depth). No raw hex or arbitrary px outside this
+   block. Tailwind's default numeric spacing scale (--spacing: 0.25rem) maps
+   1:1 to the DESIGN.md scale: p-1=4px … p-16=64px.
+   ========================================================================== */
+
+:root {
+  /* Section 2 — Color */
+  --surface-void: #050507;
+  --surface-base: #101010;
+  --surface-raised: #17171b;
+  --border-default: #3d3a39;
+  --border-hairline: #232326;
+  --text-primary: #f2f2f2;
+  --text-secondary: #b8b3b0;
+  --text-tertiary: #8b949e;
+  --accent-signal: #00d992;
+  --accent-mint: #2fd6a1;
+  --status-neg: #fb565b;
+  --status-warn: #ffba00;
+  --status-info: #4cb3d4;
+
+  /* Section 4 — Spacing (4px base) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* Section 7 — Depth */
+  --shadow-ambient-glow: rgba(92, 88, 85, 0.2) 0px 0px 15px;
+  --shadow-dramatic-float: rgba(0, 0, 0, 0.7) 0px 20px 60px,
+    rgba(148, 163, 184, 0.1) 0px 0px 0px 1px inset;
+
+  /* Section 4.2 — Grid: max content width 1440px, centred. */
+  --content-max: 1440px;
+
+  /* Section 6.1 — Motion */
+  --motion-micro: 150ms;
+  --motion-standard: 300ms;
+  --motion-emphasis: 600ms;
+  --ease-out: ease-out;
+  --ease-in-out: ease-in-out;
+  --ease-emphasis: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@theme inline {
+  /* Colour utilities: bg-surface-void, text-text-primary, border-border-default, … */
+  --color-surface-void: var(--surface-void);
+  --color-surface-base: var(--surface-base);
+  --color-surface-raised: var(--surface-raised);
+  --color-border-default: var(--border-default);
+  --color-border-hairline: var(--border-hairline);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-tertiary: var(--text-tertiary);
+  --color-accent-signal: var(--accent-signal);
+  --color-accent-mint: var(--accent-mint);
+  --color-status-neg: var(--status-neg);
+  --color-status-warn: var(--status-warn);
+  --color-status-info: var(--status-info);
+
+  /* Section 3 — Type scale: text-display, text-h1, text-h2, text-h3, text-body,
+     text-data, text-caption, text-overline. */
+  --text-display: 1.75rem;
+  --text-display--line-height: 1.1;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 600;
+  --text-h1: 1.25rem;
+  --text-h1--line-height: 1.2;
+  --text-h1--letter-spacing: -0.01em;
+  --text-h1--font-weight: 600;
+  --text-h2: 1rem;
+  --text-h2--line-height: 1.3;
+  --text-h2--font-weight: 600;
+  --text-h3: 0.875rem;
+  --text-h3--line-height: 1.4;
+  --text-h3--font-weight: 600;
+  --text-body: 0.875rem;
+  --text-body--line-height: 1.5;
+  --text-data: 0.8125rem;
+  --text-data--line-height: 1.4;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1.4;
+  --text-caption--letter-spacing: 0.02em;
+  --text-caption--font-weight: 500;
+  --text-overline: 0.6875rem;
+  --text-overline--line-height: 1.3;
+  --text-overline--letter-spacing: 0.08em;
+  --text-overline--font-weight: 600;
+
+  /* Fonts — wired from next/font in app/layout.tsx (self-hosted, no external requests). */
+  --font-mono: var(--font-jetbrains-mono), "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@theme {
+  /* Section 7.3 — Radius */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-pill: 9999px;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--surface-void);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Section 2.2 — the accent is the focus ring. Visible on every interactive element. */
+  :focus-visible {
+    outline: 2px solid var(--accent-signal);
+    outline-offset: 2px;
+  }
+}
+
+/* Section 3.3 — tabular numerals are mandatory on every number. */
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Section 6.3 — GPU-composited motion only (opacity / transform / filter). */
+@keyframes heartbeat-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+@keyframes signal-glow {
+  0% {
+    filter: drop-shadow(0 0 2px var(--accent-signal));
+  }
+  100% {
+    filter: drop-shadow(0 0 8px var(--accent-signal));
+  }
+}
+
+@keyframes thinking-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+/* Section 6.2 — reduced-motion fallback: every animation collapses to its final state. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
