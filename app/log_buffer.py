@@ -12,8 +12,29 @@ from datetime import UTC, datetime
 
 MAX_RECORDS = 500
 
+_ACCESS_LOGGER = "uvicorn.access"
+
 _records: deque[dict[str, str]] = deque(maxlen=MAX_RECORDS)
 _lock = threading.Lock()
+
+
+def _is_self_traffic(record: logging.LogRecord) -> bool:
+    """Return True for uvicorn access records for ``/health`` or ``/ops/*``.
+
+    The container healthcheck polls ``/health`` every 30s and the ops endpoints are
+    read-only self-inspection; buffering them would evict real logs within hours.
+    Fails open: anything that is not a well-formed access record is kept.
+    """
+    if record.name != _ACCESS_LOGGER:
+        return False
+    args = record.args
+    if not isinstance(args, tuple) or len(args) != 5:
+        return False
+    full_path = args[2]
+    if not isinstance(full_path, str):
+        return False
+    path = full_path.split("?", 1)[0]
+    return path == "/health" or path.startswith("/ops/")
 
 
 class RingBufferHandler(logging.Handler):
@@ -21,6 +42,8 @@ class RingBufferHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
+            if _is_self_traffic(record):
+                return
             entry = {
                 "time": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
                 "level": record.levelname,
