@@ -25,11 +25,12 @@ from app.db.models import (
     Result,
     Season,
 )
-from app.ml.dataset import load_market_priors
+from app.ml.dataset import load_hkjc_priors, load_market_priors
 from app.ml.features import MatchRow
 from app.ml.labels import handicap_label, is_whole_or_half, label_1x2, quarter_halves
-from app.ml.models import TARGET_HANDICAP
+from app.ml.models import TARGET_1X2, TARGET_HANDICAP
 from app.ml.registry import STATUS_CHAMPION
+from app.ml.value import kelly_fraction
 from app.services.runs import track_run
 
 logger = logging.getLogger(__name__)
@@ -172,13 +173,20 @@ async def place_bets(session: AsyncSession, settings: Settings) -> int:
     """Place fractional-Kelly bets on unbet champion value predictions.
 
     Selection: the prediction must belong to the current champion
-    (``ModelVersion.status = champion``), carry ``recommended_fraction > 0``,
+    (``ModelVersion.status = champion``), carry ``recommended_fraction > 0``
+    (the model's edge against its 48h-prior information set — the *signal*),
     and have no bet for the same ``(match_id, target, outcome)`` in any
     status. Matches must not have kicked off yet (kickoff strictly after now),
     so skipped predictions are never retro-actively bet on finished matches.
-    One batch shares one ``bankroll_batch_start``. Handicap bets lock
-    the champion's hdc_line recomputed via ``load_market_priors`` at placement
-    time and are skipped when that line is unavailable. Returns bets placed.
+    One batch shares one ``bankroll_batch_start``.
+
+    1x2 bets are executed at the price obtainable now — the latest HKJC HAD
+    snapshot before kickoff — and sized by ``kelly_fraction(prob, that price)``;
+    they are skipped when no such price exists or the Kelly fraction is no
+    longer positive, so a bet is never recorded at a price nobody can take.
+    Handicap bets still use the signal's odds and fraction, and lock the
+    champion's hdc_line recomputed via ``load_market_priors`` at placement time;
+    they are skipped when that line is unavailable. Returns bets placed.
     """
     bankroll_batch_start = await _bankroll_now(session, settings)
     candidates = (
@@ -210,32 +218,34 @@ async def place_bets(session: AsyncSession, settings: Settings) -> int:
         )
     ).all()
     betted = {(m, t, o) for m, t, o in existing_rows}
-    lines: dict[int, float | None] = {}
-    handicap_matches = [
-        mid for mid, preds in by_match.items() if any(p.target == TARGET_HANDICAP for p in preds)
+    fields = (
+        await session.execute(
+            select(Match, League.code, Season.label)
+            .join(League, League.id == Match.league_id)
+            .join(Season, Season.id == Match.season_id)
+            .where(Match.id.in_(list(by_match)))
+        )
+    ).all()
+    match_rows = [
+        MatchRow(
+            match_id=m.id,
+            kickoff_time=m.kickoff_time,
+            home_team_id=m.home_team_id,
+            away_team_id=m.away_team_id,
+            league_code=code,
+            season_label=label,
+        )
+        for m, code, label in fields
     ]
-    if handicap_matches:
-        fields = (
-            await session.execute(
-                select(Match, League.code, Season.label)
-                .join(League, League.id == Match.league_id)
-                .join(Season, Season.id == Match.season_id)
-                .where(Match.id.in_(handicap_matches))
-            )
-        ).all()
-        target_rows = [
-            MatchRow(
-                match_id=m.id,
-                kickoff_time=m.kickoff_time,
-                home_team_id=m.home_team_id,
-                away_team_id=m.away_team_id,
-                league_code=code,
-                season_label=label,
-            )
-            for m, code, label in fields
-        ]
-        priors = await load_market_priors(session, target_rows, settings.ml_prior_lead_hours)
-        lines = {match_id: prior.hdc_line for match_id, prior in priors.items()}
+    lines: dict[int, float | None] = {}
+    if any(prediction.target == TARGET_HANDICAP for prediction in candidates):
+        handicap_priors = await load_market_priors(
+            session, match_rows, settings.ml_prior_lead_hours
+        )
+        lines = {match_id: prior.hdc_line for match_id, prior in handicap_priors.items()}
+    exec_priors = {}
+    if any(prediction.target == TARGET_1X2 for prediction in candidates):
+        exec_priors = await load_hkjc_priors(session, match_rows, 0)
     placed = 0
     for prediction in candidates:
         key = (prediction.match_id, prediction.target, prediction.outcome)
@@ -249,11 +259,39 @@ async def place_bets(session: AsyncSession, settings: Settings) -> int:
                     prediction.match_id,
                 )
                 continue
+            if prediction.market_odds is None:
+                continue
+            odds = prediction.market_odds
+            edge = prediction.edge
+            fraction = prediction.recommended_fraction
         else:
             line = None
-        if prediction.market_odds is None:
-            continue
-        stake = _size_stake(bankroll_batch_start, prediction.recommended_fraction, settings)
+            prior = exec_priors.get(prediction.match_id)
+            exec_odds = prior.had_odds if prior is not None else None
+            exec_probs = prior.had_probs if prior is not None else None
+            if not exec_odds or not exec_probs:
+                logger.info(
+                    "skipping bet on match %s %s/%s: no pre-kickoff HKJC price",
+                    prediction.match_id, prediction.target, prediction.outcome,
+                )
+                continue
+            odds = exec_odds.get(prediction.outcome)
+            implied = exec_probs.get(prediction.outcome)
+            if odds is None or implied is None:
+                logger.info(
+                    "skipping bet on match %s %s/%s: snapshot has no price for it",
+                    prediction.match_id, prediction.target, prediction.outcome,
+                )
+                continue
+            fraction = kelly_fraction(prediction.prob, odds)
+            if fraction <= 0:
+                logger.info(
+                    "skipping bet on match %s %s/%s: no value left at execution price %.2f",
+                    prediction.match_id, prediction.target, prediction.outcome, odds,
+                )
+                continue
+            edge = prediction.prob - implied
+        stake = _size_stake(bankroll_batch_start, fraction, settings)
         if stake is None:
             logger.info(
                 "skipping bet on match %s %s/%s: below HKD %.2f minimum",
@@ -268,10 +306,10 @@ async def place_bets(session: AsyncSession, settings: Settings) -> int:
                 outcome=prediction.outcome,
                 model_version_id=prediction.model_version_id,
                 line=line,
-                odds=prediction.market_odds,
+                odds=odds,
                 stake=stake,
                 bankroll_at_place=bankroll_batch_start,
-                edge=prediction.edge,
+                edge=edge,
                 kelly_multiplier=settings.ledger_kelly_multiplier,
             )
         )
