@@ -14,11 +14,10 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, text
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import log_buffer
-from app.api.ops_data import alembic_revision, data_snapshot, iso_or_none
+from app.api.ops_data import alembic_revision, data_snapshot, iso_or_none, safe_rollback
 from app.db.models import IngestionRun
 
 router = APIRouter(prefix="/ops", tags=["ops"])
@@ -93,13 +92,14 @@ async def ops_status(request: Request, session: SessionDep) -> dict[str, object]
     db_ok = True
     try:
         await session.execute(text("SELECT 1"))
-    except SQLAlchemyError:
+    except Exception:  # noqa: BLE001  (spec: any probe failure must yield db_ok=false, never a 500)
         db_ok = False
-        await session.rollback()
+        await safe_rollback(session)
     return {
         "app_version": _APP_VERSION,
         "git_sha": os.environ.get("GIT_SHA", "unknown"),
-        "alembic_revision": await alembic_revision(session),
+        # A dead connection must not be probed again: skip the alembic read when the probe failed.
+        "alembic_revision": await alembic_revision(session) if db_ok else None,
         "uptime_seconds": time.monotonic() - _PROCESS_START,
         "db_ok": db_ok,
         "scheduler_enabled": bool(request.app.state.settings.enable_scheduler),

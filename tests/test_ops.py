@@ -6,6 +6,7 @@ from ops_helpers import FakeJob, FakeScheduler, make_app, make_client, make_db
 from sqlalchemy import text
 
 from app.db.models import IngestionRun
+from app.db.session import Database
 
 
 async def test_ops_status(tmp_path):
@@ -38,6 +39,19 @@ async def test_ops_status_reads_alembic_revision(tmp_path):
         async with make_client(make_app(db)) as client:
             body = (await client.get("/ops/status")).json()
             assert body["alembic_revision"] == "0003_ledger_bets"
+    finally:
+        await db.dispose()
+
+
+async def test_ops_status_reports_db_down_without_raising():
+    db = Database("postgresql+asyncpg://postgres@127.0.0.1:1/football")
+    try:
+        async with make_client(make_app(db)) as client:
+            response = await client.get("/ops/status")
+            assert response.status_code == 200
+            body = response.json()
+            assert body["db_ok"] is False
+            assert body["alembic_revision"] is None
     finally:
         await db.dispose()
 

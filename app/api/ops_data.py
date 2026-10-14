@@ -3,7 +3,6 @@
 from datetime import datetime
 
 from sqlalchemy import func, select, text
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import Base
@@ -40,11 +39,19 @@ def iso_or_none(value: datetime | None) -> str | None:
     return value.isoformat() if value is not None else None
 
 
+async def safe_rollback(session: AsyncSession) -> None:
+    """Roll back without ever raising: a rollback on a dead connection can itself fail."""
+    try:
+        await session.rollback()
+    except Exception:  # noqa: BLE001, S110  (cleanup must never mask the original failure)
+        pass
+
+
 async def alembic_revision(session: AsyncSession) -> str | None:
     try:
         row = (await session.execute(text("SELECT version_num FROM alembic_version"))).first()
-    except SQLAlchemyError:
-        await session.rollback()
+    except Exception:  # noqa: BLE001  (connect-time OSError is not SQLAlchemyError)
+        await safe_rollback(session)
         return None
     return str(row[0]) if row is not None else None
 
