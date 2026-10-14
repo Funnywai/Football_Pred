@@ -202,6 +202,10 @@ root-logger handler. `install` therefore attaches the same handler to the root l
 explicitly to `logging.getLogger("uvicorn.access")` and `logging.getLogger("uvicorn.error")`.
 Without this, `/ops/logs` would show app logs but no request lines.
 
+**Self-traffic is not buffered.** Access lines for `/health` and `/ops/*` are deliberately
+skipped: the container healthcheck polls `/health` every 30s, which would otherwise evict all
+real logs within hours.
+
 **Known limitation.** The buffer is in-memory and per-process. It is lost on restart, and
 after `docker compose restart app` `/ops/logs` is empty until new lines are emitted. This is
 accepted: the durable log remains `docker compose logs app` (json-file driver, `max-size 10m`,

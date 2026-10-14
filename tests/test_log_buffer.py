@@ -57,3 +57,72 @@ def test_snapshot_clamps_limit():
     logger.info("clamp-marker")
     assert len(log_buffer.snapshot(9999, None)) <= log_buffer.MAX_RECORDS
     assert len(log_buffer.snapshot(0, None)) == 1
+
+
+def _emit_access(path: str, status: int = 200) -> None:
+    """Emit a uvicorn.access record with the same logger name and args shape uvicorn uses."""
+    logger = logging.getLogger("uvicorn.access")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.info(
+        '%s - "%s %s HTTP/%s" %d',
+        "127.0.0.1:54321",
+        "GET",
+        path,
+        "1.1",
+        status,
+    )
+
+
+def _access_message(path: str, status: int = 200) -> str:
+    return f'127.0.0.1:54321 - "GET {path} HTTP/1.1" {status}'
+
+
+def _messages() -> list[str]:
+    return [entry["message"] for entry in log_buffer.snapshot(500, None)]
+
+
+def test_access_record_for_health_is_not_stored():
+    log_buffer.install("DEBUG")
+    _emit_access("/health")
+    assert _access_message("/health") not in _messages()
+
+
+def test_access_record_for_ops_path_is_not_stored():
+    log_buffer.install("DEBUG")
+    _emit_access("/ops/logs?limit=5")
+    assert _access_message("/ops/logs?limit=5") not in _messages()
+
+
+def test_access_record_for_other_path_is_stored():
+    log_buffer.install("DEBUG")
+    _emit_access("/matches?limit=5")
+    assert _access_message("/matches?limit=5") in _messages()
+
+
+def test_application_log_record_is_stored():
+    log_buffer.install("DEBUG")
+    logger = logging.getLogger("app.something")
+    logger.setLevel(logging.INFO)
+    logger.info("app-log-marker")
+    assert "app-log-marker" in _messages()
+
+
+def test_malformed_access_record_is_stored_and_emit_does_not_raise():
+    log_buffer.install("DEBUG")
+    logger = logging.getLogger("uvicorn.access")
+    logger.setLevel(logging.INFO)
+    record = logger.makeRecord(
+        "uvicorn.access",
+        logging.INFO,
+        __file__,
+        0,
+        "malformed-access %s",
+        ("marker",),
+        None,
+    )
+    handler = next(
+        item for item in logger.handlers if isinstance(item, log_buffer.RingBufferHandler)
+    )
+    handler.emit(record)
+    assert "malformed-access marker" in _messages()
