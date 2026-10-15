@@ -708,9 +708,11 @@ const summaryBase = { fetched: rows.length, query: reveal.isFiltered ? reveal.qu
   query={reveal.query}
   isFiltered={reveal.isFiltered}
   canExpand={reveal.canExpand}
+  canCollapse={reveal.visible > REVEAL_INITIAL}
   onExpand={reveal.expand}
   onExpandAll={reveal.expandAll}
   onCollapse={reveal.collapse}
+  /* no base: the <Note> above already carries the window sentence */
 />
 ```
 
@@ -813,9 +815,11 @@ Expected: FAIL — no search input, 200 rows rendered.
   query={reveal.query}
   isFiltered={reveal.isFiltered}
   canExpand={reveal.canExpand}
+  canCollapse={reveal.visible > REVEAL_INITIAL}
   onExpand={reveal.expand}
   onExpandAll={reveal.expandAll}
   onCollapse={reveal.collapse}
+  /* no base: the <Note> above already carries the window sentence */
 />
 ```
 
