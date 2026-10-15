@@ -36,8 +36,8 @@ function Source({ children }: { children: ReactNode }) {
 export default async function PerformancePage() {
   const data = await loadPerformanceData();
   const stages = pipelineStages({
-    jobs: data.jobs ?? [],
-    runs: data.runs ?? [],
+    jobs: data.jobs,
+    runs: data.runs,
     data: data.data,
     now: data.now,
   });

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { BetStatusPill } from "@/components/ui/BetStatusPill";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { betsWindowPhrase, isTruncated, type BetsWindow } from "@/lib/bets-window";
 import {
   formatDateTime,
   formatHkd,
@@ -67,7 +68,7 @@ const COLUMNS: Column<Bet>[] = [
 ];
 
 export interface BetsTableProps {
-  bets: Bet[] | null;
+  bets: BetsWindow | null;
 }
 
 export function BetsTable({ bets }: BetsTableProps) {
@@ -78,19 +79,13 @@ export function BetsTable({ bets }: BetsTableProps) {
       <EmptyState icon={Inbox} title="Bets unavailable" detail="the API did not return /bets" />
     );
   }
-  if (bets.length === 0) {
-    return (
-      <EmptyState
-        icon={Inbox}
-        title="No bets placed yet"
-        detail="the ledger has not placed a bet"
-      />
-    );
+  if (bets.rows.length === 0) {
+    return <EmptyBets bets={bets} />;
   }
 
-  const pageCount = Math.max(1, Math.ceil(bets.length / PAGE_SIZE));
+  const pageCount = Math.max(1, Math.ceil(bets.rows.length / PAGE_SIZE));
   const current = Math.min(page, pageCount - 1);
-  const rows = bets.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
+  const rows = bets.rows.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
 
   return (
     <div className="flex flex-col">
@@ -108,9 +103,7 @@ export function BetsTable({ bets }: BetsTableProps) {
         caption="All ledger bets"
       />
       <div className="flex items-center justify-between gap-4 px-6 py-3 text-caption text-text-tertiary">
-        <span className="tnum">
-          {bets.length} bets · page {current + 1} of {pageCount}
-        </span>
+        <span className="tnum">{footerText(bets, current + 1, pageCount)}</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -133,5 +126,42 @@ export function BetsTable({ bets }: BetsTableProps) {
         </div>
       </div>
     </div>
+  );
+}
+
+// The footer never states a fetched count as a total: a truncated window names the slice
+// it shows, and the oldest-page fallback names its missing summary.
+function footerText(bets: BetsWindow, page: number, pageCount: number): string {
+  const pagination = `page ${page} of ${pageCount}`;
+  if (!bets.newestFirst) {
+    return `showing the oldest ${bets.rows.length} bets · ${pagination} · /bets/summary unavailable`;
+  }
+  if (isTruncated(bets)) {
+    return `showing ${betsWindowPhrase(bets)} · ${pagination}`;
+  }
+  return `${bets.rows.length} bets · ${pagination}`;
+}
+
+function EmptyBets({ bets }: { bets: BetsWindow }) {
+  if (bets.total === 0) {
+    return (
+      <EmptyState
+        icon={Inbox}
+        title="No bets placed yet"
+        detail="the ledger has not placed a bet"
+      />
+    );
+  }
+  if (bets.total === null) {
+    return (
+      <EmptyState icon={Inbox} title="No bets to show" detail="the fetched page is empty" />
+    );
+  }
+  return (
+    <EmptyState
+      icon={Inbox}
+      title="No bets in the fetched window"
+      detail="the ledger changed between the summary and the list fetch — refresh to retry"
+    />
   );
 }

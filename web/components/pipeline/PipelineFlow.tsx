@@ -26,7 +26,7 @@ export function PipelineFlow({ jobs, runs, data, now }: PipelineFlowProps) {
     );
   }
 
-  const stages = pipelineStages({ jobs: jobs ?? [], runs: runs ?? [], data, now });
+  const stages = pipelineStages({ jobs, runs, data, now });
   const activeIndex = stages.findIndex((stage) => stage.status === "active");
 
   return (

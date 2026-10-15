@@ -5,8 +5,12 @@ import type { OpsData, OpsJob, OpsRun } from "@/lib/types";
 
 const NOW = new Date("2026-10-15T12:00:00Z");
 
-function job(id: string, lastRun: OpsJob["last_run"]): OpsJob {
-  return { id, trigger: "interval", next_run_time: "2026-10-15T12:10:00Z", pending: false, last_run: lastRun };
+function job(
+  id: string,
+  lastRun: OpsJob["last_run"],
+  nextRunTime: string | null = "2026-10-15T12:10:00Z",
+): OpsJob {
+  return { id, trigger: "interval", next_run_time: nextRunTime, pending: false, last_run: lastRun };
 }
 
 function run(overrides: Partial<OpsRun>): OpsRun {
@@ -198,5 +202,123 @@ describe("pipelineStages", () => {
   it("marks FEATURES never-tracked with no timestamp", () => {
     const stages = pipelineStages({ jobs: [], runs: [], data: data(null), now: NOW });
     expect(stageOf(stages, "FEATURES").status).toBe("never-tracked");
+  });
+});
+
+describe("overdue stages", () => {
+  it("marks a stage overdue when next_run_time is past the grace period", () => {
+    const stages = pipelineStages({
+      jobs: [
+        job(
+          "sync_odds",
+          {
+            status: "success",
+            finished_at: "2026-10-15T11:58:00Z",
+            records_upserted: 5,
+            error: null,
+          },
+          "2026-10-15T10:00:00Z",
+        ),
+      ],
+      runs: [],
+      data: null,
+      now: NOW,
+    });
+    expect(stageOf(stages, "INGEST").status).toBe("overdue");
+    expect(stageOf(stages, "INGEST").detail).toBe("next run was due 2h ago");
+  });
+
+  it("does not mark a stage overdue within the grace period", () => {
+    const stages = pipelineStages({
+      jobs: [
+        job(
+          "sync_odds",
+          {
+            status: "success",
+            finished_at: "2026-10-15T11:58:00Z",
+            records_upserted: 5,
+            error: null,
+          },
+          "2026-10-15T11:56:00Z",
+        ),
+      ],
+      runs: [],
+      data: null,
+      now: NOW,
+    });
+    expect(stageOf(stages, "INGEST").status).toBe("success");
+  });
+
+  it("keeps failed precedence over overdue", () => {
+    const stages = pipelineStages({
+      jobs: [
+        job(
+          "ledger_update",
+          {
+            status: "failed",
+            finished_at: "2026-10-15T11:00:00Z",
+            records_upserted: null,
+            error: "ValueError: boom",
+          },
+          "2026-10-15T10:00:00Z",
+        ),
+      ],
+      runs: [],
+      data: null,
+      now: NOW,
+    });
+    expect(stageOf(stages, "BET").status).toBe("failed");
+    expect(stageOf(stages, "BET").detail).toBe("ValueError: boom");
+  });
+
+  it("keeps flagged precedence over overdue", () => {
+    const stages = pipelineStages({
+      jobs: [
+        job(
+          "settle_results",
+          {
+            status: "flagged",
+            finished_at: "2026-10-15T11:00:00Z",
+            records_upserted: 2,
+            error: null,
+          },
+          "2026-10-15T10:00:00Z",
+        ),
+      ],
+      runs: [],
+      data: null,
+      now: NOW,
+    });
+    expect(stageOf(stages, "SETTLE").status).toBe("ageing");
+  });
+
+  it("marks a never-run job overdue when its next run is past", () => {
+    const stages = pipelineStages({
+      jobs: [job("ml_retrain", null, "2026-10-14T12:00:00Z")],
+      runs: [],
+      data: null,
+      now: NOW,
+    });
+    expect(stageOf(stages, "RETRAIN").status).toBe("overdue");
+  });
+});
+
+describe("partial degradation", () => {
+  it("marks job-derived stages unavailable when /ops/jobs is missing", () => {
+    const stages = pipelineStages({
+      jobs: null,
+      runs: [],
+      data: data("2026-10-15T11:00:00Z"),
+      now: NOW,
+    });
+    for (const id of ["INGEST", "PREDICT", "BET", "SETTLE", "RETRAIN"]) {
+      expect(stageOf(stages, id).status).toBe("unavailable");
+    }
+    expect(stageOf(stages, "FEATURES").status).toBe("success");
+  });
+
+  it("marks FEATURES unavailable when /ops/data is missing", () => {
+    const stages = pipelineStages({ jobs: [], runs: [], data: null, now: NOW });
+    expect(stageOf(stages, "FEATURES").status).toBe("unavailable");
   });
 });

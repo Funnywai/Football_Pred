@@ -2,9 +2,10 @@ import { ArrowDown, ArrowLeftRight, ArrowUp, Inbox } from "lucide-react";
 
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { betsWindowPhrase, type BetsWindow } from "@/lib/bets-window";
 import { formatDateTime, formatOdds, formatSignedPercent } from "@/lib/format";
 import { signalExecutionRows, type SignalExecutionRow } from "@/lib/signal-execution";
-import type { Bet, Prediction } from "@/lib/types";
+import type { Prediction } from "@/lib/types";
 
 function DiffCell({ value, percent = false }: { value: number; percent?: boolean }) {
   const positive = value >= 0;
@@ -50,7 +51,7 @@ const COLUMNS: Column<SignalExecutionRow>[] = [
 ];
 
 export interface SignalVsExecutionTableProps {
-  bets: Bet[] | null;
+  bets: BetsWindow | null;
   predictions: Prediction[] | null;
 }
 
@@ -64,7 +65,7 @@ export function SignalVsExecutionTable({ bets, predictions }: SignalVsExecutionT
       />
     );
   }
-  if (bets.length === 0) {
+  if (bets.rows.length === 0) {
     return (
       <EmptyState
         icon={Inbox}
@@ -74,7 +75,7 @@ export function SignalVsExecutionTable({ bets, predictions }: SignalVsExecutionT
     );
   }
 
-  const rows = signalExecutionRows(bets, predictions);
+  const rows = signalExecutionRows(bets.rows, predictions);
   const unmatched = rows.filter((row) => !row.matched).length;
 
   return (
@@ -82,8 +83,11 @@ export function SignalVsExecutionTable({ bets, predictions }: SignalVsExecutionT
       <p className="px-6 py-3 text-caption text-text-tertiary">
         signal is the 48h prior market price (predictions.market_odds); execution is the
         price the bet was placed at (ledger_bets.odds). Rows where the price moved against
-        us are marked.
-        {unmatched > 0 ? ` ${unmatched} bet(s) have no matching prediction.` : ""}
+        us are marked. Window: {betsWindowPhrase(bets)} joined with
+        /predictions?limit=200&champion_only=false.
+        {unmatched > 0
+          ? ` ${unmatched} bet(s) have no matching prediction in the fetched page.`
+          : ""}
       </p>
       <DataTable
         columns={COLUMNS}

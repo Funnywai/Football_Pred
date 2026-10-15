@@ -54,7 +54,10 @@ export const getBetSummary = (): Promise<ApiResult<BetSummary>> => apiGet("/bets
 export const getEquityCurve = (): Promise<ApiResult<EquityPoint[]>> =>
   apiGet("/bets/equity-curve");
 
-export const getBets = (limit = 50): Promise<ApiResult<Bet[]>> => apiGet(`/bets?limit=${limit}`);
+// `/bets` orders by (placed_at, id) ascending; the caller passes the offset of the page
+// it wants (the performance tab fetches the newest page, i.e. the tail of the list).
+export const getBets = (limit = 50, offset = 0): Promise<ApiResult<Bet[]>> =>
+  apiGet(`/bets?limit=${limit}&offset=${offset}`);
 
 // `champion_only` defaults to true on the API. The signal-vs-execution join needs the
 // prediction a bet was actually placed from, which may belong to a since-replaced model,

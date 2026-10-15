@@ -6,6 +6,7 @@ import { KpiStrip } from "@/components/kpi/KpiStrip";
 import { PipelineFlow } from "@/components/pipeline/PipelineFlow";
 import { BetsTable } from "@/components/tables/BetsTable";
 import { SignalVsExecutionTable } from "@/components/tables/SignalVsExecutionTable";
+import type { BetsWindow } from "@/lib/bets-window";
 import type { Bet, BetSummary, EquityPoint, OpsData, OpsJob, Prediction } from "@/lib/types";
 
 const NOW = new Date("2026-10-15T12:00:00Z");
@@ -74,6 +75,10 @@ function job(id: string, lastRun: OpsJob["last_run"]): OpsJob {
   return { id, trigger: "interval", next_run_time: "2026-10-15T12:10:00Z", pending: false, last_run: lastRun };
 }
 
+function windowOf(rows: Bet[], total: number | null, newestFirst = true): BetsWindow {
+  return { rows, total, newestFirst };
+}
+
 function opsData(): OpsData {
   return {
     table_counts: {},
@@ -94,11 +99,45 @@ function opsData(): OpsData {
 
 describe("KpiStrip", () => {
   it("renders the summary values and the derived win rate", () => {
-    render(<KpiStrip summary={SUMMARY} bets={[bet({ id: 1, status: "won", profit: 14.8 }), bet({ id: 2, status: "lost", profit: -9.8 })]} />);
+    render(
+      <KpiStrip
+        summary={SUMMARY}
+        bets={windowOf(
+          [bet({ id: 1, status: "won", profit: 14.8 }), bet({ id: 2, status: "lost", profit: -9.8 })],
+          2,
+        )}
+      />,
+    );
     expect(screen.getAllByText("HK$1,005.00").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("+HK$5.00").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("25.0%").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("50.0%").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("discloses the window when the win rate is derived from a truncated page", () => {
+    const rows = Array.from({ length: 30 }, (_, index) =>
+      bet({ id: index + 1, status: "won", profit: 1 }),
+    );
+    render(<KpiStrip summary={SUMMARY} bets={windowOf(rows, 250)} />);
+    expect(screen.getByText(/over the 30 most recent settled bets/)).toBeInTheDocument();
+  });
+
+  it("adds no truncation wording when the fetched page covers the ledger", () => {
+    render(
+      <KpiStrip
+        summary={SUMMARY}
+        bets={windowOf(
+          [bet({ id: 1, status: "won", profit: 14.8 }), bet({ id: 2, status: "lost", profit: -9.8 })],
+          2,
+        )}
+      />,
+    );
+    expect(screen.queryByText(/most recent settled bets/)).not.toBeInTheDocument();
+  });
+
+  it("says the bets source is unavailable when the bets fetch failed", () => {
+    render(<KpiStrip summary={SUMMARY} bets={null} />);
+    expect(screen.getByText("bets unavailable")).toBeInTheDocument();
   });
 
   it("renders an explicit unavailable state when the summary is missing", () => {
@@ -158,10 +197,46 @@ describe("PipelineFlow", () => {
 
 describe("BetsTable", () => {
   it("renders the execution-price note and the bet rows", () => {
-    render(<BetsTable bets={[bet({ id: 1 }), bet({ id: 2, match_id: 29160, odds: 4.0 })]} />);
+    render(
+      <BetsTable
+        bets={windowOf([bet({ id: 1 }), bet({ id: 2, match_id: 29160, odds: 4.0 })], 2)}
+      />,
+    );
     expect(screen.getByText(/odds is the execution price/)).toBeInTheDocument();
     expect(screen.getAllByText("Arsenal v Chelsea").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("2 bets · page 1 of 1")).toBeInTheDocument();
+  });
+
+  it("discloses the fetched slice when the page is truncated", () => {
+    const rows = Array.from({ length: 30 }, (_, index) => bet({ id: index + 1 }));
+    render(<BetsTable bets={windowOf(rows, 250)} />);
+    expect(
+      screen.getByText("showing the 30 most recent of 250 bets · page 1 of 2"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the rows in the given newest-first display order", () => {
+    render(
+      <BetsTable
+        bets={windowOf(
+          [
+            bet({ id: 2, home_team: "Newest", placed_at: "2026-10-14T00:00:00Z" }),
+            bet({ id: 1, home_team: "Older", placed_at: "2026-10-13T00:00:00Z" }),
+          ],
+          2,
+        )}
+      />,
+    );
+    const rows = screen.getAllByRole("row");
+    expect(rows[1]).toHaveTextContent("Newest");
+    expect(rows[2]).toHaveTextContent("Older");
+  });
+
+  it("renders the oldest-page wording when the summary was unavailable", () => {
+    render(<BetsTable bets={windowOf([bet({ id: 1 }), bet({ id: 2 })], null, false)} />);
+    expect(
+      screen.getByText("showing the oldest 2 bets · page 1 of 1 · /bets/summary unavailable"),
+    ).toBeInTheDocument();
   });
 
   it("renders an explicit unavailable state when bets are missing", () => {
@@ -169,9 +244,14 @@ describe("BetsTable", () => {
     expect(screen.getByText("Bets unavailable")).toBeInTheDocument();
   });
 
-  it("renders an empty state when there are no bets", () => {
-    render(<BetsTable bets={[]} />);
+  it("renders an empty state when the ledger is empty", () => {
+    render(<BetsTable bets={windowOf([], 0)} />);
     expect(screen.getByText("No bets placed yet")).toBeInTheDocument();
+  });
+
+  it("renders an honest empty state when the fetched window is empty but the ledger is not", () => {
+    render(<BetsTable bets={windowOf([], 250)} />);
+    expect(screen.getByText("No bets in the fetched window")).toBeInTheDocument();
   });
 });
 
@@ -179,7 +259,7 @@ describe("SignalVsExecutionTable", () => {
   it("renders the signal and execution prices for a matched bet", () => {
     render(
       <SignalVsExecutionTable
-        bets={[bet({ id: 2, match_id: 29160, odds: 4.0 })]}
+        bets={windowOf([bet({ id: 2, match_id: 29160, odds: 4.0 })], 2)}
         predictions={[prediction({ match_id: 29160, market_odds: 3.9 })]}
       />,
     );
@@ -188,13 +268,25 @@ describe("SignalVsExecutionTable", () => {
     expect(screen.getByText("+0.10")).toBeInTheDocument();
   });
 
+  it("states the joined window, the predictions source, and the unmatched count", () => {
+    const rows = Array.from({ length: 30 }, (_, index) => bet({ id: index + 1 }));
+    render(<SignalVsExecutionTable bets={windowOf(rows, 250)} predictions={[]} />);
+    expect(screen.getByText(/the 30 most recent of 250 bets/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/\/predictions\?limit=200&champion_only=false/),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/30 bet\(s\) have no matching prediction in the fetched page/),
+    ).toBeInTheDocument();
+  });
+
   it("renders an explicit unavailable state when a source is missing", () => {
     render(<SignalVsExecutionTable bets={null} predictions={null} />);
     expect(screen.getByText("Signal vs execution unavailable")).toBeInTheDocument();
   });
 
   it("renders an empty state when there are no bets", () => {
-    render(<SignalVsExecutionTable bets={[]} predictions={[]} />);
+    render(<SignalVsExecutionTable bets={windowOf([], 0)} predictions={[]} />);
     expect(screen.getByText("No bets to compare yet")).toBeInTheDocument();
   });
 });

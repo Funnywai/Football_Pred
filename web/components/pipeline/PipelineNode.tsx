@@ -8,7 +8,9 @@ const STATUS_VARIANT: Record<StageStatus, StatusVariant> = {
   failed: "failed",
   ageing: "ageing",
   stale: "stale",
+  overdue: "overdue",
   "never-tracked": "never-tracked",
+  unavailable: "unavailable",
 };
 
 export interface PipelineNodeProps {

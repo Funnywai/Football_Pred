@@ -2,15 +2,16 @@ import { Inbox } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RollingNumber } from "@/components/ui/RollingNumber";
+import { isTruncated, type BetsWindow } from "@/lib/bets-window";
 import { formatCount, formatHkd, formatPercent } from "@/lib/format";
 import { bankrollBullet, breakevenBullet, winRateFrom, type WinRate } from "@/lib/kpi";
-import type { Bet, BetSummary } from "@/lib/types";
+import type { BetSummary } from "@/lib/types";
 
 import { KpiTile } from "./KpiTile";
 
 export interface KpiStripProps {
   summary: BetSummary | null;
-  bets: Bet[] | null;
+  bets: BetsWindow | null;
 }
 
 export function KpiStrip({ summary, bets }: KpiStripProps) {
@@ -24,7 +25,7 @@ export function KpiStrip({ summary, bets }: KpiStripProps) {
     );
   }
 
-  const winRate = bets === null ? null : winRateFrom(bets);
+  const winRate = bets === null ? null : winRateFrom(bets.rows);
   const profitPositive = summary.realized_profit >= 0;
 
   return (
@@ -75,7 +76,7 @@ export function KpiStrip({ summary, bets }: KpiStripProps) {
               <RollingNumber value={winRate.rate} format="percent" />
             )
           }
-          hint={winRateHint(winRate)}
+          hint={winRateHint(winRate, bets)}
         />
       </div>
       <KpiTableFallback summary={summary} winRate={winRate} />
@@ -83,10 +84,17 @@ export function KpiStrip({ summary, bets }: KpiStripProps) {
   );
 }
 
-function winRateHint(winRate: WinRate | null): string {
-  if (winRate === null) return "no settled bets";
-  if (winRate.rate === null) return "no decided bets";
-  return `${winRate.wins}W / ${winRate.losses}L · ${winRate.pushes} push excluded`;
+// The hint never states a fetched count as a total: a truncated window names the settled
+// slice the rate is computed over, and the oldest-page fallback names its missing summary.
+function winRateHint(winRate: WinRate | null, bets: BetsWindow | null): string {
+  if (bets === null) return "bets unavailable";
+  if (winRate === null || winRate.rate === null) {
+    return isTruncated(bets) || !bets.newestFirst ? "no decided bets in the fetched window" : "no decided bets";
+  }
+  const record = `${winRate.wins}W / ${winRate.losses}L · ${winRate.pushes} push excluded`;
+  if (!bets.newestFirst) return `over the oldest ${winRate.settled} settled bets · ${record}`;
+  if (isTruncated(bets)) return `over the ${winRate.settled} most recent settled bets · ${record}`;
+  return record;
 }
 
 function KpiTableFallback({ summary, winRate }: { summary: BetSummary; winRate: WinRate | null }) {
