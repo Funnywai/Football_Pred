@@ -12,12 +12,12 @@ export default async function DashboardLayout({ children }: { children: React.Re
   return (
     <div className="min-h-[100dvh]">
       <SystemHeader data={data} />
-      <div className="mx-auto max-w-[var(--content-max)] px-4 py-6 lg:px-6">
+      <main className="mx-auto max-w-[var(--content-max)] px-4 py-6 lg:px-6">
         <div className="mb-6 max-w-md">
           <TabBar />
         </div>
         {children}
-      </div>
+      </main>
     </div>
   );
 }

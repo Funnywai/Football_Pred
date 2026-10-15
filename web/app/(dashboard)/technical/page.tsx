@@ -35,7 +35,7 @@ export default async function TechnicalPage({
   const runsTotal = data.data?.table_counts.ingestion_runs ?? null;
 
   return (
-    <main role="tabpanel" aria-labelledby="tab-technical" className="flex flex-col gap-6">
+    <div role="tabpanel" aria-labelledby="tab-technical" className="flex flex-col gap-6">
       <div>
         <h1 className="text-h1 font-semibold text-text-primary">Technical</h1>
         <p className="mt-1 text-body text-text-secondary">
@@ -86,6 +86,6 @@ export default async function TechnicalPage({
       <Panel id="environment" title="Environment" action={<Source>/ops/status</Source>}>
         <EnvironmentPanel status={data.status} />
       </Panel>
-    </main>
+    </div>
   );
 }
