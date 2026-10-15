@@ -107,7 +107,7 @@ export function SignalVsExecutionTable({ bets, predictions }: SignalVsExecutionT
         us are marked. Window: {betsWindowPhrase(bets)} joined with
         /predictions?limit=200&champion_only=false.
         {unmatched > 0
-          ? ` ${unmatched} bet(s) have no matching prediction in the fetched page.`
+          ? ` ${unmatched} bet(s) have no matching prediction in the fetched window.`
           : ""}
       </Note>
       <DataTable

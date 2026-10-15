@@ -40,7 +40,7 @@ export function RevealFooter({
         {base === undefined ? count : `${base} · ${count}`}
       </span>
       <div className="flex items-center gap-2">
-        <button type="button" className={BUTTON} onClick={onExpand} disabled={!canExpand} aria-expanded={canExpand}>
+        <button type="button" className={BUTTON} onClick={onExpand} disabled={!canExpand}>
           Expand +10
         </button>
         <button type="button" className={BUTTON} onClick={onExpandAll} disabled={!canExpand}>

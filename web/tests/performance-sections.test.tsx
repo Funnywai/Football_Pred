@@ -291,7 +291,7 @@ describe("SignalVsExecutionTable", () => {
       screen.getByText(/\/predictions\?limit=200&champion_only=false/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/30 bet\(s\) have no matching prediction in the fetched page/),
+      screen.getByText(/30 bet\(s\) have no matching prediction in the fetched window/),
     ).toBeInTheDocument();
   });
 

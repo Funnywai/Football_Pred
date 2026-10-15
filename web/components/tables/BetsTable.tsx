@@ -155,7 +155,7 @@ function EmptyBets({ bets }: { bets: BetsWindow }) {
   }
   if (bets.total === null) {
     return (
-      <EmptyState icon={Inbox} title="No bets to show" detail="the fetched page is empty" />
+      <EmptyState icon={Inbox} title="No bets to show" detail="the fetched window is empty" />
     );
   }
   return (
