@@ -25,6 +25,10 @@
   - never a generic "no data" that would read as an empty table.
 - **Locked footer format:** `{base} · {shown} of {matching} shown`, where `base` is optional and,
   when a filter is active, ` · matching "{query}"` is appended.
+- **Every `<RevealFooter>` call site passes `canCollapse={reveal.visible > REVEAL_INITIAL}`** —
+  `canExpand` is false once the list is fully revealed, so it must not be reused for Collapse.
+- **`SearchInput` uses `useId()`, never a constant id** — up to three of these tables share the
+  Performance page, and duplicate DOM ids break the label association.
 - **Locked join-summary formats:**
   - unfiltered: `{unmatched} of the {fetched} fetched rows have no place in the ledger; {matched} matched a placed bet.`
   - filtered: `of the {matching} rows matching "{query}" in this window, {unmatched} have no place in the ledger; {matched} matched a placed bet.`
@@ -313,19 +317,20 @@ describe("SearchInput", () => {
 
 describe("RevealFooter", () => {
   it("states both counts so the revealed number never reads as a total", () => {
-    render(<RevealFooter base="showing the 200 most recent of 250 bets" shown={10} matching={200} isFiltered={false} canExpand onExpand={() => {}} onExpandAll={() => {}} onCollapse={() => {}} />);
+    render(<RevealFooter base="showing the 200 most recent of 250 bets" shown={10} matching={200} isFiltered={false} canExpand canCollapse={false} onExpand={() => {}} onExpandAll={() => {}} onCollapse={() => {}} />);
     expect(screen.getByText("showing the 200 most recent of 250 bets · 10 of 200 shown")).toBeInTheDocument();
   });
 
   it("names the query when filtered", () => {
-    render(<RevealFooter base="showing 200 of 250 bets" shown={6} matching={6} isFiltered canExpand={false} onExpand={() => {}} onExpandAll={() => {}} onCollapse={() => {}} />);
+    render(<RevealFooter base="showing 200 of 250 bets" shown={6} matching={6} isFiltered canExpand={false} canCollapse={false} onExpand={() => {}} onExpandAll={() => {}} onCollapse={() => {}} />);
     expect(screen.getByText(/· matching "/)).toBeInTheDocument();
   });
 
-  it("disables expand when everything is shown and exposes aria-expanded", () => {
-    render(<RevealFooter base="b" shown={35} matching={35} isFiltered={false} canExpand={false} onExpand={() => {}} onExpandAll={() => {}} onCollapse={() => {}} />);
+  it("disables the expand controls when everything is shown but keeps Collapse usable", () => {
+    render(<RevealFooter base="b" shown={35} matching={35} isFiltered={false} canExpand={false} canCollapse onExpand={() => {}} onExpandAll={() => {}} onCollapse={() => {}} />);
     expect(screen.getByRole("button", { name: /Expand/ })).toBeDisabled();
     expect(screen.getByRole("button", { name: /Show all/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Collapse" })).toBeEnabled();
   });
 });
 ```
@@ -369,6 +374,8 @@ the right.
 // web/components/ui/SearchInput.tsx
 "use client";
 
+import { useId } from "react";
+
 import { Search, X } from "lucide-react";
 
 export interface SearchInputProps {
@@ -380,7 +387,9 @@ export interface SearchInputProps {
 }
 
 export function SearchInput({ label, scope, value, onChange, onClear }: SearchInputProps) {
-  const id = "row-search";
+  // useId, never a constant: three of these tables can appear on one page, and duplicate DOM
+  // ids would break the label association and make getByLabelText ambiguous.
+  const id = useId();
   return (
     <div className="flex flex-wrap items-center gap-3 px-6 py-3">
       <label htmlFor={id} className="flex items-center gap-2 text-body text-text-secondary">
@@ -426,6 +435,9 @@ export interface RevealFooterProps {
   query?: string;
   isFiltered: boolean;
   canExpand: boolean;
+  /** True once the reveal has grown past its initial size, so Collapse stays usable when the
+   *  list is fully shown (canExpand is false then). */
+  canCollapse: boolean;
   onExpand: () => void;
   onExpandAll: () => void;
   onCollapse: () => void;
@@ -438,6 +450,7 @@ export function RevealFooter({
   query,
   isFiltered,
   canExpand,
+  canCollapse,
   onExpand,
   onExpandAll,
   onCollapse,
@@ -456,7 +469,7 @@ export function RevealFooter({
         <button type="button" className={BUTTON} onClick={onExpandAll} disabled={!canExpand}>
           Show all {matching}
         </button>
-        <button type="button" className={BUTTON} onClick={onCollapse} disabled={!canExpand}>
+        <button type="button" className={BUTTON} onClick={onCollapse} disabled={!canCollapse}>
           Collapse
         </button>
       </div>
