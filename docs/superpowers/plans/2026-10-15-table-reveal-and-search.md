@@ -591,7 +591,7 @@ describe("joinSummaryPhrase named base", () => {
 it("shows 10 rows by default and reveals 10 more", async () => {
   render(<MatchesPredictionsTable /* existing 200-row fixture */ />);
   expect(screen.getAllByRole("row")).toHaveLength(11); // header + 10
-  await userEvent.click(screen.getByRole("button", { name: /Expand/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
   expect(screen.getAllByRole("row")).toHaveLength(21);
 });
 
@@ -759,9 +759,9 @@ git commit -m "feat: 比賽×預測表改為 10 筆＋展開＋視窗內搜尋�
 it("shows 10 rows, reveals 10 more, and searches the window", async () => {
   render(<ResultsTable /* existing fixture, >= 30 rows */ />);
   expect(screen.getAllByRole("row")).toHaveLength(11);
-  await userEvent.click(screen.getByRole("button", { name: /Expand/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
   expect(screen.getAllByRole("row")).toHaveLength(21);
-  await userEvent.type(screen.getByLabelText("Search results"), "hkjc");
+  fireEvent.change(screen.getByLabelText("Search results"), { target: { value: "hkjc" } });
   expect(screen.getByText(/· matching "hkjc"/)).toBeInTheDocument();
 });
 
@@ -769,7 +769,7 @@ it("keeps the window sentence byte-identical while filtered", async () => {
   render(<ResultsTable /* fixture */ />);
   const note = "Window: the newest 200 results by kickoff time (newest first); newer results cannot fall outside this window, older ones can.";
   expect(screen.getByText(note)).toBeInTheDocument();
-  await userEvent.type(screen.getByLabelText("Search results"), "zzz");
+  fireEvent.change(screen.getByLabelText("Search results"), { target: { value: "zzz" } });
   expect(screen.getByText(note)).toBeInTheDocument();
   expect(screen.getByText(/No row in this window matches "zzz"/)).toBeInTheDocument();
 });
@@ -840,9 +840,9 @@ git commit -m "feat: 賽果表改為 10 筆＋展開＋視窗內搜尋"
 it("reveals and searches the signal table without touching its window sentence", async () => {
   render(<SignalVsExecutionTable /* fixture */ />);
   expect(screen.getAllByRole("row")).toHaveLength(11);
-  await userEvent.click(screen.getByRole("button", { name: /Show all/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Show all/ }));
   expect(screen.getAllByRole("row").length).toBeGreaterThan(11);
-  await userEvent.type(screen.getByLabelText("Search signal vs execution"), "laliga");
+  fireEvent.change(screen.getByLabelText("Search signal vs execution"), { target: { value: "laliga" } });
   expect(screen.getByText(/· matching "laliga"/)).toBeInTheDocument();
   expect(screen.getByText(/joined with .*predictions\?limit=200/)).toBeInTheDocument();
 });
@@ -910,9 +910,9 @@ expect(
 it("reveals 10 more per click and searches", async () => {
   render(<BetsTable /* fixture: 30 bets */ />);
   expect(screen.getAllByRole("row")).toHaveLength(11);
-  await userEvent.click(screen.getByRole("button", { name: /Expand/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
   expect(screen.getAllByRole("row")).toHaveLength(21);
-  await userEvent.type(screen.getByLabelText("Search bets"), "chelsea");
+  fireEvent.change(screen.getByLabelText("Search bets"), { target: { value: "chelsea" } });
   expect(screen.getByText(/· matching "chelsea"/)).toBeInTheDocument();
 });
 ```
@@ -973,9 +973,9 @@ git commit -m "refactor: 注單表改為 10 筆＋展開＋搜尋，移除 Prev/
 it("reveals runs 10 at a time and searches job, status and error text", async () => {
   render(<IngestionRunsTimeline /* fixture: 30 runs incl. one failed with "503" */ />);
   expect(screen.getAllByRole("listitem")).toHaveLength(10);
-  await userEvent.click(screen.getByRole("button", { name: /Expand/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
   expect(screen.getAllByRole("listitem")).toHaveLength(20);
-  await userEvent.type(screen.getByLabelText("Search runs"), "503");
+  fireEvent.change(screen.getByLabelText("Search runs"), { target: { value: "503" } });
   expect(screen.getAllByRole("listitem")).toHaveLength(1);
 });
 ```
