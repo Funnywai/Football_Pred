@@ -538,6 +538,12 @@ it("searching narrows rows and does NOT change the window counts", async () => {
 
 And reword the two existing assertions (spec §9.7):
 
+Also update the two **pre-existing** `joinSummaryPhrase` call sites in the same test file, which
+the signature change breaks: `:121` gains the base and must read
+`"54 of the 54 fetched rows have no place in the ledger; 0 matched a placed bet."`, and `:127`
+takes the new fourth argument `{ fetched: 54 }` and must stay **byte-identical** to today's
+truncation string.
+
 ```tsx
 // :98  from /200 of these have no place in the ledger; 0 matched a placed bet\./
      to   /200 of the 200 fetched rows have no place in the ledger; 0 matched a placed bet\./
@@ -752,7 +758,7 @@ it("reveals and searches the signal table without touching its window sentence",
 Run: `cd web && npx vitest run tests/performance-rest.test.tsx`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement** — `"use client"`, `const reveal = useRowReveal(rows, signalMatches)`, keep the existing `<Note>` sentence byte-identical, pass `rows={reveal.shown}`, add `<SearchInput label="Search signal vs execution" scope={`searches the ${rows.length} rows in this window`} … />` and a `<RevealFooter base="Window: …" … />` built from the existing sentence string.
+- [ ] **Step 3: Implement** — `"use client"`, `const reveal = useRowReveal(rows, signalMatches)`, keep the existing `<Note>` sentence byte-identical, pass `rows={reveal.shown}`, add `<SearchInput label="Search signal vs execution" scope={`searches the ${rows.length} rows in this window`} … />` and a `<RevealFooter … />` with no `base` (the `<Note>` above already carries the window sentence).
 
 ```ts
 function signalMatches(row: SignalRow, query: string): boolean {
