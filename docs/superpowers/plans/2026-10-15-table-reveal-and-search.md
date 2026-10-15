@@ -886,11 +886,9 @@ Expected: FAIL.
 ```ts
 function signalMatches(row: SignalRow, query: string): boolean {
   // Read the component's own row type first and search exactly the fields it already renders:
-  // home team, away team, league code, outcome (spec section 6).
-  const haystack = [row.homeTeam, row.awayTeam, row.leagueCode, row.outcome]
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(query);
+  // home team, away team, league code, outcome (spec section 6). Delegate to the shared matcher:
+  // import { matchesQuery } from "@/lib/row-search".
+  return matchesQuery([row.homeTeam, row.awayTeam, row.leagueCode, row.outcome], query);
 }
 ```
 
@@ -964,10 +962,11 @@ function windowSentence(bets: BetsWindow): string {
 
 ```ts
 function betMatches(bet: Bet, query: string): boolean {
-  const haystack = [bet.home_team, bet.away_team, bet.league_code, bet.target, bet.outcome, bet.status]
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(query);
+  // Delegate to the shared matcher: import { matchesQuery } from "@/lib/row-search".
+  return matchesQuery(
+    [bet.home_team, bet.away_team, bet.league_code, bet.target, bet.outcome, bet.status],
+    query,
+  );
 }
 ```
 
@@ -1017,8 +1016,8 @@ Expected: FAIL.
 
 ```ts
 function runMatches(run: OpsRun, query: string): boolean {
-  const haystack = [run.job, run.status, run.error ?? ""].join(" ").toLowerCase();
-  return haystack.includes(query);
+  // Delegate to the shared matcher: import { matchesQuery } from "@/lib/row-search".
+  return matchesQuery([run.job, run.status, run.error ?? ""], query);
 }
 ```
 
