@@ -212,7 +212,14 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 ### StatusPill
 
 - **Structure**: inline-flex pill with a Lucide glyph, a text label, and a colour token.
-- **Variants**: `running`, `success`, `failed`, `never-tracked`, `queued`, `ageing`.
+- **Variants**: `running`, `success`, `failed`, `never-tracked`, `queued`, `ageing`, `stale`,
+  `overdue`, `unavailable`.
+  (`stale` is a documented extension: Section 2.2 already assigns stale data to `--status-neg`,
+  and the pipeline needs a distinct stale state separate from `ageing`; it pairs `--status-neg`
+  with a `TimerOff` glyph and the label "stale". `overdue` is a stalled scheduler — a job whose
+  `next_run_time` passed without firing — and pairs `--status-warn` with an `AlarmClock` glyph
+  and the label "overdue". `unavailable` is a missing `/ops/*` source, distinct from
+  "never tracked"; it pairs `--status-warn` with a `CloudOff` glyph and the label "unavailable".)
 - **Spacing**: `--space-1` vertical, `--space-2` horizontal.
 - **States**: static only (status is data, not interactive).
 - **Accessibility**: the text label is always present; colour is supplementary. `role="status"`

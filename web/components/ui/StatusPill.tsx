@@ -1,4 +1,14 @@
-import { AlertTriangle, Check, Clock, Hourglass, Loader2, Minus } from "lucide-react";
+import {
+  AlarmClock,
+  AlertTriangle,
+  Check,
+  Clock,
+  CloudOff,
+  Hourglass,
+  Loader2,
+  Minus,
+  TimerOff,
+} from "lucide-react";
 import type { ComponentType } from "react";
 
 export type StatusVariant =
@@ -7,7 +17,10 @@ export type StatusVariant =
   | "failed"
   | "never-tracked"
   | "queued"
-  | "ageing";
+  | "ageing"
+  | "stale"
+  | "overdue"
+  | "unavailable";
 
 interface VariantSpec {
   Icon: ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
@@ -38,6 +51,17 @@ const VARIANTS: Record<StatusVariant, VariantSpec> = {
   },
   queued: { Icon: Clock, label: "queued", className: "text-status-warn border-status-warn/40" },
   ageing: { Icon: Hourglass, label: "ageing", className: "text-status-warn border-status-warn/40" },
+  stale: { Icon: TimerOff, label: "stale", className: "text-status-neg border-status-neg/40" },
+  overdue: {
+    Icon: AlarmClock,
+    label: "overdue",
+    className: "text-status-warn border-status-warn/40",
+  },
+  unavailable: {
+    Icon: CloudOff,
+    label: "unavailable",
+    className: "text-status-warn border-status-warn/40",
+  },
 };
 
 export interface StatusPillProps {
