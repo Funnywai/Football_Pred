@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ClvCard } from "@/components/clv/ClvCard";
@@ -92,6 +92,27 @@ describe("ResultsTable", () => {
   it("renders an empty state when no result is recorded", () => {
     render(<ResultsTable results={[]} />);
     expect(screen.getByText("No results yet")).toBeInTheDocument();
+  });
+
+  it("shows 10 rows, reveals 10 more, and searches the window", () => {
+    const results = Array.from({ length: 30 }, (_, index) => result({ match_id: index + 1 }));
+    render(<ResultsTable results={results} />);
+    expect(screen.getAllByRole("row")).toHaveLength(11);
+    fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
+    expect(screen.getAllByRole("row")).toHaveLength(21);
+    fireEvent.change(screen.getByLabelText("Search results"), { target: { value: "hkjc" } });
+    expect(screen.getByText(/· matching "hkjc"/)).toBeInTheDocument();
+  });
+
+  it("keeps the window sentence byte-identical while filtered", () => {
+    const results = Array.from({ length: 200 }, (_, index) => result({ match_id: index + 1 }));
+    render(<ResultsTable results={results} />);
+    const note =
+      "Window: the newest 200 results by kickoff time (newest first); newer results cannot fall outside this window, older ones can.";
+    expect(screen.getByText(note)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search results"), { target: { value: "zzz" } });
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.getByText(/No row in this window matches "zzz"/)).toBeInTheDocument();
   });
 });
 
