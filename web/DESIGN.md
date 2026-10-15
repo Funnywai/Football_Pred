@@ -188,7 +188,7 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 
 - **Structure**: `<section>` with a header row (title + optional action) and a body slot.
 - **Variants**: `default` (1px `--border-default`), `accent` (2px `--accent-signal`, for the
-  active pipeline panel), `flush` (no padding, for tables).
+  active pipeline panel).
 - **Spacing**: `--space-6` padding, `--space-4` header-to-body gap.
 - **States**: default, hover (border shifts toward `--accent-signal` at low opacity), focus-within
   (focus ring), loading (skeleton rows matching final shape), empty (composed empty state with a
@@ -293,17 +293,18 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 - **Accessibility**: the level is a text tag, not colour alone.
 - **Motion**: none. The stream scrolls; lines do not animate in.
 
-### SectionShell
+### Note
 
-- **Structure**: a `Panel` whose header carries the section title and a `queued` `StatusPill`
-  reading "pending — next increment", and whose body carries the section's one-line purpose
-  and its source route(s).
-- **Variants**: none.
-- **Spacing**: `--space-6` panel padding, `--space-2` purpose-to-source gap.
-- **States**: pending only (this is the walking-skeleton placeholder for a section that a
-  later increment fills in).
-- **Accessibility**: the title is the panel's `aria-labelledby` target; the pending state is
-  carried by the pill's text label, not colour alone.
+- **Structure**: a `<p>` carrying the Info glyph and one caption sentence. This is the
+  shared caption primitive for both tabs (Performance and Technical): every window label,
+  disclosure and caveat renders through it, so the two tabs read as one product.
+- **Variants**: none. The Info glyph is always present — one rule, no per-site variation.
+- **Spacing**: `--space-2` glyph-to-text gap. The note carries no padding of its own; it
+  sits flush with the panel body's content edge (`--space-6`), and the surrounding
+  container owns the vertical rhythm (`--space-3` gaps).
+- **Placement**: a Note sits above the content it describes.
+- **States**: static only.
+- **Accessibility**: the glyph is `aria-hidden`; the sentence is plain text.
 - **Motion**: none.
 
 ---
@@ -438,7 +439,57 @@ is also a failure, not a finish.
 
 ---
 
-## 10. Provenance: ui-ux-pro-max queries
+## 10. Technical additions
+
+Added by the TECHNICAL tab increment (2026-10-15). These patterns extend the primitives in
+Section 5; every value traces to a token already defined above. No new colour, type size or
+spacing value is introduced.
+
+### LogLevelFilter
+
+- **Structure**: a `<nav aria-label="Log level filter">` of links (`all`, `debug`, `info`,
+  `warning`, `error`, `critical`). The active link carries `aria-current="true"`.
+- **Spacing**: `--space-1` gap, `--space-2` horizontal padding, `--space-1` vertical.
+- **States**: default (`--text-secondary`), hover (`--text-primary`), active
+  (`--accent-signal` text plus a 1px `--accent-signal` underline), focus (global focus ring).
+- **Accessibility**: real links; the active filter is carried by `aria-current` and the
+  underline, not colour alone.
+- **Motion**: none.
+
+### LogAutoRefresh
+
+- **Structure**: a caption (`auto-refresh 15s · live|paused`) plus a real `<button>` with a
+  Pause/Play glyph and a `pause`/`resume` label; `aria-pressed` mirrors the paused state.
+- **Spacing**: `--space-2` gap, `--space-2` horizontal padding, `--space-1` vertical.
+- **States**: default, hover (border toward `--accent-signal` at low opacity), focus ring.
+- **Motion**: 150ms ease-out border transition only.
+
+### LogViewport
+
+- **Structure**: an `<ol>` of `LogLine`s inside a bounded viewport (`max-h-96` = 24rem, a
+  multiple of the 4px base) with internal scrolling and `--border-hairline` dividers.
+- **Accessibility**: the level is a glyph plus the raw level text; the message is escaped
+  text. The tail window and the active filter are stated above the viewport.
+- **Motion**: none; lines do not animate in.
+
+### TimelineList
+
+- **Structure**: an `<ol>` with `--border-hairline` dividers; each item carries a
+  `StatusPill`, mono identifiers, and tabular timestamps. Used by the ingestion runs
+  timeline and the model version timeline. It is a list, not a chart: no chart fallback.
+- **Spacing**: `--space-2` vertical per item, `--space-3` horizontal gap.
+- **Motion**: none.
+
+### MetricGrid
+
+- **Structure**: a `<dl>` grid of metric cells; each cell is an Overline key over a Data
+  value with tabular numerals. A metric the target does not track renders as `—` (never 0).
+- **Spacing**: `--space-4` column gap, `--space-1` row gap.
+- **Motion**: none.
+
+---
+
+## 11. Provenance: ui-ux-pro-max queries
 
 The following queries were run against `~/.agents/skills/ui-ux-pro-max/scripts/search.py` (the
 working path; the skill's own `SKILL.md` prints a Claude-only path that does not work here). Note
@@ -455,3 +506,43 @@ without `--stack`.
 | `dashboard density information hierarchy` | ux | Colour-only is a High-severity a11y issue (use icons/text in addition to colour); use a consistent modular type scale (12 14 16 18 24 32), never arbitrary sizes. |
 | `dark tech terminal developer` | style | **Dark Mode (OLED)** and **Cyberpunk UI** both confirm dark-only, monospace, visible focus, and reduced-motion support. The cyberpunk neon/glitch treatment is explicitly rejected as too loud for a mission-control surface. |
 | `server components data fetching` | stack (nextjs) | Fetch data in Server Components; keep components server by default; push Client Components down to interactive leaves. Confirms the server-side-only fetch architecture. |
+
+---
+
+## Performance additions
+
+The second performance increment (sections f, g and h of the spec) adds three composed
+patterns. **No new colour, type, spacing, radius or motion token was introduced**; every
+value below traces to Sections 2-7.
+
+### MatchesPredictionsTable (section f)
+
+- **Structure**: a window note (Info glyph + Caption prose) above a `DataTable` of
+  `/predictions` rows joined in memory to `/bets` on `(match_id, target, outcome)`.
+- **Columns**: kickoff, league, match, target, outcome, prob, implied, edge, bet state,
+  bet odds, bet stake. Every numeric cell is right-aligned with tabular numerals.
+- **States**: default, unavailable (`/predictions` or `/bets` missing), empty (no
+  predictions). The window note always names the fetched window and the display order; a
+  full page is never stated as a total.
+- **Semantics**: the bet column carries the words "placed" or "no bet"; the edge cell
+  carries its sign and colour. Colour is never the sole carrier.
+
+### ResultsTable (section g)
+
+- **Structure**: a window note above a `DataTable` of `/results` rows.
+- **Columns**: kickoff, league, match, score, confirmed, payout, source, confirmed at.
+- **States**: default, unavailable, empty.
+- **Semantics**: `confirmed` and `payout_confirmed` render as `StatusPill`s — a glyph plus
+  the words "confirmed"/"unconfirmed" and "payout confirmed"/"payout unconfirmed" — never
+  colour alone.
+
+### ClvCard (section h)
+
+- **Structure**: a five-cell metric grid (the KpiTile anatomy: Overline label over an H1
+  tabular numeral) above the champion identity line and three mandatory prose notes.
+- **States**: default, unavailable (`/models` missing), no champion 1x2 version, no
+  metrics reported.
+- **Semantics**: the notes state on screen that CLV is the only evidence available before
+  wins and losses accumulate (naming `clv_n`), that no CLV time series and no per-bet CLV
+  exist in v1, and that the ledger's execution price never enters CLV. No trend line is
+  drawn.

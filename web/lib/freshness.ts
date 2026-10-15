@@ -2,7 +2,7 @@
 // no invented heartbeat timestamp. Thresholds are named constants so the UI can explain
 // why a value is degraded or stale.
 
-import type { OpsJob, OpsRun } from "./types";
+import type { OpsData, OpsJob, OpsRun } from "./types";
 
 export type FreshnessStatus = "healthy" | "degraded" | "stale";
 
@@ -43,6 +43,89 @@ export function statusForAge(
   if (age >= thresholds.staleMs) return "stale";
   if (age >= thresholds.degradedMs) return "degraded";
   return "healthy";
+}
+
+export type FreshnessRowState =
+  | FreshnessStatus
+  | "never-tracked"
+  | "unavailable"
+  | "not-in-window";
+
+export interface FreshnessRow {
+  id: "odds" | "features" | "results" | "predictions";
+  label: string;
+  source: string;
+  iso: string | null;
+  state: FreshnessRowState;
+  thresholds: AgeThresholds;
+}
+
+/** Format a threshold duration for the on-screen "degraded > 30m · stale > 3h" label. */
+export function formatDuration(ms: number): string {
+  const minutes = Math.round(ms / MINUTE);
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `${hours}h`;
+  return `${Math.round(hours / 24)}d`;
+}
+
+/**
+ * The four arrival streams of the freshness panel. `runs` is nullable: when /ops/runs is
+ * unreachable the prediction arrival cannot be derived and is marked unavailable, never
+ * "never tracked" (which would claim no prediction ever ran). A fetched window that holds
+ * no ml_predict run is a window miss, not a never-tracked source: the window is a
+ * truncated tail, so the run may exist outside it.
+ */
+export function freshnessRows(data: OpsData, runs: OpsRun[] | null, now: Date): FreshnessRow[] {
+  const newestPredict =
+    runs === null
+      ? null
+      : (runs
+          .filter((run) => run.job === "ml_predict")
+          .map((run) => run.finished_at)
+          .filter((value): value is string => value !== null)
+          .sort()
+          .at(-1) ?? null);
+
+  const defs: Array<Omit<FreshnessRow, "state">> = [
+    {
+      id: "odds",
+      label: "Odds snapshot",
+      source: "/ops/data.last_arrived.odds_captured_at",
+      iso: data.last_arrived.odds_captured_at,
+      thresholds: FRESHNESS_THRESHOLDS.odds,
+    },
+    {
+      id: "features",
+      label: "Features",
+      source: "/ops/data.last_arrived.features_built_at",
+      iso: data.last_arrived.features_built_at,
+      thresholds: FRESHNESS_THRESHOLDS.features,
+    },
+    {
+      id: "results",
+      label: "Confirmed result",
+      source: "/ops/data.last_arrived.results_confirmed_at",
+      iso: data.last_arrived.results_confirmed_at,
+      thresholds: FRESHNESS_THRESHOLDS.results,
+    },
+    {
+      id: "predictions",
+      label: "Prediction",
+      source: "newest ml_predict run in /ops/runs",
+      iso: newestPredict,
+      thresholds: FRESHNESS_THRESHOLDS.predictions,
+    },
+  ];
+
+  return defs.map((def) => {
+    if (def.id === "predictions") {
+      if (runs === null) return { ...def, state: "unavailable" };
+      if (def.iso === null) return { ...def, state: "not-in-window" };
+    }
+    if (def.iso === null) return { ...def, state: "never-tracked" };
+    return { ...def, state: statusForAge(def.iso, def.thresholds, now) };
+  });
 }
 
 export interface HeartbeatResult {

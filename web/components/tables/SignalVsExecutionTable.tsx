@@ -2,6 +2,7 @@ import { ArrowDown, ArrowLeftRight, ArrowUp, Inbox } from "lucide-react";
 
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { betsWindowPhrase, type BetsWindow } from "@/lib/bets-window";
 import { formatDateTime, formatOdds, formatSignedPercent } from "@/lib/format";
 import { signalExecutionRows, type SignalExecutionRow } from "@/lib/signal-execution";
@@ -79,8 +80,8 @@ export function SignalVsExecutionTable({ bets, predictions }: SignalVsExecutionT
   const unmatched = rows.filter((row) => !row.matched).length;
 
   return (
-    <div className="flex flex-col">
-      <p className="px-6 py-3 text-caption text-text-tertiary">
+    <div className="flex flex-col gap-3">
+      <Note>
         signal is the 48h prior market price (predictions.market_odds); execution is the
         price the bet was placed at (ledger_bets.odds). Rows where the price moved against
         us are marked. Window: {betsWindowPhrase(bets)} joined with
@@ -88,7 +89,7 @@ export function SignalVsExecutionTable({ bets, predictions }: SignalVsExecutionT
         {unmatched > 0
           ? ` ${unmatched} bet(s) have no matching prediction in the fetched page.`
           : ""}
-      </p>
+      </Note>
       <DataTable
         columns={COLUMNS}
         rows={rows}

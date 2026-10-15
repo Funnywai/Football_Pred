@@ -2,28 +2,21 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { EquityCurve } from "@/components/charts/EquityCurve";
+import { ClvCard } from "@/components/clv/ClvCard";
 import { KpiStrip } from "@/components/kpi/KpiStrip";
 import { PipelineFlow } from "@/components/pipeline/PipelineFlow";
-import { SectionShell } from "@/components/sections/SectionShell";
 import { BetsTable } from "@/components/tables/BetsTable";
+import { MatchesPredictionsTable } from "@/components/tables/MatchesPredictionsTable";
+import { ResultsTable } from "@/components/tables/ResultsTable";
 import { SignalVsExecutionTable } from "@/components/tables/SignalVsExecutionTable";
 import { Panel } from "@/components/ui/Panel";
 import { RefreshOnInterval } from "@/components/ui/RefreshOnInterval";
 import { loadPerformanceData } from "@/lib/performance-data";
 import { pipelineStages } from "@/lib/pipeline";
-import { PERFORMANCE_SECTIONS } from "@/lib/sections";
 
 export const metadata: Metadata = {
   title: "Performance · WorldCup Mission Control",
 };
-
-const IMPLEMENTED = new Set([
-  "kpi-strip",
-  "equity-curve",
-  "pipeline",
-  "signal-vs-execution",
-  "bets",
-]);
 
 function Source({ children }: { children: ReactNode }) {
   return (
@@ -86,9 +79,21 @@ export default async function PerformancePage() {
         <BetsTable bets={data.bets} />
       </Panel>
 
-      {PERFORMANCE_SECTIONS.filter((section) => !IMPLEMENTED.has(section.id)).map((section) => (
-        <SectionShell key={section.id} {...section} />
-      ))}
+      <Panel
+        id="matches-predictions"
+        title="Matches x predictions"
+        action={<Source>/predictions + /bets</Source>}
+      >
+        <MatchesPredictionsTable predictions={data.predictions} bets={data.bets} />
+      </Panel>
+
+      <Panel id="results" title="Results" action={<Source>/results</Source>}>
+        <ResultsTable results={data.results} />
+      </Panel>
+
+      <Panel id="clv" title="CLV card" action={<Source>/models</Source>}>
+        <ClvCard models={data.models} />
+      </Panel>
     </main>
   );
 }
