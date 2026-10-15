@@ -15,6 +15,7 @@ vi.mock("@/lib/performance-data", () => ({
     bets: null,
     equity: null,
     predictions: null,
+    results: null,
     jobs: null,
     runs: null,
     data: null,
@@ -30,6 +31,9 @@ const IMPLEMENTED = new Set([
   "pipeline",
   "signal-vs-execution",
   "bets",
+  "matches-predictions",
+  "results",
+  "clv",
 ]);
 
 describe("route smoke — /performance", () => {
@@ -40,7 +44,7 @@ describe("route smoke — /performance", () => {
       expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
     }
     const remaining = PERFORMANCE_SECTIONS.filter((section) => !IMPLEMENTED.has(section.id));
-    expect(screen.getAllByText("pending — next increment")).toHaveLength(remaining.length);
+    expect(screen.queryAllByText("pending — next increment")).toHaveLength(remaining.length);
   });
 });
 
