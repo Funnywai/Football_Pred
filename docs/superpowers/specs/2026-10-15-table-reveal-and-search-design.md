@@ -239,8 +239,31 @@ Unit / component tests (Vitest + Testing Library), extending the existing suites
 4. **Search** - each table's fields, case-insensitivity, the no-match `EmptyState` reason, and
    the reset-to-10 rule.
 5. **a11y** - the input's accessible name, `aria-expanded`, the live-region count.
-6. The full existing suite (**230 tests**) must stay green; no existing test may be weakened
-   or deleted.
+6. The full existing suite (**230 tests**, 25 files) must stay green; no existing test may be
+   weakened or deleted.
+
+7. **Impact on existing test strings (exact, so nobody "fixes" a failing test by weakening it).**
+   Two classes of existing assertion are affected, and the plan must list both:
+
+   - **Deliberately reworded** (mandated by 4.3 / 4.6), all in
+     `web/tests/performance-sections.test.tsx` and `web/tests/matches-predictions.test.tsx`:
+     - footer pagination strings: `"2 bets · page 1 of 1"` (:207),
+       `"showing the 30 most recent of 250 bets · page 1 of 2"` (:214), and
+       `"showing the oldest 2 bets · page 1 of 1 · /bets/summary unavailable"` (:238) - the last
+       one **must keep its oldest-page qualification**;
+     - join-summary strings: `"200 of these have no place in the ledger; 0 matched a placed
+       bet."` (:98) and `"1 of these has no place in the ledger; 0 matched a placed bet."`
+       (:136) gain the **named base** (e.g. `"200 of the 200 fetched rows …"`,
+       `"of the 1 row in this window, 1 has …"`), which also introduces singular/plural
+       handling the plan must specify.
+   - **Must stay byte-identical:** every window `<Note>` sentence - e.g. the results assertion
+     at `web/tests/performance-rest.test.tsx:76` (`"newer results cannot fall outside this
+     window, older ones can"`) - and the truncation-qualified join wording at
+     `web/tests/matches-predictions.test.tsx:123` and `:150`.
+
+   `DataTable` has **eight** consumers: the five in-scope tables plus `FreshnessPanel`,
+   `SchedulerTable` and `DbSizeTable`. It is **not modified**; the three small tables stay
+   untouched, and any edit to `DataTable` would ripple to all eight and is out of scope.
 
 Then the mandated completion gates, unchanged from the base dashboard:
 
