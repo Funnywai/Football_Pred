@@ -118,14 +118,35 @@ describe("predictionBetRows", () => {
 
 describe("joinSummaryPhrase", () => {
   it("claims no ledger place only when the fetched bets window covers the ledger", () => {
-    expect(joinSummaryPhrase(0, 54, false)).toBe(
-      "54 of these have no place in the ledger; 0 matched a placed bet.",
+    expect(joinSummaryPhrase(0, 54, false, { fetched: 54 })).toBe(
+      "54 of the 54 fetched rows have no place in the ledger; 0 matched a placed bet.",
     );
   });
 
   it("qualifies the counts when the fetched bets window is truncated", () => {
-    expect(joinSummaryPhrase(2, 52, true)).toBe(
+    expect(joinSummaryPhrase(2, 52, true, { fetched: 54 })).toBe(
       "2 matched a placed bet in the fetched bets window; 52 have no match there — a bet outside the fetched window would not be seen.",
+    );
+  });
+});
+
+describe("joinSummaryPhrase named base", () => {
+  it("names the fetched window when unfiltered", () => {
+    expect(joinSummaryPhrase(0, 200, false, { fetched: 200 })).toBe(
+      "200 of the 200 fetched rows have no place in the ledger; 0 matched a placed bet.",
+    );
+  });
+  it("names the query when filtered", () => {
+    expect(joinSummaryPhrase(1, 11, false, { fetched: 200, query: "arsenal" })).toBe(
+      'of the 12 rows matching "arsenal" in this window, 11 have no place in the ledger; 1 matched a placed bet.',
+    );
+  });
+  it("keeps the truncation wording byte-identical (filtered or not)", () => {
+    expect(joinSummaryPhrase(1, 0, true, { fetched: 200, query: "arsenal" })).toBe(
+      "1 matched a placed bet in the fetched bets window; 0 have no match there — a bet outside the fetched window would not be seen.",
+    );
+    expect(joinSummaryPhrase(0, 1, true, { fetched: 200 })).toBe(
+      "0 matched a placed bet in the fetched bets window; 1 has no match there — a bet outside the fetched window would not be seen.",
     );
   });
 });

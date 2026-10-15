@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { MatchesPredictionsTable } from "@/components/tables/MatchesPredictionsTable";
@@ -95,7 +95,7 @@ describe("MatchesPredictionsTable", () => {
       screen.getByText(/Rows are shown newest kickoff first within that window/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/200 of these have no place in the ledger; 0 matched a placed bet\./),
+      screen.getByText(/200 of the 200 fetched rows have no place in the ledger; 0 matched a placed bet\./),
     ).toBeInTheDocument();
   });
 
@@ -133,7 +133,7 @@ describe("MatchesPredictionsTable", () => {
       />,
     );
     expect(
-      screen.getByText(/1 of these has no place in the ledger; 0 matched a placed bet\./),
+      screen.getByText(/1 of the 1 fetched rows has no place in the ledger; 0 matched a placed bet\./),
     ).toBeInTheDocument();
     expect(screen.queryByText(/no match there/)).not.toBeInTheDocument();
   });
@@ -161,5 +161,38 @@ describe("MatchesPredictionsTable", () => {
   it("renders an empty state when the model has written no prediction", () => {
     render(<MatchesPredictionsTable predictions={[]} bets={windowOf([], 0)} />);
     expect(screen.getByText("No predictions yet")).toBeInTheDocument();
+  });
+
+  it("shows 10 rows by default and reveals 10 more", async () => {
+    const predictions = Array.from({ length: 200 }, (_, index) =>
+      prediction({ id: index + 1, match_id: index + 1 }),
+    );
+    render(<MatchesPredictionsTable predictions={predictions} bets={windowOf([], 0)} />);
+    expect(screen.getAllByRole("row")).toHaveLength(11); // header + 10
+    fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
+    expect(screen.getAllByRole("row")).toHaveLength(21);
+  });
+
+  it("searching narrows rows and does NOT change the window counts", () => {
+    const predictions = Array.from({ length: 200 }, (_, index) =>
+      prediction({
+        id: index + 1,
+        match_id: index + 1,
+        home_team: index === 0 ? "Arsenal" : `Home ${index + 1}`,
+        away_team: index === 0 ? "Chelsea" : `Away ${index + 1}`,
+      }),
+    );
+    const bets = [bet({ id: 1, match_id: 1 }), bet({ id: 2, match_id: 2 })];
+    render(<MatchesPredictionsTable predictions={predictions} bets={windowOf(bets, 2)} />);
+    // 200 rows, 2 of them matched a bet -> 198 unmatched. The assertion must not claim 200 of 200.
+    expect(
+      screen.getByText(/198 of the 200 fetched rows have no place in the ledger; 2 matched a placed bet\./),
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search predictions"), { target: { value: "arsenal" } });
+    expect(screen.getAllByRole("row").length).toBeLessThan(11);
+    expect(screen.getByText(/rows matching "arsenal" in this window/)).toBeInTheDocument();
+    expect(screen.getByText(/· matching "arsenal"/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search predictions"), { target: { value: "zzz" } });
+    expect(screen.getByText(/No row in this window matches "zzz"/)).toBeInTheDocument();
   });
 });
