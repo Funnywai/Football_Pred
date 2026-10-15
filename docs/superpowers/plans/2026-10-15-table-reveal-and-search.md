@@ -521,6 +521,8 @@ git commit -m "feat: 新增 SearchInput 與 RevealFooter 積木（並先寫入 D
 ### Task 3: Matches x predictions — reveal, search, and the named-base join summary
 
 **Files:**
+- Create: `web/lib/row-search.ts` (the shared matcher all five tables use)
+- Create: `web/tests/row-search.test.ts`
 - Modify: `web/components/tables/MatchesPredictionsTable.tsx` (add `"use client"`, hook, controls; counts keep using the full window)
 - Modify: `web/lib/predictions-join.ts` (add the named-base summary function)
 - Modify: `web/tests/matches-predictions.test.tsx` (:98 and :136 reworded; add reveal/search tests)
@@ -530,6 +532,33 @@ git commit -m "feat: 新增 SearchInput 與 RevealFooter 積木（並先寫入 D
 - Produces: `joinSummaryPhrase(matched, unmatched, betsWindowTruncated, base)` where `base` is `{ fetched: number; query?: string }` — used only here.
 
 - [ ] **Step 1: Write the failing tests**
+
+```ts
+// web/tests/row-search.test.ts
+import { describe, expect, it } from "vitest";
+
+import { matchesQuery } from "@/lib/row-search";
+
+describe("matchesQuery", () => {
+  it("matches a lowercased query against any field, case-insensitively", () => {
+    expect(matchesQuery(["Arsenal", "Chelsea", "EPL"], "arsenal")).toBe(true);
+    expect(matchesQuery(["Arsenal", "Chelsea", "EPL"], "epl")).toBe(true);
+  });
+
+  it("does not match when no field contains the query", () => {
+    expect(matchesQuery(["Arsenal", "Chelsea"], "liverpool")).toBe(false);
+  });
+
+  it("matches every row on an empty query", () => {
+    expect(matchesQuery(["anything"], "")).toBe(true);
+  });
+
+  it("treats null and undefined fields as empty strings", () => {
+    expect(matchesQuery([null, undefined, "Arsenal"], "arsenal")).toBe(true);
+    expect(matchesQuery([null, undefined], "x")).toBe(false);
+  });
+});
+```
 
 ```ts
 // web/tests/predictions-join.test.ts (append)
@@ -658,21 +687,28 @@ const summaryBase = { fetched: rows.length, query: reveal.isFiltered ? reveal.qu
 />
 ```
 
-with the searchable-field matcher added next to the row builder:
+with the searchable-field matcher added next to the row builder, delegating to the shared helper
+(see the Global Constraint "One shared search matcher, never six copies"):
 
 ```ts
+// web/lib/row-search.ts
+export function matchesQuery(fields: (string | null | undefined)[], query: string): boolean {
+  return fields.join(" ").toLowerCase().includes(query);
+}
+
+// web/components/tables/MatchesPredictionsTable.tsx
 function predictionMatches(row: PredictionBetRow, query: string): boolean {
-  const haystack = [
-    row.prediction.home_team,
-    row.prediction.away_team,
-    row.prediction.league_code,
-    row.prediction.target,
-    row.prediction.outcome,
-    row.bet === null ? "no bet" : "placed",
-  ]
-    .join(" ")
-    .toLowerCase();
-  return haystack.includes(query);
+  return matchesQuery(
+    [
+      row.prediction.home_team,
+      row.prediction.away_team,
+      row.prediction.league_code,
+      row.prediction.target,
+      row.prediction.outcome,
+      row.bet === null ? "no bet" : "placed",
+    ],
+    query,
+  );
 }
 ```
 
