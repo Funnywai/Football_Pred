@@ -438,7 +438,57 @@ is also a failure, not a finish.
 
 ---
 
-## 10. Provenance: ui-ux-pro-max queries
+## 10. Technical additions
+
+Added by the TECHNICAL tab increment (2026-10-15). These patterns extend the primitives in
+Section 5; every value traces to a token already defined above. No new colour, type size or
+spacing value is introduced.
+
+### LogLevelFilter
+
+- **Structure**: a `<nav aria-label="Log level filter">` of links (`all`, `debug`, `info`,
+  `warning`, `error`, `critical`). The active link carries `aria-current="true"`.
+- **Spacing**: `--space-1` gap, `--space-2` horizontal padding, `--space-1` vertical.
+- **States**: default (`--text-secondary`), hover (`--text-primary`), active
+  (`--accent-signal` text plus a 1px `--accent-signal` underline), focus (global focus ring).
+- **Accessibility**: real links; the active filter is carried by `aria-current` and the
+  underline, not colour alone.
+- **Motion**: none.
+
+### LogAutoRefresh
+
+- **Structure**: a caption (`auto-refresh 15s · live|paused`) plus a real `<button>` with a
+  Pause/Play glyph and a `pause`/`resume` label; `aria-pressed` mirrors the paused state.
+- **Spacing**: `--space-2` gap, `--space-2` horizontal padding, `--space-1` vertical.
+- **States**: default, hover (border toward `--accent-signal` at low opacity), focus ring.
+- **Motion**: 150ms ease-out border transition only.
+
+### LogViewport
+
+- **Structure**: an `<ol>` of `LogLine`s inside a bounded viewport (`max-h-96` = 24rem, a
+  multiple of the 4px base) with internal scrolling and `--border-hairline` dividers.
+- **Accessibility**: the level is a glyph plus the raw level text; the message is escaped
+  text. The tail window and the active filter are stated above the viewport.
+- **Motion**: none; lines do not animate in.
+
+### TimelineList
+
+- **Structure**: an `<ol>` with `--border-hairline` dividers; each item carries a
+  `StatusPill`, mono identifiers, and tabular timestamps. Used by the ingestion runs
+  timeline and the model version timeline. It is a list, not a chart: no chart fallback.
+- **Spacing**: `--space-2` vertical per item, `--space-3` horizontal gap.
+- **Motion**: none.
+
+### MetricGrid
+
+- **Structure**: a `<dl>` grid of metric cells; each cell is an Overline key over a Data
+  value with tabular numerals. A metric the target does not track renders as `—` (never 0).
+- **Spacing**: `--space-4` column gap, `--space-1` row gap.
+- **Motion**: none.
+
+---
+
+## 11. Provenance: ui-ux-pro-max queries
 
 The following queries were run against `~/.agents/skills/ui-ux-pro-max/scripts/search.py` (the
 working path; the skill's own `SKILL.md` prints a Claude-only path that does not work here). Note
