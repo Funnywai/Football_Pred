@@ -1,11 +1,17 @@
-import { ListTree } from "lucide-react";
+"use client";
+
+import { ListTree, SearchX } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Note } from "@/components/ui/Note";
+import { RevealFooter } from "@/components/ui/RevealFooter";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { StatusPill, type StatusVariant } from "@/components/ui/StatusPill";
 import { formatCount, formatDateTime } from "@/lib/format";
+import { matchesQuery } from "@/lib/row-search";
 import { runStage, runStatusKind, runsWindowLabel, type RunStatusKind } from "@/lib/runs";
 import type { OpsRun } from "@/lib/types";
+import { REVEAL_INITIAL, useRowReveal } from "@/lib/use-row-reveal";
 
 // This is a list, NOT a chart: the run history renders as a dense ordered list. Do not add
 // a chart fallback — there is no chart here.
@@ -23,7 +29,13 @@ export interface IngestionRunsTimelineProps {
   limit: number;
 }
 
+function runMatches(run: OpsRun, query: string): boolean {
+  return matchesQuery([run.job, run.status, run.error ?? ""], query);
+}
+
 export function IngestionRunsTimeline({ runs, total, limit }: IngestionRunsTimelineProps) {
+  const reveal = useRowReveal(runs ?? [], runMatches);
+
   if (runs === null) {
     return (
       <EmptyState
@@ -38,14 +50,40 @@ export function IngestionRunsTimeline({ runs, total, limit }: IngestionRunsTimel
   }
   return (
     <div className="flex flex-col gap-3">
+      <SearchInput
+        label="Search runs"
+        scope={`searches the ${runs.length} runs in this window`}
+        value={reveal.query}
+        onChange={reveal.setQuery}
+        onClear={reveal.clear}
+      />
       <Note>
         {runsWindowLabel(runs, total, limit)} · run count is a row count, not a rate.
       </Note>
-      <ol className="divide-y divide-border-hairline">
-        {runs.map((run) => (
-          <RunRow key={run.id} run={run} />
-        ))}
-      </ol>
+      {reveal.isFiltered && reveal.filtered.length === 0 ? (
+        <EmptyState
+          icon={SearchX}
+          title={`No row in this window matches "${reveal.query.trim()}"`}
+          detail="Search covers only the fetched window."
+        />
+      ) : (
+        <ol className="divide-y divide-border-hairline">
+          {reveal.shown.map((run) => (
+            <RunRow key={run.id} run={run} />
+          ))}
+        </ol>
+      )}
+      <RevealFooter
+        shown={reveal.shown.length}
+        matching={reveal.filtered.length}
+        query={reveal.query}
+        isFiltered={reveal.isFiltered}
+        canExpand={reveal.canExpand}
+        canCollapse={reveal.visible > REVEAL_INITIAL}
+        onExpand={reveal.expand}
+        onExpandAll={reveal.expandAll}
+        onCollapse={reveal.collapse}
+      />
     </div>
   );
 }
