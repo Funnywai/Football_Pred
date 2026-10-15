@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { ClvCard } from "@/components/clv/ClvCard";
 import { ResultsTable } from "@/components/tables/ResultsTable";
-import type { ModelVersion, Result } from "@/lib/types";
+import { SignalVsExecutionTable } from "@/components/tables/SignalVsExecutionTable";
+import type { Bet, ModelVersion, Result } from "@/lib/types";
 
 function result(overrides: Partial<Result>): Result {
   return {
@@ -40,6 +41,32 @@ function model(overrides: Partial<ModelVersion>): ModelVersion {
     artifact_path: "artifacts/ml/model.txt",
     created_at: "2026-10-14T00:00:00Z",
     promoted_at: "2026-10-14T12:00:00Z",
+    ...overrides,
+  };
+}
+
+function bet(overrides: Partial<Bet>): Bet {
+  return {
+    id: 1,
+    match_id: 29164,
+    target: "1x2",
+    outcome: "H",
+    model_version_id: 1,
+    line: null,
+    odds: 2.48,
+    stake: 10,
+    bankroll_at_place: 1000,
+    edge: 0.05,
+    kelly_multiplier: 0.5,
+    status: "won",
+    placed_at: "2026-10-14T00:00:00Z",
+    settled_at: "2026-10-15T00:00:00Z",
+    payout: 24.8,
+    profit: 14.8,
+    kickoff_time: "2026-10-14T12:00:00Z",
+    league_code: "EPL",
+    home_team: "Arsenal",
+    away_team: "Chelsea",
     ...overrides,
   };
 }
@@ -151,5 +178,27 @@ describe("ClvCard", () => {
     render(<ClvCard models={[model({ metrics: {} })]} />);
     expect(screen.getByText("No metrics reported")).toBeInTheDocument();
     expect(screen.getByText("#2")).toBeInTheDocument();
+  });
+});
+
+describe("SignalVsExecutionTable", () => {
+  it("reveals and searches the signal table without touching its window sentence", () => {
+    const bets = Array.from({ length: 12 }, (_, index) =>
+      bet({ id: index + 1, league_code: index === 0 ? "LALIGA" : "EPL" }),
+    );
+    render(
+      <SignalVsExecutionTable
+        bets={{ rows: bets, total: 12, newestFirst: true }}
+        predictions={[]}
+      />,
+    );
+    expect(screen.getAllByRole("row")).toHaveLength(11);
+    fireEvent.click(screen.getByRole("button", { name: /Show all/ }));
+    expect(screen.getAllByRole("row").length).toBeGreaterThan(11);
+    fireEvent.change(screen.getByLabelText("Search signal vs execution"), {
+      target: { value: "laliga" },
+    });
+    expect(screen.getByText(/· matching "laliga"/)).toBeInTheDocument();
+    expect(screen.getByText(/joined with .*predictions\?limit=200/)).toBeInTheDocument();
   });
 });
