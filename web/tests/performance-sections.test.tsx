@@ -242,13 +242,16 @@ describe("BetsTable", () => {
   });
 
   it("reveals 10 more per click and searches", () => {
-    const rows = Array.from({ length: 30 }, (_, index) => bet({ id: index + 1 }));
+    const rows = Array.from({ length: 30 }, (_, index) =>
+      bet({ id: index + 1, away_team: index < 5 ? "Chelsea" : "Liverpool" }),
+    );
     render(<BetsTable bets={windowOf(rows, 30)} />);
     expect(screen.getAllByRole("row")).toHaveLength(11);
     fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
     expect(screen.getAllByRole("row")).toHaveLength(21);
     fireEvent.change(screen.getByLabelText("Search bets"), { target: { value: "chelsea" } });
-    expect(screen.getByText(/· matching "chelsea"/)).toBeInTheDocument();
+    expect(screen.getAllByRole("row").length).toBeLessThan(11);
+    expect(screen.getByText('30 bets · 5 of 5 shown · matching "chelsea"')).toBeInTheDocument();
   });
 
   it("renders an explicit unavailable state when bets are missing", () => {

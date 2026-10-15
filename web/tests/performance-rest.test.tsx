@@ -122,13 +122,16 @@ describe("ResultsTable", () => {
   });
 
   it("shows 10 rows, reveals 10 more, and searches the window", () => {
-    const results = Array.from({ length: 30 }, (_, index) => result({ match_id: index + 1 }));
+    const results = Array.from({ length: 30 }, (_, index) =>
+      result({ match_id: index + 1, source: index < 5 ? "hkjc" : "football_data" }),
+    );
     render(<ResultsTable results={results} />);
     expect(screen.getAllByRole("row")).toHaveLength(11);
     fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
     expect(screen.getAllByRole("row")).toHaveLength(21);
     fireEvent.change(screen.getByLabelText("Search results"), { target: { value: "hkjc" } });
-    expect(screen.getByText(/· matching "hkjc"/)).toBeInTheDocument();
+    expect(screen.getAllByRole("row").length).toBeLessThan(11);
+    expect(screen.getByText('5 of 5 shown · matching "hkjc"')).toBeInTheDocument();
   });
 
   it("keeps the window sentence byte-identical while filtered", () => {
@@ -184,7 +187,7 @@ describe("ClvCard", () => {
 describe("SignalVsExecutionTable", () => {
   it("reveals and searches the signal table without touching its window sentence", () => {
     const bets = Array.from({ length: 12 }, (_, index) =>
-      bet({ id: index + 1, league_code: index === 0 ? "LALIGA" : "EPL" }),
+      bet({ id: index + 1, league_code: index < 5 ? "LALIGA" : "EPL" }),
     );
     render(
       <SignalVsExecutionTable
@@ -198,7 +201,8 @@ describe("SignalVsExecutionTable", () => {
     fireEvent.change(screen.getByLabelText("Search signal vs execution"), {
       target: { value: "laliga" },
     });
-    expect(screen.getByText(/· matching "laliga"/)).toBeInTheDocument();
+    expect(screen.getAllByRole("row").length).toBeLessThan(11);
+    expect(screen.getByText('5 of 5 shown · matching "laliga"')).toBeInTheDocument();
     expect(screen.getByText(/joined with .*predictions\?limit=200/)).toBeInTheDocument();
   });
 });
