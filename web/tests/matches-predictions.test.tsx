@@ -190,6 +190,11 @@ describe("MatchesPredictionsTable", () => {
     ).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Search predictions"), { target: { value: "arsenal" } });
     expect(screen.getAllByRole("row").length).toBeLessThan(11);
+    // The filtered sentence must report the FILTERED counts, not the window counts. Exactly one row
+    // matches "arsenal" and it is the row that matched a bet, so this is the only true wording.
+    expect(
+      screen.getByText(/of the 1 rows matching "arsenal" in this window, 0 have no place in the ledger; 1 matched a placed bet\./),
+    ).toBeInTheDocument();
     expect(screen.getByText(/rows matching "arsenal" in this window/)).toBeInTheDocument();
     expect(screen.getByText(/· matching "arsenal"/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Search predictions"), { target: { value: "zzz" } });

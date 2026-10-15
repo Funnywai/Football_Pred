@@ -135,8 +135,13 @@ export function MatchesPredictionsTable({ predictions, bets }: MatchesPrediction
     );
   }
 
-  const matched = rows.filter((row) => row.bet !== null).length;
-  const unmatched = rows.length - matched;
+  // The summary must describe the set the sentence names: the full window when no filter is active,
+  // the filtered set when one is. Passing the window counts under a query-named base would claim that
+  // every fetched row matches the query - a false sentence, and the failure spec section 4.2/4.3 exists
+  // to prevent.
+  const counted = reveal.isFiltered ? reveal.filtered : rows;
+  const matched = counted.filter((row) => row.bet !== null).length;
+  const unmatched = counted.length - matched;
   const summaryBase = { fetched: rows.length, query: reveal.isFiltered ? reveal.query : undefined };
 
   return (
