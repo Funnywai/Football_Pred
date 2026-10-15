@@ -64,6 +64,9 @@
     verbatim: `1 of the 1 fetched rows has no place in the ledger; 0 matched a placed bet.` Only the
     verb (`has` for 1, `have` otherwise) follows the count. Every document specifies this identically;
     if you find a document that disagrees, it is stale - the brief is the single source of truth.
+  - **A count rendered beside a filter must describe the set the sentence names.** Unfiltered: the
+    full fetched window. Filtered: the filtered set, with the query named as the base. The failure
+    this prevents is a sentence claiming every fetched row matches the query when only a few do.
 - Gates: `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build`, then `/visual-qa` on a real browser at 375/768/1280 on both tabs in populated and degraded states, plus **Lighthouse 100** in every category on a production build with real Playwright Chromium.
 
 ## File structure (locked before task decomposition)
@@ -605,6 +608,11 @@ it("searching narrows rows and does NOT change the window counts", () => {
   expect(screen.getByText(/198 of the 200 fetched rows have no place in the ledger; 2 matched a placed bet\./)).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Search predictions"), { target: { value: "arsenal" } });
   expect(screen.getAllByRole("row").length).toBeLessThan(11);
+  // The filtered sentence must report the FILTERED counts, not the window counts. Exactly one row
+  // matches "arsenal" and it is the row that matched a bet, so this is the only true wording.
+  expect(
+    screen.getByText(/of the 1 rows matching "arsenal" in this window, 0 have no place in the ledger; 1 matched a placed bet\./),
+  ).toBeInTheDocument();
   fireEvent.change(screen.getByLabelText("Search predictions"), { target: { value: "zzz" } });
   expect(screen.getByText(/No row in this window matches "zzz"/)).toBeInTheDocument();
   expect(screen.getByText(/rows matching "arsenal" in this window/)).toBeInTheDocument();
@@ -667,8 +675,13 @@ In `web/components/tables/MatchesPredictionsTable.tsx`:
 
 // inside the component, after the row-building:
 const reveal = useRowReveal(rows, predictionMatches);
-const matched = rows.filter((row) => row.bet !== null).length; // unchanged: full window
-const unmatched = rows.length - matched;
+// The summary must describe the set the sentence names: the full window when no filter is active,
+// the filtered set when one is. Passing the window counts under a query-named base would claim that
+// every fetched row matches the query - a false sentence, and the failure spec section 4.2/4.3 exists
+// to prevent.
+const counted = reveal.isFiltered ? reveal.filtered : rows;
+const matched = counted.filter((row) => row.bet !== null).length;
+const unmatched = counted.length - matched;
 const summaryBase = { fetched: rows.length, query: reveal.isFiltered ? reveal.query : undefined };
 ```
 
