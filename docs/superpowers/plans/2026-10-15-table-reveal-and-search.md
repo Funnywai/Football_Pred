@@ -29,6 +29,11 @@
   `canExpand` is false once the list is fully revealed, so it must not be reused for Collapse.
 - **`SearchInput` uses `useId()`, never a constant id** — up to three of these tables share the
   Performance page, and duplicate DOM ids break the label association.
+- **Tests use `fireEvent` from `@testing-library/react`.** `@testing-library/user-event` is NOT
+  installed and must not be added (the no-new-dependency constraint binds). Where a snippet shows
+  `await userEvent.click(el)` use `fireEvent.click(el)`, and where it shows
+  `await userEvent.type(el, "value")` use `fireEvent.change(el, { target: { value: "value" } })`;
+  drop the `user-event` import and any `async` that becomes unused. Assertions are unchanged.
 - **Locked join-summary formats:**
   - unfiltered: `{unmatched} of the {fetched} fetched rows have no place in the ledger; {matched} matched a placed bet.`
   - filtered: `of the {matching} rows matching "{query}" in this window, {unmatched} have no place in the ledger; {matched} matched a placed bet.`
@@ -291,8 +296,7 @@ git commit -m "feat: 新增 useRowReveal（記憶體內過濾 ＋ 每次展開 1
 
 ```tsx
 // web/tests/reveal-search.test.tsx
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { RevealFooter } from "@/components/ui/RevealFooter";
@@ -305,12 +309,12 @@ describe("SearchInput", () => {
     expect(screen.getByText("searches the 200 rows in this window")).toBeInTheDocument();
   });
 
-  it("only shows Clear when non-empty and calls onClear", async () => {
+  it("only shows Clear when non-empty and calls onClear", () => {
     const onClear = vi.fn();
     const { rerender } = render(<SearchInput label="Search bets" scope="s" value="" onChange={() => {}} onClear={onClear} />);
     expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
     rerender(<SearchInput label="Search bets" scope="s" value="arsenal" onChange={() => {}} onClear={onClear} />);
-    await userEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
     expect(onClear).toHaveBeenCalledOnce();
   });
 });
