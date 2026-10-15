@@ -326,8 +326,8 @@ describe("RevealFooter", () => {
   });
 
   it("names the query when filtered", () => {
-    render(<RevealFooter base="showing 200 of 250 bets" shown={6} matching={6} isFiltered canExpand={false} canCollapse={false} onExpand={() => {}} onExpandAll={() => {}} onCollapse={() => {}} />);
-    expect(screen.getByText(/· matching "/)).toBeInTheDocument();
+    render(<RevealFooter base="showing 200 of 250 bets" shown={6} matching={6} query="arsenal" isFiltered canExpand={false} canCollapse={false} onExpand={() => {}} onExpandAll={() => {}} onCollapse={() => {}} />);
+    expect(screen.getByText(/· matching "arsenal"/)).toBeInTheDocument();
   });
 
   it("disables the expand controls when everything is shown but keeps Collapse usable", () => {
