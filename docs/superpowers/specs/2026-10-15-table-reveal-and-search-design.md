@@ -100,7 +100,7 @@ by a test.
 5. **The search states its scope on screen.** Next to the input: "searches the N rows in this
    window" (N = the fetched count), never a bare placeholder that implies the whole table.
 6. **A revealed count is never stated as a total.** The footer names both numbers, e.g.
-   `showing 10 of 200 rows in this window` - "10" is never allowed to read as the window.
+   `10 of 200 shown` - "10" is never allowed to read as the window.
 7. **Nothing else changes.** No new counter, no new field, no new route, no fabricated number.
 
 ## 5. Primitives
@@ -164,12 +164,13 @@ Behaviours that must be tested:
 
 ### 5.3 `RevealFooter` (`web/components/ui/RevealFooter.tsx`)
 
-- Left: the honest count sentence from the caller (e.g. `showing 10 of 200 rows in this window`).
-- Right: `Expand +10` (primary) and `Show all N` (secondary), plus `Collapse` once expanded.
+- Left: the honest count sentence from the caller (e.g. `10 of 200 shown`).
+- Right: `Expand +10` (primary) and `Show all N` (secondary), plus `Collapse` (always rendered;
+  disabled until the reveal has grown past its initial size).
   `Expand` and `Show all` are disabled/hidden when `canExpand` is false.
 - One button style, reused from the existing footer button class in `BetsTable`.
-- `aria-expanded` on the expand control; the count sentence is an `aria-live="polite"` region so
-  a screen reader hears the new count after a click.
+- The footer's controls are action buttons and carry no `aria-expanded`; the count sentence is an
+  `aria-live="polite"` region so a screen reader hears the new count after a click.
 - No entrance animation of any kind (the design contract bans scroll/entrance animation).
 
 **"Show all N" is deliberate, not scope creep.** The bets table's Prev/Next let a user reach
@@ -245,8 +246,9 @@ Unit / component tests (Vitest + Testing Library), extending the existing suites
 7. **Impact on existing test strings (exact, so nobody "fixes" a failing test by weakening it).**
    Two classes of existing assertion are affected, and the plan must list both:
 
-   - **Deliberately reworded** (mandated by 4.3 / 4.6), all in
-     `web/tests/performance-sections.test.tsx` and `web/tests/matches-predictions.test.tsx`:
+   - **Deliberately reworded** (mandated by 4.3 / 4.6), in
+     `web/tests/performance-sections.test.tsx`, `web/tests/matches-predictions.test.tsx` and
+     `web/tests/predictions-join.test.ts`:
      - footer pagination strings: `"2 bets · page 1 of 1"` (:207),
        `"showing the 30 most recent of 250 bets · page 1 of 2"` (:214), and
        `"showing the oldest 2 bets · page 1 of 1 · /bets/summary unavailable"` (:238) - the last
@@ -256,6 +258,10 @@ Unit / component tests (Vitest + Testing Library), extending the existing suites
        (:136) gain the **named base** (e.g. `"200 of the 200 fetched rows …"`,
        `"1 of the 1 fetched rows has …"`), which also introduces singular/plural
        handling the plan must specify.
+     - a sixth assertion, in `web/tests/predictions-join.test.ts`:
+       `"54 of these have no place in the ledger; 0 matched a placed bet."` →
+       `"54 of the 54 fetched rows have no place in the ledger; 0 matched a placed bet."` -
+       reworded as part of the same mandated change.
    - **Must stay byte-identical:** every window `<Note>` sentence - e.g. the results assertion
      at `web/tests/performance-rest.test.tsx:76` (`"newer results cannot fall outside this
      window, older ones can"`) - and the truncation-qualified join wording at

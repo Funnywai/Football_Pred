@@ -326,8 +326,10 @@ the right.
 
 - Left, `text-caption text-text-tertiary tnum`, inside `aria-live="polite"`:
   `{base} · {shown} of {matching} shown`, with ` · matching "{query}"` appended when filtered.
-- Right: `Expand +10` (primary), `Show all N` (secondary), `Collapse` (only once `shown > initial`).
-  Buttons reuse the existing footer button class from `BetsTable`. `Expand` carries `aria-expanded`.
+- Right: `Expand +10` (primary), `Show all N` (secondary), `Collapse` (always rendered; disabled
+  until the reveal has grown past its initial size). Buttons reuse the existing footer button
+  class from `BetsTable`. The footer's controls are action buttons and carry no `aria-expanded`;
+  the count sentence already announces changes via `aria-live`.
 - Both expand controls are disabled when everything is already shown.
 - No entrance animation (see §6.3).
 
