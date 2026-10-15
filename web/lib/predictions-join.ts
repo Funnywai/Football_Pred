@@ -68,12 +68,18 @@ export function joinSummaryPhrase(
   base: { fetched: number; query?: string },
 ): string {
   const verb = unmatched === 1 ? "has" : "have";
-  if (betsWindowTruncated) {
-    // Byte-identical to the pre-change truncation wording: the existing assertions at
-    // matches-predictions.test.tsx:123 and :150 must keep passing unchanged.
-    return `${matched} matched a placed bet in the fetched bets window; ${unmatched} ${verb} no match there — a bet outside the fetched window would not be seen.`;
-  }
   const query = base.query?.trim();
+  const filtered = query !== undefined && query !== "";
+  if (betsWindowTruncated) {
+    // The clause after the semicolon is byte-identical to the pre-change truncation wording (the
+    // unfiltered assertions at matches-predictions.test.tsx:123 and :150 must keep passing). When a
+    // query is active the counts come from the filtered set, so the sentence must name that base
+    // (spec section 4.2/4.3) - otherwise it reads as a claim about the whole window.
+    const lead = filtered
+      ? `of the ${matched + unmatched} rows matching "${query}" in this window, ${matched} matched a placed bet in the fetched bets window`
+      : `${matched} matched a placed bet in the fetched bets window`;
+    return `${lead}; ${unmatched} ${verb} no match there — a bet outside the fetched window would not be seen.`;
+  }
   const tally =
     query === undefined || query === ""
       ? `${unmatched} of the ${base.fetched} fetched rows`
