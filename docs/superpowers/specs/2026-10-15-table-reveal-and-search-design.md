@@ -254,7 +254,7 @@ Unit / component tests (Vitest + Testing Library), extending the existing suites
      - join-summary strings: `"200 of these have no place in the ledger; 0 matched a placed
        bet."` (:98) and `"1 of these has no place in the ledger; 0 matched a placed bet."`
        (:136) gain the **named base** (e.g. `"200 of the 200 fetched rows …"`,
-       `"of the 1 row in this window, 1 has …"`), which also introduces singular/plural
+       `"1 of the 1 fetched rows has …"`), which also introduces singular/plural
        handling the plan must specify.
    - **Must stay byte-identical:** every window `<Note>` sentence - e.g. the results assertion
      at `web/tests/performance-rest.test.tsx:76` (`"newer results cannot fall outside this

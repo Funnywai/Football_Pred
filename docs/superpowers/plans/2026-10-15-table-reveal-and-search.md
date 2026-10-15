@@ -60,6 +60,10 @@
   - unfiltered: `{unmatched} of the {fetched} fetched rows have no place in the ledger; {matched} matched a placed bet.`
   - filtered: `of the {matching} rows matching "{query}" in this window, {unmatched} have no place in the ledger; {matched} matched a placed bet.`
   - when the bets window is the oldest-page fallback, the text after the semicolon becomes `{unmatched} have no match there — a bet outside the fetched window would not be seen.` (unchanged wording).
+  - **There is no singular exception.** Even when both numbers are 1, the unfiltered form is used
+    verbatim: `1 of the 1 fetched rows has no place in the ledger; 0 matched a placed bet.` Only the
+    verb (`has` for 1, `have` otherwise) follows the count. Every document specifies this identically;
+    if you find a document that disagrees, it is stale - the brief is the single source of truth.
 - Gates: `npx tsc --noEmit`, `npm run lint`, `npm test`, `npm run build`, then `/visual-qa` on a real browser at 375/768/1280 on both tabs in populated and degraded states, plus **Lighthouse 100** in every category on a production build with real Playwright Chromium.
 
 ## File structure (locked before task decomposition)
@@ -620,7 +624,7 @@ truncation string.
 // :98  from /200 of these have no place in the ledger; 0 matched a placed bet\./
      to   /200 of the 200 fetched rows have no place in the ledger; 0 matched a placed bet\./
 // :136 from /1 of these has no place in the ledger; 0 matched a placed bet\./
-     to   /of the 1 row in this window, 1 has no place in the ledger; 0 matched a placed bet\./
+     to   /1 of the 1 fetched rows has no place in the ledger; 0 matched a placed bet\./
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
