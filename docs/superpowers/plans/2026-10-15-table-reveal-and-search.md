@@ -595,11 +595,14 @@ it("shows 10 rows by default and reveals 10 more", async () => {
   expect(screen.getAllByRole("row")).toHaveLength(21);
 });
 
-it("searching narrows rows and does NOT change the window counts", async () => {
-  render(<MatchesPredictionsTable /* fixture: 200 rows, 2 matching a bet, one named "Arsenal" */ />);
-  expect(screen.getByText(/200 of the 200 fetched rows have no place in the ledger; 2 matched a placed bet\./)).toBeInTheDocument();
-  await userEvent.type(screen.getByLabelText("Search predictions"), "arsenal");
+it("searching narrows rows and does NOT change the window counts", () => {
+  render(<MatchesPredictionsTable /* fixture: 200 rows of which exactly 2 matched a bet, one named "Arsenal" */ />);
+  // 200 rows, 2 of them matched a bet -> 198 unmatched. The assertion must not claim 200 of 200.
+  expect(screen.getByText(/198 of the 200 fetched rows have no place in the ledger; 2 matched a placed bet\./)).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Search predictions"), { target: { value: "arsenal" } });
   expect(screen.getAllByRole("row").length).toBeLessThan(11);
+  fireEvent.change(screen.getByLabelText("Search predictions"), { target: { value: "zzz" } });
+  expect(screen.getByText(/No row in this window matches "zzz"/)).toBeInTheDocument();
   expect(screen.getByText(/rows matching "arsenal" in this window/)).toBeInTheDocument();
   expect(screen.getByText(/· matching "arsenal"/)).toBeInTheDocument();
 });
@@ -709,6 +712,22 @@ function predictionMatches(row: PredictionBetRow, query: string): boolean {
     ],
     query,
   );
+}
+```
+
+The no-match state is **required** by the Global Constraint "When a filter matches nothing". Pass it to the
+`DataTable` as its `empty` prop (importing `SearchX` from `lucide-react` and `EmptyState` from
+`@/components/ui/EmptyState`), keeping the component's existing empty state when unfiltered:
+
+```tsx
+empty={
+  reveal.isFiltered ? (
+    <EmptyState
+      icon={SearchX}
+      title={`No row in this window matches "${reveal.query.trim()}"`}
+      detail="Search covers only the fetched window."
+    />
+  ) : undefined
 }
 ```
 
