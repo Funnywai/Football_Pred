@@ -582,10 +582,11 @@ describe("joinSummaryPhrase named base", () => {
       'of the 12 rows matching "arsenal" in this window, 11 have no place in the ledger; 1 matched a placed bet.',
     );
   });
-  it("keeps the truncation wording byte-identical (filtered or not)", () => {
+  it("names the query in the truncation branch, and keeps the sub-clause byte-identical", () => {
     expect(joinSummaryPhrase(1, 0, true, { fetched: 200, query: "arsenal" })).toBe(
-      "1 matched a placed bet in the fetched bets window; 0 have no match there — a bet outside the fetched window would not be seen.",
+      'of the 1 rows matching "arsenal" in this window, 1 matched a placed bet in the fetched bets window; 0 have no match there — a bet outside the fetched window would not be seen.',
     );
+    // Unfiltered: byte-identical to the wording that matches-predictions.test.tsx:123/:150 pin.
     expect(joinSummaryPhrase(0, 1, true, { fetched: 200 })).toBe(
       "0 matched a placed bet in the fetched bets window; 1 has no match there — a bet outside the fetched window would not be seen.",
     );
@@ -652,12 +653,18 @@ export function joinSummaryPhrase(
   base: { fetched: number; query?: string },
 ): string {
   const verb = unmatched === 1 ? "has" : "have";
-  if (betsWindowTruncated) {
-    // Byte-identical to the pre-change truncation wording: the existing assertions at
-    // matches-predictions.test.tsx:123 and :150 must keep passing unchanged.
-    return `${matched} matched a placed bet in the fetched bets window; ${unmatched} ${verb} no match there — a bet outside the fetched window would not be seen.`;
-  }
   const query = base.query?.trim();
+  const filtered = query !== undefined && query !== "";
+  if (betsWindowTruncated) {
+    // The clause after the semicolon is byte-identical to the pre-change truncation wording (the
+    // unfiltered assertions at matches-predictions.test.tsx:123 and :150 must keep passing). When a
+    // query is active the counts come from the filtered set, so the sentence must name that base
+    // (spec section 4.2/4.3) - otherwise it reads as a claim about the whole window.
+    const lead = filtered
+      ? `of the ${matched + unmatched} rows matching "${query}" in this window, ${matched} matched a placed bet in the fetched bets window`
+      : `${matched} matched a placed bet in the fetched bets window`;
+    return `${lead}; ${unmatched} ${verb} no match there — a bet outside the fetched window would not be seen.`;
+  }
   const tally =
     query === undefined || query === ""
       ? `${unmatched} of the ${base.fetched} fetched rows`
