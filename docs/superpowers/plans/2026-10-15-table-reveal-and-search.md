@@ -34,6 +34,28 @@
   `await userEvent.click(el)` use `fireEvent.click(el)`, and where it shows
   `await userEvent.type(el, "value")` use `fireEvent.change(el, { target: { value: "value" } })`;
   drop the `user-event` import and any `async` that becomes unused. Assertions are unchanged.
+- **One shared search matcher, never six copies.** Create `web/lib/row-search.ts` (in Task 3,
+  consumed by Tasks 3-7) exporting:
+
+  ```ts
+  export function matchesQuery(fields: (string | null | undefined)[], query: string): boolean {
+    return fields.join(" ").toLowerCase().includes(query);
+  }
+  ```
+
+  It needs no null handling: joining turns `null` and `undefined` into empty strings. It gets its
+  own test file, `web/tests/row-search.test.ts`, covering: a match, a non-match, case-insensitivity
+  on the field side, an empty query matching everything, and `null`/`undefined` fields being
+  harmless. Every table's matcher **keeps the name and the searchable-field set its task lists** and
+  delegates, e.g.
+
+  ```ts
+  const predictionMatches = (row: PredictionBetRow, q: string) =>
+    matchesQuery([row.prediction.home_team, row.prediction.away_team, row.prediction.league_code,
+                  row.prediction.target, row.prediction.outcome, row.bet === null ? "no bet" : "placed"], q);
+  ```
+
+  A review that finds the same haystack expression repeated in two tables is a defect.
 - **Locked join-summary formats:**
   - unfiltered: `{unmatched} of the {fetched} fetched rows have no place in the ledger; {matched} matched a placed bet.`
   - filtered: `of the {matching} rows matching "{query}" in this window, {unmatched} have no place in the ledger; {matched} matched a placed bet.`
@@ -960,5 +982,5 @@ Expected: 100 in every category. If a score drops, fix the architecture - do not
 - [ ] **Step 5: Commit any fixes and report**
 
 ```bash
-git add -A web && git commit -m "test: 表格收合與搜尋的完整驗收（視覺 QA ＋ Lighthouse）"
+git add web/components web/lib web/tests web/DESIGN.md && git commit -m "test: 表格收合與搜尋的完整驗收（視覺 QA ＋ Lighthouse）"
 ```
