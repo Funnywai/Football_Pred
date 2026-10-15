@@ -22,6 +22,21 @@ vi.mock("@/lib/performance-data", () => ({
   }),
 }));
 
+vi.mock("@/lib/technical-data", () => ({
+  LOGS_LIMIT: 100,
+  RUNS_LIMIT: 200,
+  loadTechnicalData: async () => ({
+    now: new Date("2026-10-15T12:00:00Z"),
+    status: null,
+    jobs: null,
+    runs: null,
+    logs: null,
+    data: null,
+    models: null,
+    logLevel: null,
+  }),
+}));
+
 import PerformancePage from "@/app/(dashboard)/performance/page";
 
 const IMPLEMENTED = new Set([
@@ -45,14 +60,12 @@ describe("route smoke — /performance", () => {
 });
 
 describe("route smoke — /technical", () => {
-  it("renders a shell for every technical section with a pending state", () => {
-    render(<TechnicalPage />);
+  it("renders every technical section heading with an explicit unavailable state", async () => {
+    render(await TechnicalPage({ searchParams: Promise.resolve({}) }));
 
     for (const section of TECHNICAL_SECTIONS) {
       expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
     }
-    expect(screen.getAllByText("pending — next increment")).toHaveLength(
-      TECHNICAL_SECTIONS.length,
-    );
+    expect(screen.queryByText("pending — next increment")).not.toBeInTheDocument();
   });
 });

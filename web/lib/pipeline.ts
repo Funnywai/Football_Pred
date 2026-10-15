@@ -117,40 +117,58 @@ function fromJob(
   if (job === null) {
     return stage(def, "never-tracked", null, "no run recorded");
   }
+  const result = jobStatus(job, runs, thresholds, now);
+  return stage(def, result.status, job.last_run?.finished_at ?? null, result.detail);
+}
+
+export interface JobStatus {
+  status: StageStatus;
+  detail: string;
+}
+
+/**
+ * Per-job status derivation, shared by the pipeline stages and the scheduler table so a
+ * job cannot read as healthy in one place and overdue in another. Precedence: a running
+ * last run (stuck -> failed), a failed last run, a flagged last run, an overdue
+ * next_run_time, then ageing by the job's own thresholds.
+ */
+export function jobStatus(
+  job: OpsJob,
+  runs: OpsRun[],
+  thresholds: AgeThresholds,
+  now: Date,
+): JobStatus {
   const lastRun = job.last_run;
   if (lastRun !== null) {
-    const lastActionAt = lastRun.finished_at;
     if (lastRun.status === "running") {
       const stuck = runs.some(
-        (run) => matchesStage(run, def) && run.status === "running" && isStuck(run, now),
+        (run) => matchesJob(run, job.id) && run.status === "running" && isStuck(run, now),
       );
       return stuck
-        ? stage(def, "failed", lastActionAt, "a run is stuck")
-        : stage(def, "active", lastActionAt, "running now");
+        ? { status: "failed", detail: "a run is stuck" }
+        : { status: "active", detail: "running now" };
     }
     if (lastRun.status === "failed") {
-      return stage(def, "failed", lastActionAt, lastRun.error ?? "last run failed");
+      return { status: "failed", detail: lastRun.error ?? "last run failed" };
     }
     if (lastRun.status === "flagged") {
-      return stage(def, "ageing", lastActionAt, "flagged for review");
+      return { status: "ageing", detail: "flagged for review" };
     }
   }
   if (isOverdue(job.next_run_time, now)) {
-    return stage(
-      def,
-      "overdue",
-      lastRun?.finished_at ?? null,
-      `next run was due ${formatRelative(job.next_run_time, now)}`,
-    );
+    return {
+      status: "overdue",
+      detail: `next run was due ${formatRelative(job.next_run_time, now)}`,
+    };
   }
   if (lastRun === null) {
-    return stage(def, "never-tracked", null, "no run recorded");
+    return { status: "never-tracked", detail: "no run recorded" };
   }
   const age = ageMs(lastRun.finished_at, now);
-  if (age === null) return stage(def, "never-tracked", lastRun.finished_at, "no finish time");
-  if (age >= thresholds.staleMs) return stage(def, "stale", lastRun.finished_at, "last run is stale");
-  if (age >= thresholds.degradedMs) return stage(def, "ageing", lastRun.finished_at, "last run is ageing");
-  return stage(def, "success", lastRun.finished_at, "last run succeeded");
+  if (age === null) return { status: "never-tracked", detail: "no finish time" };
+  if (age >= thresholds.staleMs) return { status: "stale", detail: "last run is stale" };
+  if (age >= thresholds.degradedMs) return { status: "ageing", detail: "last run is ageing" };
+  return { status: "success", detail: "last run succeeded" };
 }
 
 // A job whose scheduled next_run_time is past by more than the grace period did not fire.
@@ -161,12 +179,11 @@ function isOverdue(nextRunTime: string | null, now: Date): boolean {
   return now.getTime() - parsed > OVERDUE_GRACE_MS;
 }
 
-// Generic run-to-stage match: a run belongs to a stage when its job id equals the stage's
+// Generic run-to-job match: a run belongs to a job when its job id equals the scheduler
 // job id or is a tracked variant of it (e.g. settle_results_hkjc). This is not the API's
 // JOB_RUN_KEYS dict; it is a prefix rule used only for stuck-run detection.
-function matchesStage(run: OpsRun, def: StageDef): boolean {
-  if (def.jobId === null) return false;
-  return run.job === def.jobId || run.job.startsWith(`${def.jobId}_`);
+function matchesJob(run: OpsRun, jobId: string): boolean {
+  return run.job === jobId || run.job.startsWith(`${jobId}_`);
 }
 
 function isStuck(run: OpsRun, now: Date): boolean {
