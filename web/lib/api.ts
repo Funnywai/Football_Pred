@@ -56,8 +56,14 @@ export const getEquityCurve = (): Promise<ApiResult<EquityPoint[]>> =>
 
 export const getBets = (limit = 50): Promise<ApiResult<Bet[]>> => apiGet(`/bets?limit=${limit}`);
 
-export const getPredictions = (limit = 50): Promise<ApiResult<Prediction[]>> =>
-  apiGet(`/predictions?limit=${limit}`);
+// `champion_only` defaults to true on the API. The signal-vs-execution join needs the
+// prediction a bet was actually placed from, which may belong to a since-replaced model,
+// so that view fetches with champion_only=false.
+export const getPredictions = (
+  limit = 50,
+  championOnly = true,
+): Promise<ApiResult<Prediction[]>> =>
+  apiGet(`/predictions?limit=${limit}&champion_only=${championOnly}`);
 
 export const getModels = (): Promise<ApiResult<ModelVersion[]>> => apiGet("/models");
 

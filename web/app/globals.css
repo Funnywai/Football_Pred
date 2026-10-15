@@ -170,6 +170,50 @@
   }
 }
 
+/* Section 6.2 — the equity curve's final segment draws in over 500ms (Emphasis tier). */
+@keyframes draw-in {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.draw-in {
+  animation: draw-in 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Section 6.2 — the new curve point marker scales from 0 to 1. */
+@keyframes marker-in {
+  from {
+    transform: scale(0);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.marker-in {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: marker-in 500ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Section 6.2 — the active pipeline node's green signal glow pulses once over 600ms. */
+@keyframes node-ignite {
+  0% {
+    filter: drop-shadow(0 0 2px var(--accent-signal));
+  }
+  100% {
+    filter: drop-shadow(0 0 8px var(--accent-signal));
+  }
+}
+
+.node-ignite {
+  animation: node-ignite 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
 /* Section 6.2 — reduced-motion fallback: every animation collapses to its final state. */
 @media (prefers-reduced-motion: reduce) {
   *,

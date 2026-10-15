@@ -1,20 +1,46 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import PerformancePage from "@/app/(dashboard)/performance/page";
 import TechnicalPage from "@/app/(dashboard)/technical/page";
 import { PERFORMANCE_SECTIONS, TECHNICAL_SECTIONS } from "@/lib/sections";
 
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: () => {} }),
+}));
+
+vi.mock("@/lib/performance-data", () => ({
+  loadPerformanceData: async () => ({
+    now: new Date("2026-10-15T12:00:00Z"),
+    summary: null,
+    bets: null,
+    equity: null,
+    predictions: null,
+    jobs: null,
+    runs: null,
+    data: null,
+    models: null,
+  }),
+}));
+
+import PerformancePage from "@/app/(dashboard)/performance/page";
+
+const IMPLEMENTED = new Set([
+  "kpi-strip",
+  "equity-curve",
+  "pipeline",
+  "signal-vs-execution",
+  "bets",
+]);
+
 describe("route smoke — /performance", () => {
-  it("renders a shell for every performance section with a pending state", () => {
-    render(<PerformancePage />);
+  it("renders every section heading, with shells only for the unimplemented ones", async () => {
+    render(await PerformancePage());
 
     for (const section of PERFORMANCE_SECTIONS) {
       expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
     }
-    expect(screen.getAllByText("pending — next increment")).toHaveLength(
-      PERFORMANCE_SECTIONS.length,
-    );
+    const remaining = PERFORMANCE_SECTIONS.filter((section) => !IMPLEMENTED.has(section.id));
+    expect(screen.getAllByText("pending — next increment")).toHaveLength(remaining.length);
   });
 });
 
