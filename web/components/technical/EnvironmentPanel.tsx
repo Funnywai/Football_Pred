@@ -1,6 +1,7 @@
 import { ServerCog } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { StatusPill, type StatusVariant } from "@/components/ui/StatusPill";
 import { environmentRows, type EnvironmentTone } from "@/lib/environment";
 import type { OpsStatus } from "@/lib/types";
@@ -29,6 +30,9 @@ export function EnvironmentPanel({ status }: EnvironmentPanelProps) {
   const rows = environmentRows(status);
   return (
     <div className="flex flex-col gap-3">
+      <Note>
+        whitelisted fields only — no environment values, secrets, DSNs or tokens are rendered.
+      </Note>
       <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-5">
         {rows.map((row) => {
           const tone = row.tone;
@@ -46,9 +50,6 @@ export function EnvironmentPanel({ status }: EnvironmentPanelProps) {
           );
         })}
       </dl>
-      <p className="text-caption text-text-tertiary">
-        whitelisted fields only — no environment values, secrets, DSNs or tokens are rendered.
-      </p>
     </div>
   );
 }

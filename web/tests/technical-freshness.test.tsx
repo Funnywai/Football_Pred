@@ -85,6 +85,18 @@ describe("freshnessRows", () => {
     expect(rowOf(rows, "predictions").state).toBe("healthy");
   });
 
+  it("ages the predictions row normally when the newest ml_predict run is inside the window", () => {
+    const runs: OpsRun[] = [run({ id: 1, finished_at: "2026-10-15T09:00:00Z" })];
+    const rows = freshnessRows(data({}), runs, NOW);
+    expect(rowOf(rows, "predictions").state).toBe("degraded");
+  });
+
+  it("marks the predictions row as not in the fetched window when the window holds no ml_predict run", () => {
+    const runs: OpsRun[] = [run({ id: 1, job: "sync_odds", finished_at: "2026-10-15T11:58:00Z" })];
+    const rows = freshnessRows(data({}), runs, NOW);
+    expect(rowOf(rows, "predictions").state).toBe("not-in-window");
+  });
+
   it("exposes the thresholds it used", () => {
     const rows = freshnessRows(data({}), [], NOW);
     expect(rowOf(rows, "odds").thresholds).toEqual(FRESHNESS_THRESHOLDS.odds);
@@ -108,5 +120,21 @@ describe("FreshnessPanel", () => {
   it("renders an explicit unavailable state when /ops/data failed", () => {
     render(<FreshnessPanel data={null} runs={null} now={NOW} />);
     expect(screen.getByText("Freshness unavailable")).toBeInTheDocument();
+  });
+
+  it("renders the window-miss state with a label that names the window, never never-tracked", () => {
+    render(
+      <FreshnessPanel
+        data={data({
+          odds_captured_at: "2026-10-15T11:58:00Z",
+          features_built_at: "2026-10-15T11:58:00Z",
+          results_confirmed_at: "2026-10-15T11:58:00Z",
+        })}
+        runs={[run({ id: 1, job: "sync_odds", finished_at: "2026-10-15T11:58:00Z" })]}
+        now={NOW}
+      />,
+    );
+    expect(screen.getByText("not in the fetched runs window")).toBeInTheDocument();
+    expect(screen.queryByText("never tracked")).not.toBeInTheDocument();
   });
 });

@@ -45,7 +45,11 @@ export function statusForAge(
   return "healthy";
 }
 
-export type FreshnessRowState = FreshnessStatus | "never-tracked" | "unavailable";
+export type FreshnessRowState =
+  | FreshnessStatus
+  | "never-tracked"
+  | "unavailable"
+  | "not-in-window";
 
 export interface FreshnessRow {
   id: "odds" | "features" | "results" | "predictions";
@@ -68,7 +72,9 @@ export function formatDuration(ms: number): string {
 /**
  * The four arrival streams of the freshness panel. `runs` is nullable: when /ops/runs is
  * unreachable the prediction arrival cannot be derived and is marked unavailable, never
- * "never tracked" (which would claim no prediction ever ran).
+ * "never tracked" (which would claim no prediction ever ran). A fetched window that holds
+ * no ml_predict run is a window miss, not a never-tracked source: the window is a
+ * truncated tail, so the run may exist outside it.
  */
 export function freshnessRows(data: OpsData, runs: OpsRun[] | null, now: Date): FreshnessRow[] {
   const newestPredict =
@@ -113,7 +119,10 @@ export function freshnessRows(data: OpsData, runs: OpsRun[] | null, now: Date): 
   ];
 
   return defs.map((def) => {
-    if (def.id === "predictions" && runs === null) return { ...def, state: "unavailable" };
+    if (def.id === "predictions") {
+      if (runs === null) return { ...def, state: "unavailable" };
+      if (def.iso === null) return { ...def, state: "not-in-window" };
+    }
     if (def.iso === null) return { ...def, state: "never-tracked" };
     return { ...def, state: statusForAge(def.iso, def.thresholds, now) };
   });

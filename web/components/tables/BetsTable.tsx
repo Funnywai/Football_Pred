@@ -1,11 +1,12 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Inbox, Info } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Inbox } from "lucide-react";
 import { useState } from "react";
 
 import { BetStatusPill } from "@/components/ui/BetStatusPill";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { betsWindowPhrase, isTruncated, type BetsWindow } from "@/lib/bets-window";
 import {
   formatDateTime,
@@ -88,14 +89,11 @@ export function BetsTable({ bets }: BetsTableProps) {
   const rows = bets.rows.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
 
   return (
-    <div className="flex flex-col">
-      <p className="flex items-start gap-2 px-6 py-3 text-caption text-text-tertiary">
-        <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
-        <span>
-          odds is the execution price (the latest pre-kickoff HKJC snapshot at placement);
-          edge is measured at that price.
-        </span>
-      </p>
+    <div className="flex flex-col gap-3">
+      <Note>
+        odds is the execution price (the latest pre-kickoff HKJC snapshot at placement);
+        edge is measured at that price.
+      </Note>
       <DataTable
         columns={COLUMNS}
         rows={rows}

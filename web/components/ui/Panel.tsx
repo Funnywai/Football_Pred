@@ -1,11 +1,10 @@
 import type { ReactNode } from "react";
 
-type PanelVariant = "default" | "accent" | "flush";
+type PanelVariant = "default" | "accent";
 
 const VARIANT_CLASS: Record<PanelVariant, string> = {
   default: "border border-border-default",
   accent: "border-2 border-accent-signal",
-  flush: "border border-border-default",
 };
 
 export interface PanelProps {
@@ -29,7 +28,7 @@ export function Panel({ id, title, action, variant = "default", children }: Pane
         </h2>
         {action}
       </header>
-      <div className={variant === "flush" ? "" : "px-6 py-6"}>{children}</div>
+      <div className="px-6 py-6">{children}</div>
     </section>
   );
 }

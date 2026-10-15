@@ -1,6 +1,7 @@
 import { ListTree } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { StatusPill, type StatusVariant } from "@/components/ui/StatusPill";
 import { formatCount, formatDateTime } from "@/lib/format";
 import { runStage, runStatusKind, runsWindowLabel, type RunStatusKind } from "@/lib/runs";
@@ -37,9 +38,9 @@ export function IngestionRunsTimeline({ runs, total, limit }: IngestionRunsTimel
   }
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-caption text-text-tertiary">
+      <Note>
         {runsWindowLabel(runs, total, limit)} · run count is a row count, not a rate.
-      </p>
+      </Note>
       <ol className="divide-y divide-border-hairline">
         {runs.map((run) => (
           <RunRow key={run.id} run={run} />

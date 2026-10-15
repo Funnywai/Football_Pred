@@ -1,7 +1,8 @@
-import { Info, Inbox } from "lucide-react";
+import { Inbox } from "lucide-react";
 
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { StatusPill } from "@/components/ui/StatusPill";
 import { formatDateTime } from "@/lib/format";
 import { RESULTS_PAGE_SIZE, resultsWindowPhrase } from "@/lib/results-window";
@@ -81,11 +82,8 @@ export function ResultsTable({ results }: ResultsTableProps) {
   }
 
   return (
-    <div className="flex flex-col">
-      <p className="flex items-start gap-2 px-6 py-3 text-caption text-text-tertiary">
-        <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
-        <span>Window: {resultsWindowPhrase(results.length, RESULTS_PAGE_SIZE)}.</span>
-      </p>
+    <div className="flex flex-col gap-3">
+      <Note>Window: {resultsWindowPhrase(results.length, RESULTS_PAGE_SIZE)}.</Note>
       <DataTable
         columns={COLUMNS}
         rows={results}

@@ -1,6 +1,7 @@
-import { Info, LineChart } from "lucide-react";
+import { LineChart } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { champion1x2, clvMetrics, clvNotes } from "@/lib/clv";
 import {
   formatCount,
@@ -74,6 +75,11 @@ export function ClvCard({ models }: ClvCardProps) {
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
+        {clvNotes(metrics).map((note) => (
+          <Note key={note}>{note}</Note>
+        ))}
+      </div>
       <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border-default bg-border-hairline md:grid-cols-5">
         <Metric
           label="CLV mean edge"
@@ -94,14 +100,6 @@ export function ClvCard({ models }: ClvCardProps) {
         />
       </dl>
       <ChampionLine model={champion} />
-      <ul className="flex flex-col gap-2">
-        {clvNotes(metrics).map((note) => (
-          <li key={note} className="flex items-start gap-2 text-body text-text-secondary">
-            <Info className="mt-0.5 size-3 shrink-0 text-text-tertiary" aria-hidden />
-            <span>{note}</span>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

@@ -3,6 +3,7 @@ import Link from "next/link";
 import type { ComponentType, ReactNode } from "react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { formatDateTime } from "@/lib/format";
 import { LOG_LEVELS, logLevelKind, type LogLevel, type LogLevelKind } from "@/lib/logs";
 import type { OpsLogLine } from "@/lib/types";
@@ -51,11 +52,11 @@ export function LogStream({ logs, level, limit }: LogStreamProps) {
         </nav>
         <LogAutoRefresh />
       </div>
-      <p className="text-caption text-text-tertiary">
+      <Note>
         tail of the newest {limit} buffered lines (API default limit {limit}, max 500; the
         buffer is per-process and lost on restart)
         {level === null ? " · no level filter" : ` · filter: ${level} and above`}
-      </p>
+      </Note>
       {logs === null ? (
         <EmptyState
           icon={ScrollText}

@@ -37,7 +37,6 @@ export interface HeaderThinking {
 }
 
 export interface HeaderData {
-  apiReachable: boolean;
   money: HeaderMoney | null;
   build: HeaderBuild | null;
   heartbeat: HeartbeatResult;
@@ -123,14 +122,6 @@ export interface HeaderInputs {
 export function buildHeaderData(inputs: HeaderInputs): HeaderData {
   const { summary, status, jobs, runs, data, models, now } = inputs;
 
-  const apiReachable =
-    summary !== null ||
-    status !== null ||
-    jobs !== null ||
-    runs !== null ||
-    data !== null ||
-    models !== null;
-
   const money =
     summary === null
       ? null
@@ -162,7 +153,6 @@ export function buildHeaderData(inputs: HeaderInputs): HeaderData {
       : { status: "stale", label: "unavailable", detail: "ops surface unreachable" };
 
   return {
-    apiReachable,
     money,
     build,
     heartbeat,

@@ -2,6 +2,7 @@ import { CalendarClock } from "lucide-react";
 
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { StatusPill, type StatusVariant } from "@/components/ui/StatusPill";
 import { formatCount, formatDateTime } from "@/lib/format";
 import type { StageStatus } from "@/lib/pipeline";
@@ -110,16 +111,16 @@ export function SchedulerTable({ jobs, runs, now }: SchedulerTableProps) {
 
   return (
     <div className="flex flex-col gap-3">
+      <Note>
+        prune_odds does not record ingestion runs, so its last run always reads never tracked.
+        {runs === null ? " stuck-run detection unavailable (/ops/runs unreachable)." : ""}
+      </Note>
       <DataTable
         columns={columns}
         rows={rows}
         rowKey={(row) => row.job.id}
         caption="Scheduled jobs"
       />
-      <p className="text-caption text-text-tertiary">
-        prune_odds does not record ingestion runs, so its last run always reads never tracked.
-        {runs === null ? " stuck-run detection unavailable (/ops/runs unreachable)." : ""}
-      </p>
     </div>
   );
 }

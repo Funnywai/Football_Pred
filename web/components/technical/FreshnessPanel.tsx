@@ -18,6 +18,7 @@ const STATE_PILL: Record<FreshnessRowState, { variant: StatusVariant; label: str
   stale: { variant: "stale", label: "stale" },
   "never-tracked": { variant: "never-tracked", label: "never tracked" },
   unavailable: { variant: "unavailable", label: "unavailable" },
+  "not-in-window": { variant: "unavailable", label: "not in the fetched runs window" },
 };
 
 export interface FreshnessPanelProps {

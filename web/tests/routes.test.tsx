@@ -40,26 +40,50 @@ vi.mock("@/lib/technical-data", () => ({
 
 import PerformancePage from "@/app/(dashboard)/performance/page";
 
-const IMPLEMENTED = new Set([
-  "kpi-strip",
-  "equity-curve",
-  "pipeline",
-  "signal-vs-execution",
-  "bets",
-  "matches-predictions",
-  "results",
-  "clv",
-]);
+// The exact unavailable strings each section renders when every loader returns null,
+// read from the components that emit them. A section that regresses to a shell, a blank
+// panel, or a reworded state fails here.
+const PERFORMANCE_UNAVAILABLE: Array<[string, string]> = [
+  ["KPI data unavailable", "the API did not return /bets/summary"],
+  ["Equity curve unavailable", "the API did not return /bets/equity-curve"],
+  ["Pipeline unavailable", "the API did not return /ops/jobs or /ops/data"],
+  ["Signal vs execution unavailable", "the API did not return /bets or /predictions"],
+  ["Bets unavailable", "the API did not return /bets"],
+  ["Matches x predictions unavailable", "the API did not return /predictions or /bets"],
+  ["Results unavailable", "the API did not return /results"],
+  ["CLV unavailable", "the API did not return /models"],
+];
+
+const TECHNICAL_UNAVAILABLE: Array<[string, string]> = [
+  ["Log stream unavailable", "the API did not return /ops/logs"],
+  ["Scheduler unavailable", "the API did not return /ops/jobs"],
+  ["Runs unavailable", "the API did not return /ops/runs"],
+  ["Freshness unavailable", "the API did not return /ops/data"],
+  ["DB size unavailable", "the API did not return /ops/data"],
+  ["Model versions unavailable", "the API did not return /models"],
+  ["Environment unavailable", "the API did not return /ops/status"],
+];
+
+function expectUnavailableStates(pairs: Array<[string, string]>): void {
+  const detailCounts = new Map<string, number>();
+  for (const [title, detail] of pairs) {
+    expect(screen.getByText(title)).toBeInTheDocument();
+    detailCounts.set(detail, (detailCounts.get(detail) ?? 0) + 1);
+  }
+  for (const [detail, count] of detailCounts) {
+    expect(screen.getAllByText(detail)).toHaveLength(count);
+  }
+}
 
 describe("route smoke — /performance", () => {
-  it("renders every section heading, with shells only for the unimplemented ones", async () => {
+  it("renders every section heading and the explicit unavailable state of every section", async () => {
     render(await PerformancePage());
 
     for (const section of PERFORMANCE_SECTIONS) {
       expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
     }
-    const remaining = PERFORMANCE_SECTIONS.filter((section) => !IMPLEMENTED.has(section.id));
-    expect(screen.queryAllByText("pending — next increment")).toHaveLength(remaining.length);
+    expectUnavailableStates(PERFORMANCE_UNAVAILABLE);
+    expect(screen.queryByText("pending — next increment")).not.toBeInTheDocument();
   });
 });
 
@@ -70,6 +94,7 @@ describe("route smoke — /technical", () => {
     for (const section of TECHNICAL_SECTIONS) {
       expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
     }
+    expectUnavailableStates(TECHNICAL_UNAVAILABLE);
     expect(screen.queryByText("pending — next increment")).not.toBeInTheDocument();
   });
 });

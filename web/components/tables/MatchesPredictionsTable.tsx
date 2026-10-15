@@ -1,7 +1,8 @@
-import { Info, Inbox, TableProperties } from "lucide-react";
+import { Inbox, TableProperties } from "lucide-react";
 
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { isTruncated, type BetsWindow } from "@/lib/bets-window";
 import {
   formatDateTime,
@@ -115,15 +116,12 @@ export function MatchesPredictionsTable({ predictions, bets }: MatchesPrediction
   const unmatched = rows.length - matched;
 
   return (
-    <div className="flex flex-col">
-      <p className="flex items-start gap-2 px-6 py-3 text-caption text-text-tertiary">
-        <Info className="mt-0.5 size-3 shrink-0" aria-hidden />
-        <span>
-          Window: {predictionsWindowPhrase(predictions.length, PREDICTIONS_PAGE_SIZE)}. Rows
-          are shown newest kickoff first within that window.{" "}
-          {joinSummaryPhrase(matched, unmatched, isTruncated(bets))}
-        </span>
-      </p>
+    <div className="flex flex-col gap-3">
+      <Note>
+        Window: {predictionsWindowPhrase(predictions.length, PREDICTIONS_PAGE_SIZE)}. Rows
+        are shown newest kickoff first within that window.{" "}
+        {joinSummaryPhrase(matched, unmatched, isTruncated(bets) || !bets.newestFirst)}
+      </Note>
       <DataTable
         columns={COLUMNS}
         rows={rows}

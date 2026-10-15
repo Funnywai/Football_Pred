@@ -1,6 +1,7 @@
 import { Boxes } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Note } from "@/components/ui/Note";
 import { StatusPill, type StatusVariant } from "@/components/ui/StatusPill";
 import { formatDateTime } from "@/lib/format";
 import {
@@ -40,15 +41,15 @@ export function ModelTimeline({ models, opsVersions }: ModelTimelineProps) {
   const entries = modelTimelineRows(models, opsVersions);
   return (
     <div className="flex flex-col gap-3">
+      <Note>
+        — = metric not tracked for this target (handicap models carry brier, logloss and n
+        only). Ordered by created_at, newest first.
+      </Note>
       <ol className="divide-y divide-border-hairline">
         {entries.map((entry) => (
           <ModelRow key={entry.model.id} entry={entry} />
         ))}
       </ol>
-      <p className="text-caption text-text-tertiary">
-        — = metric not tracked for this target (handicap models carry brier, logloss and n
-        only). Ordered by created_at, newest first.
-      </p>
     </div>
   );
 }
@@ -80,14 +81,15 @@ function ModelRow({ entry }: { entry: ModelTimelineEntry }) {
         ))}
       </dl>
       <p className="text-caption text-text-tertiary">
-        artifact <span className="font-mono text-text-secondary">{model.artifact_path}</span>
+        artifact{" "}
+        <span className="break-all font-mono text-text-secondary">{model.artifact_path}</span>
       </p>
       <p className="text-caption text-text-tertiary">
         params{" "}
         {params === null ? (
           <span>unavailable (not in /ops/data)</span>
         ) : (
-          <span className="font-mono text-text-secondary">
+          <span className="break-words font-mono text-text-secondary">
             {Object.entries(params)
               .map(([key, value]) => `${key}=${formatParamValue(value)}`)
               .join(" · ")}

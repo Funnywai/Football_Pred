@@ -188,7 +188,7 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 
 - **Structure**: `<section>` with a header row (title + optional action) and a body slot.
 - **Variants**: `default` (1px `--border-default`), `accent` (2px `--accent-signal`, for the
-  active pipeline panel), `flush` (no padding, for tables).
+  active pipeline panel).
 - **Spacing**: `--space-6` padding, `--space-4` header-to-body gap.
 - **States**: default, hover (border shifts toward `--accent-signal` at low opacity), focus-within
   (focus ring), loading (skeleton rows matching final shape), empty (composed empty state with a
@@ -293,17 +293,18 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 - **Accessibility**: the level is a text tag, not colour alone.
 - **Motion**: none. The stream scrolls; lines do not animate in.
 
-### SectionShell
+### Note
 
-- **Structure**: a `Panel` whose header carries the section title and a `queued` `StatusPill`
-  reading "pending — next increment", and whose body carries the section's one-line purpose
-  and its source route(s).
-- **Variants**: none.
-- **Spacing**: `--space-6` panel padding, `--space-2` purpose-to-source gap.
-- **States**: pending only (this is the walking-skeleton placeholder for a section that a
-  later increment fills in).
-- **Accessibility**: the title is the panel's `aria-labelledby` target; the pending state is
-  carried by the pill's text label, not colour alone.
+- **Structure**: a `<p>` carrying the Info glyph and one caption sentence. This is the
+  shared caption primitive for both tabs (Performance and Technical): every window label,
+  disclosure and caveat renders through it, so the two tabs read as one product.
+- **Variants**: none. The Info glyph is always present — one rule, no per-site variation.
+- **Spacing**: `--space-2` glyph-to-text gap. The note carries no padding of its own; it
+  sits flush with the panel body's content edge (`--space-6`), and the surrounding
+  container owns the vertical rhythm (`--space-3` gaps).
+- **Placement**: a Note sits above the content it describes.
+- **States**: static only.
+- **Accessibility**: the glyph is `aria-hidden`; the sentence is plain text.
 - **Motion**: none.
 
 ---
