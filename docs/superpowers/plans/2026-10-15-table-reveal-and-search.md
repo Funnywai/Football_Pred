@@ -166,9 +166,10 @@ describe("useRowReveal", () => {
       { initialProps: { data: rows } },
     );
     act(() => result.current.setQuery("team 2"));
-    expect(result.current.filtered).toHaveLength(10);
-    rerender({ data: [...rows, { id: 99, name: "team 29" }] });
+    // "team 2" also matches team 20..29, so this is 11 of the 35 rows, not 10.
     expect(result.current.filtered).toHaveLength(11);
+    rerender({ data: [...rows, { id: 99, name: "team 29" }] });
+    expect(result.current.filtered).toHaveLength(12);
   });
 });
 ```
