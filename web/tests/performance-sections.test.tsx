@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { EquityCurve } from "@/components/charts/EquityCurve";
@@ -204,14 +204,14 @@ describe("BetsTable", () => {
     );
     expect(screen.getByText(/odds is the execution price/)).toBeInTheDocument();
     expect(screen.getAllByText("Arsenal v Chelsea").length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("2 bets · page 1 of 1")).toBeInTheDocument();
+    expect(screen.getByText("2 bets · 2 of 2 shown")).toBeInTheDocument();
   });
 
   it("discloses the fetched slice when the page is truncated", () => {
     const rows = Array.from({ length: 30 }, (_, index) => bet({ id: index + 1 }));
     render(<BetsTable bets={windowOf(rows, 250)} />);
     expect(
-      screen.getByText("showing the 30 most recent of 250 bets · page 1 of 2"),
+      screen.getByText("showing the 30 most recent of 250 bets · 10 of 30 shown"),
     ).toBeInTheDocument();
   });
 
@@ -235,8 +235,20 @@ describe("BetsTable", () => {
   it("renders the oldest-page wording when the summary was unavailable", () => {
     render(<BetsTable bets={windowOf([bet({ id: 1 }), bet({ id: 2 })], null, false)} />);
     expect(
-      screen.getByText("showing the oldest 2 bets · page 1 of 1 · /bets/summary unavailable"),
+      screen.getByText(
+        "showing the oldest 2 bets · /bets/summary unavailable · 2 of 2 shown",
+      ),
     ).toBeInTheDocument();
+  });
+
+  it("reveals 10 more per click and searches", () => {
+    const rows = Array.from({ length: 30 }, (_, index) => bet({ id: index + 1 }));
+    render(<BetsTable bets={windowOf(rows, 30)} />);
+    expect(screen.getAllByRole("row")).toHaveLength(11);
+    fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
+    expect(screen.getAllByRole("row")).toHaveLength(21);
+    fireEvent.change(screen.getByLabelText("Search bets"), { target: { value: "chelsea" } });
+    expect(screen.getByText(/· matching "chelsea"/)).toBeInTheDocument();
   });
 
   it("renders an explicit unavailable state when bets are missing", () => {

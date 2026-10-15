@@ -1,12 +1,13 @@
 "use client";
 
-import { ArrowDown, ArrowUp, ChevronLeft, ChevronRight, Inbox } from "lucide-react";
-import { useState } from "react";
+import { ArrowDown, ArrowUp, Inbox, SearchX } from "lucide-react";
 
 import { BetStatusPill } from "@/components/ui/BetStatusPill";
 import { DataTable, type Column } from "@/components/ui/DataTable";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Note } from "@/components/ui/Note";
+import { RevealFooter } from "@/components/ui/RevealFooter";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { betsWindowPhrase, isTruncated, type BetsWindow } from "@/lib/bets-window";
 import {
   formatDateTime,
@@ -15,12 +16,9 @@ import {
   formatPercent,
   formatSignedHkd,
 } from "@/lib/format";
+import { matchesQuery } from "@/lib/row-search";
 import type { Bet } from "@/lib/types";
-
-const PAGE_SIZE = 25;
-
-const BUTTON =
-  "inline-flex items-center gap-1 rounded-md border border-border-default px-2 py-1 text-caption text-text-secondary transition-colors duration-150 ease-out hover:border-accent-signal/60 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-40";
+import { REVEAL_INITIAL, useRowReveal } from "@/lib/use-row-reveal";
 
 function ProfitCell({ value }: { value: number }) {
   const positive = value >= 0;
@@ -68,12 +66,19 @@ const COLUMNS: Column<Bet>[] = [
   { key: "placed", header: "Placed", render: (bet) => formatDateTime(bet.placed_at) },
 ];
 
+function betMatches(bet: Bet, query: string): boolean {
+  return matchesQuery(
+    [bet.home_team, bet.away_team, bet.league_code, bet.target, bet.outcome, bet.status],
+    query,
+  );
+}
+
 export interface BetsTableProps {
   bets: BetsWindow | null;
 }
 
 export function BetsTable({ bets }: BetsTableProps) {
-  const [page, setPage] = useState(0);
+  const reveal = useRowReveal(bets?.rows ?? [], betMatches);
 
   if (bets === null) {
     return (
@@ -84,60 +89,58 @@ export function BetsTable({ bets }: BetsTableProps) {
     return <EmptyBets bets={bets} />;
   }
 
-  const pageCount = Math.max(1, Math.ceil(bets.rows.length / PAGE_SIZE));
-  const current = Math.min(page, pageCount - 1);
-  const rows = bets.rows.slice(current * PAGE_SIZE, current * PAGE_SIZE + PAGE_SIZE);
-
   return (
     <div className="flex flex-col gap-3">
+      <SearchInput
+        label="Search bets"
+        scope={`searches the ${bets.rows.length} rows in this window`}
+        value={reveal.query}
+        onChange={reveal.setQuery}
+        onClear={reveal.clear}
+      />
       <Note>
         odds is the execution price (the latest pre-kickoff HKJC snapshot at placement);
         edge is measured at that price.
       </Note>
       <DataTable
         columns={COLUMNS}
-        rows={rows}
+        rows={reveal.shown}
         rowKey={(bet) => bet.id}
         caption="All ledger bets"
+        empty={
+          reveal.isFiltered ? (
+            <EmptyState
+              icon={SearchX}
+              title={`No row in this window matches "${reveal.query.trim()}"`}
+              detail="Search covers only the fetched window."
+            />
+          ) : undefined
+        }
       />
-      <div className="flex items-center justify-between gap-4 px-6 py-3 text-caption text-text-tertiary">
-        <span className="tnum">{footerText(bets, current + 1, pageCount)}</span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className={BUTTON}
-            onClick={() => setPage(current - 1)}
-            disabled={current === 0}
-          >
-            <ChevronLeft className="size-3" aria-hidden />
-            Prev
-          </button>
-          <button
-            type="button"
-            className={BUTTON}
-            onClick={() => setPage(current + 1)}
-            disabled={current >= pageCount - 1}
-          >
-            Next
-            <ChevronRight className="size-3" aria-hidden />
-          </button>
-        </div>
-      </div>
+      <RevealFooter
+        base={windowSentence(bets)}
+        shown={reveal.shown.length}
+        matching={reveal.filtered.length}
+        query={reveal.query}
+        isFiltered={reveal.isFiltered}
+        canExpand={reveal.canExpand}
+        canCollapse={reveal.visible > REVEAL_INITIAL}
+        onExpand={reveal.expand}
+        onExpandAll={reveal.expandAll}
+        onCollapse={reveal.collapse}
+      />
     </div>
   );
 }
 
 // The footer never states a fetched count as a total: a truncated window names the slice
 // it shows, and the oldest-page fallback names its missing summary.
-function footerText(bets: BetsWindow, page: number, pageCount: number): string {
-  const pagination = `page ${page} of ${pageCount}`;
+function windowSentence(bets: BetsWindow): string {
   if (!bets.newestFirst) {
-    return `showing the oldest ${bets.rows.length} bets · ${pagination} · /bets/summary unavailable`;
+    return `showing the oldest ${bets.rows.length} bets · /bets/summary unavailable`;
   }
-  if (isTruncated(bets)) {
-    return `showing ${betsWindowPhrase(bets)} · ${pagination}`;
-  }
-  return `${bets.rows.length} bets · ${pagination}`;
+  if (isTruncated(bets)) return `showing ${betsWindowPhrase(bets)}`;
+  return `${bets.rows.length} bets`;
 }
 
 function EmptyBets({ bets }: { bets: BetsWindow }) {
