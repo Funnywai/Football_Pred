@@ -455,3 +455,43 @@ without `--stack`.
 | `dashboard density information hierarchy` | ux | Colour-only is a High-severity a11y issue (use icons/text in addition to colour); use a consistent modular type scale (12 14 16 18 24 32), never arbitrary sizes. |
 | `dark tech terminal developer` | style | **Dark Mode (OLED)** and **Cyberpunk UI** both confirm dark-only, monospace, visible focus, and reduced-motion support. The cyberpunk neon/glitch treatment is explicitly rejected as too loud for a mission-control surface. |
 | `server components data fetching` | stack (nextjs) | Fetch data in Server Components; keep components server by default; push Client Components down to interactive leaves. Confirms the server-side-only fetch architecture. |
+
+---
+
+## Performance additions
+
+The second performance increment (sections f, g and h of the spec) adds three composed
+patterns. **No new colour, type, spacing, radius or motion token was introduced**; every
+value below traces to Sections 2-7.
+
+### MatchesPredictionsTable (section f)
+
+- **Structure**: a window note (Info glyph + Caption prose) above a `DataTable` of
+  `/predictions` rows joined in memory to `/bets` on `(match_id, target, outcome)`.
+- **Columns**: kickoff, league, match, target, outcome, prob, implied, edge, bet state,
+  bet odds, bet stake. Every numeric cell is right-aligned with tabular numerals.
+- **States**: default, unavailable (`/predictions` or `/bets` missing), empty (no
+  predictions). The window note always names the fetched window and the display order; a
+  full page is never stated as a total.
+- **Semantics**: the bet column carries the words "placed" or "no bet"; the edge cell
+  carries its sign and colour. Colour is never the sole carrier.
+
+### ResultsTable (section g)
+
+- **Structure**: a window note above a `DataTable` of `/results` rows.
+- **Columns**: kickoff, league, match, score, confirmed, payout, source, confirmed at.
+- **States**: default, unavailable, empty.
+- **Semantics**: `confirmed` and `payout_confirmed` render as `StatusPill`s — a glyph plus
+  the words "confirmed"/"unconfirmed" and "payout confirmed"/"payout unconfirmed" — never
+  colour alone.
+
+### ClvCard (section h)
+
+- **Structure**: a five-cell metric grid (the KpiTile anatomy: Overline label over an H1
+  tabular numeral) above the champion identity line and three mandatory prose notes.
+- **States**: default, unavailable (`/models` missing), no champion 1x2 version, no
+  metrics reported.
+- **Semantics**: the notes state on screen that CLV is the only evidence available before
+  wins and losses accumulate (naming `clv_n`), that no CLV time series and no per-bet CLV
+  exist in v1, and that the ledger's execution price never enters CLV. No trend line is
+  drawn.

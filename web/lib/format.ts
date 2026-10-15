@@ -43,6 +43,10 @@ export function formatOdds(value: number): string {
   return value.toFixed(2);
 }
 
+export function formatDecimal(value: number, digits = 4): string {
+  return value.toFixed(digits);
+}
+
 export function formatCount(value: number): string {
   return COUNT.format(value);
 }
