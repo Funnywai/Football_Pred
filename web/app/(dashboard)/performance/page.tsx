@@ -37,7 +37,7 @@ export default async function PerformancePage() {
   const pipelineActive = stages.some((stage) => stage.status === "active");
 
   return (
-    <main role="tabpanel" aria-labelledby="tab-performance" className="flex flex-col gap-6">
+    <div role="tabpanel" aria-labelledby="tab-performance" className="flex flex-col gap-6">
       <RefreshOnInterval />
       <div>
         <h1 className="text-h1 font-semibold text-text-primary">Performance</h1>
@@ -94,6 +94,6 @@ export default async function PerformancePage() {
       <Panel id="clv" title="CLV card" action={<Source>/models</Source>}>
         <ClvCard models={data.models} />
       </Panel>
-    </main>
+    </div>
   );
 }

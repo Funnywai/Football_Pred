@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { IngestionRunsTimeline } from "@/components/technical/IngestionRunsTimeline";
@@ -77,5 +77,21 @@ describe("IngestionRunsTimeline", () => {
   it("renders an empty state when no runs exist", () => {
     render(<IngestionRunsTimeline runs={[]} total={0} limit={200} />);
     expect(screen.getByText("No ingestion runs recorded yet")).toBeInTheDocument();
+  });
+
+  it("reveals runs 10 at a time and searches job, status and error text", () => {
+    const runs = Array.from({ length: 30 }, (_, index) =>
+      run({
+        id: index + 1,
+        status: index === 0 ? "failed" : "success",
+        error: index === 0 ? "HTTP 503 from HKJC" : null,
+      }),
+    );
+    render(<IngestionRunsTimeline runs={runs} total={30} limit={200} />);
+    expect(screen.getAllByRole("listitem")).toHaveLength(10);
+    fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(20);
+    fireEvent.change(screen.getByLabelText("Search runs"), { target: { value: "503" } });
+    expect(screen.getAllByRole("listitem")).toHaveLength(1);
   });
 });

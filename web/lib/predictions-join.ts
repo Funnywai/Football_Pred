@@ -55,18 +55,34 @@ function byKickoffDesc(a: PredictionBetRow, b: PredictionBetRow): number {
 }
 
 /**
- * "54 of these have no place in the ledger; 0 matched a placed bet." when the fetched bets
- * window covers the ledger; a truncated window only supports a qualified claim, because a
- * bet outside it would not be seen.
+ * "54 of the 54 fetched rows have no place in the ledger; 0 matched a placed bet." when the
+ * fetched bets window covers the ledger; a truncated window only supports a qualified claim,
+ * because a bet outside it would not be seen. With a filter active the tally names the query
+ * and its base: `of the 12 rows matching "arsenal" in this window, 11 have no place in the
+ * ledger; 1 matched a placed bet.`
  */
 export function joinSummaryPhrase(
   matched: number,
   unmatched: number,
   betsWindowTruncated: boolean,
+  base: { fetched: number; query?: string },
 ): string {
   const verb = unmatched === 1 ? "has" : "have";
+  const query = base.query?.trim();
+  const filtered = query !== undefined && query !== "";
   if (betsWindowTruncated) {
-    return `${matched} matched a placed bet in the fetched bets window; ${unmatched} ${verb} no match there — a bet outside the fetched window would not be seen.`;
+    // The clause after the semicolon is byte-identical to the pre-change truncation wording (the
+    // unfiltered assertions at matches-predictions.test.tsx:123 and :150 must keep passing). When a
+    // query is active the counts come from the filtered set, so the sentence must name that base
+    // (spec section 4.2/4.3) - otherwise it reads as a claim about the whole window.
+    const lead = filtered
+      ? `of the ${matched + unmatched} rows matching "${query}" in this window, ${matched} matched a placed bet in the fetched bets window`
+      : `${matched} matched a placed bet in the fetched bets window`;
+    return `${lead}; ${unmatched} ${verb} no match there — a bet outside the fetched window would not be seen.`;
   }
-  return `${unmatched} of these ${verb} no place in the ledger; ${matched} matched a placed bet.`;
+  const tally =
+    query === undefined || query === ""
+      ? `${unmatched} of the ${base.fetched} fetched rows`
+      : `of the ${matched + unmatched} rows matching "${query}" in this window, ${unmatched}`;
+  return `${tally} ${verb} no place in the ledger; ${matched} matched a placed bet.`;
 }

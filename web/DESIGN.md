@@ -307,6 +307,32 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 - **Accessibility**: the glyph is `aria-hidden`; the sentence is plain text.
 - **Motion**: none.
 
+### SearchInput
+
+A labelled `<input type="search">` plus a visible scope line and a clear control. Used by the
+row-heavy tables on both tabs.
+
+- Tokens: `text-body` input, `text-caption text-text-tertiary` scope line, `border-border-default`
+  border, `rounded-md`, `px-2 py-1`, `bg-surface-base`, focus ring on `--accent-signal`.
+- The scope line is mandatory and must name the fetched row count: `searches the N rows in this window`.
+- The clear control (Lucide `X`) renders only when the value is non-empty and carries
+  `aria-label="Clear search"`.
+- Never submits a form, never navigates, never fetches.
+
+### RevealFooter
+
+The footer for a revealing table: one honest count sentence on the left, the reveal controls on
+the right.
+
+- Left, `text-caption text-text-tertiary tnum`, inside `aria-live="polite"`:
+  `{base} · {shown} of {matching} shown`, with ` · matching "{query}"` appended when filtered.
+- Right: `Expand +10` (primary), `Show all N` (secondary), `Collapse` (always rendered; disabled
+  until the reveal has grown past its initial size). Buttons reuse the existing footer button
+  class from `BetsTable`. The footer's controls are action buttons and carry no `aria-expanded`;
+  the count sentence already announces changes via `aria-live`.
+- Both expand controls are disabled when everything is already shown.
+- No entrance animation (see §6.3).
+
 ---
 
 ## 6. Motion & Interaction

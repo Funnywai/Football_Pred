@@ -1,9 +1,10 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { ClvCard } from "@/components/clv/ClvCard";
 import { ResultsTable } from "@/components/tables/ResultsTable";
-import type { ModelVersion, Result } from "@/lib/types";
+import { SignalVsExecutionTable } from "@/components/tables/SignalVsExecutionTable";
+import type { Bet, ModelVersion, Result } from "@/lib/types";
 
 function result(overrides: Partial<Result>): Result {
   return {
@@ -40,6 +41,32 @@ function model(overrides: Partial<ModelVersion>): ModelVersion {
     artifact_path: "artifacts/ml/model.txt",
     created_at: "2026-10-14T00:00:00Z",
     promoted_at: "2026-10-14T12:00:00Z",
+    ...overrides,
+  };
+}
+
+function bet(overrides: Partial<Bet>): Bet {
+  return {
+    id: 1,
+    match_id: 29164,
+    target: "1x2",
+    outcome: "H",
+    model_version_id: 1,
+    line: null,
+    odds: 2.48,
+    stake: 10,
+    bankroll_at_place: 1000,
+    edge: 0.05,
+    kelly_multiplier: 0.5,
+    status: "won",
+    placed_at: "2026-10-14T00:00:00Z",
+    settled_at: "2026-10-15T00:00:00Z",
+    payout: 24.8,
+    profit: 14.8,
+    kickoff_time: "2026-10-14T12:00:00Z",
+    league_code: "EPL",
+    home_team: "Arsenal",
+    away_team: "Chelsea",
     ...overrides,
   };
 }
@@ -93,6 +120,30 @@ describe("ResultsTable", () => {
     render(<ResultsTable results={[]} />);
     expect(screen.getByText("No results yet")).toBeInTheDocument();
   });
+
+  it("shows 10 rows, reveals 10 more, and searches the window", () => {
+    const results = Array.from({ length: 30 }, (_, index) =>
+      result({ match_id: index + 1, source: index < 5 ? "hkjc" : "football_data" }),
+    );
+    render(<ResultsTable results={results} />);
+    expect(screen.getAllByRole("row")).toHaveLength(11);
+    fireEvent.click(screen.getByRole("button", { name: /Expand/ }));
+    expect(screen.getAllByRole("row")).toHaveLength(21);
+    fireEvent.change(screen.getByLabelText("Search results"), { target: { value: "hkjc" } });
+    expect(screen.getAllByRole("row").length).toBeLessThan(11);
+    expect(screen.getByText('5 of 5 shown · matching "hkjc"')).toBeInTheDocument();
+  });
+
+  it("keeps the window sentence byte-identical while filtered", () => {
+    const results = Array.from({ length: 200 }, (_, index) => result({ match_id: index + 1 }));
+    render(<ResultsTable results={results} />);
+    const note =
+      "Window: the newest 200 results by kickoff time (newest first); newer results cannot fall outside this window, older ones can.";
+    expect(screen.getByText(note)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Search results"), { target: { value: "zzz" } });
+    expect(screen.getByText(note)).toBeInTheDocument();
+    expect(screen.getByText(/No row in this window matches "zzz"/)).toBeInTheDocument();
+  });
 });
 
 describe("ClvCard", () => {
@@ -130,5 +181,28 @@ describe("ClvCard", () => {
     render(<ClvCard models={[model({ metrics: {} })]} />);
     expect(screen.getByText("No metrics reported")).toBeInTheDocument();
     expect(screen.getByText("#2")).toBeInTheDocument();
+  });
+});
+
+describe("SignalVsExecutionTable", () => {
+  it("reveals and searches the signal table without touching its window sentence", () => {
+    const bets = Array.from({ length: 12 }, (_, index) =>
+      bet({ id: index + 1, league_code: index < 5 ? "LALIGA" : "EPL" }),
+    );
+    render(
+      <SignalVsExecutionTable
+        bets={{ rows: bets, total: 12, newestFirst: true }}
+        predictions={[]}
+      />,
+    );
+    expect(screen.getAllByRole("row")).toHaveLength(11);
+    fireEvent.click(screen.getByRole("button", { name: /Show all/ }));
+    expect(screen.getAllByRole("row").length).toBeGreaterThan(11);
+    fireEvent.change(screen.getByLabelText("Search signal vs execution"), {
+      target: { value: "laliga" },
+    });
+    expect(screen.getAllByRole("row").length).toBeLessThan(11);
+    expect(screen.getByText('5 of 5 shown · matching "laliga"')).toBeInTheDocument();
+    expect(screen.getByText(/joined with .*predictions\?limit=200/)).toBeInTheDocument();
   });
 });
