@@ -72,6 +72,12 @@ def test_ml_prior_lead_default_and_env(monkeypatch) -> None:
     assert Settings(_env_file=None).ml_prior_lead_hours == 0
 
 
+def test_ml_blend_defaults() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.ml_blend_weight == 0.20
+    assert settings.ml_exec_edge_buffer == 0.03
+
+
 def test_ledger_defaults() -> None:
     settings = Settings(_env_file=None)
     assert settings.ledger_enable is True

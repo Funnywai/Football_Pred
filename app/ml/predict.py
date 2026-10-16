@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from math import isinf, isnan
+from math import exp, isinf, isnan, log
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -27,6 +27,8 @@ from app.ml.value import edge, fair_odds, is_value, kelly_fraction
 
 OUTCOMES_1X2 = ("H", "D", "A")
 OUTCOMES_HANDICAP = ("H", "A")
+
+_LOG_EPSILON = 1e-12
 
 
 @dataclass
@@ -79,6 +81,36 @@ async def load_upcoming_matches(
     ]
 
 
+def blend_probs(
+    model_probs: dict[str, float],
+    prior_probs: dict[str, float] | None,
+    weight: float,
+) -> dict[str, float]:
+    """Blend model probabilities toward the de-vigged market prior in logit space.
+
+    ``p_blend = softmax(w * log(p_model) + (1 - w) * log(p_prior))`` over the
+    shared outcomes, i.e. a weighted geometric mean. Probabilities are clamped
+    away from zero before the log and re-normalised after the softmax. When the
+    prior is missing (or does not cover every model outcome) or ``weight >= 1``,
+    the pure model probabilities are returned unchanged.
+    """
+    if (
+        prior_probs is None
+        or weight >= 1.0
+        or any(outcome not in prior_probs for outcome in model_probs)
+    ):
+        return dict(model_probs)
+    logits = {
+        outcome: weight * log(max(model_probs[outcome], _LOG_EPSILON))
+        + (1.0 - weight) * log(max(prior_probs[outcome], _LOG_EPSILON))
+        for outcome in model_probs
+    }
+    peak = max(logits.values())
+    weights = {outcome: exp(value - peak) for outcome, value in logits.items()}
+    total = sum(weights.values())
+    return {outcome: value / total for outcome, value in weights.items()}
+
+
 def _rows_for(
     upcoming: UpcomingMatch,
     champion: Champion,
@@ -86,9 +118,18 @@ def _rows_for(
     prob_map: dict[str, float],
     prior: MarketPrior | None,
     threshold: float,
+    blend_weight: float,
+    exec_edge_buffer: float,
 ) -> list[Prediction]:
+    prior_probs: dict[str, float] | None = None
+    if target == TARGET_1X2 and prior is not None:
+        prior_probs = prior.had_probs
+    elif target == TARGET_HANDICAP and prior is not None:
+        prior_probs = prior.hdc_probs
+    blended_map = blend_probs(prob_map, prior_probs, blend_weight)
     rows: list[Prediction] = []
-    for outcome, model_prob in prob_map.items():
+    for outcome in prob_map:
+        blended_prob = blended_map[outcome]
         fair_prob = market_odds = None
         if target == TARGET_1X2 and prior is not None and prior.had_probs is not None:
             fair_prob = prior.had_probs.get(outcome)
@@ -96,20 +137,25 @@ def _rows_for(
         elif target == TARGET_HANDICAP and prior is not None and prior.hdc_probs is not None:
             fair_prob = prior.hdc_probs.get(outcome)
             market_odds = (prior.hdc_odds or {}).get(outcome)
-        edge_value = edge(model_prob, fair_prob) if fair_prob is not None else None
+        edge_value = edge(blended_prob, fair_prob) if fair_prob is not None else None
         fraction = 0.0
-        if market_odds is not None and edge_value is not None and is_value(edge_value, threshold):
-            fraction = kelly_fraction(model_prob, market_odds)
+        if (
+            market_odds is not None
+            and edge_value is not None
+            and is_value(edge_value, threshold)
+            and blended_prob * market_odds > 1.0 + exec_edge_buffer
+        ):
+            fraction = kelly_fraction(blended_prob, market_odds)
         rows.append(
             Prediction(
                 match_id=upcoming.match_id,
                 target=target,
                 outcome=outcome,
                 model_version_id=champion.version.id,
-                prob=model_prob,
+                prob=blended_prob,
                 implied_prob=fair_prob,
                 edge=edge_value,
-                fair_odds=fair_odds(max(model_prob, CALIBRATION_EPSILON)),
+                fair_odds=fair_odds(max(blended_prob, CALIBRATION_EPSILON)),
                 market_odds=market_odds,
                 recommended_fraction=fraction,
             )
@@ -124,11 +170,15 @@ def build_prediction_rows(
     champion_handicap: Champion | None,
     prior: MarketPrior | None,
     threshold: float,
+    blend_weight: float = 1.0,
+    exec_edge_buffer: float = 0.0,
     probs_1x2: dict[str, float] | None = None,
     probs_handicap: dict[str, float] | None = None,
 ) -> list[Prediction]:
     """Build prediction rows. ``probs_*`` may be supplied directly (tests) or are
-    computed from the champion models when omitted."""
+    computed from the champion models when omitted. ``blend_weight`` mixes the
+    model toward the de-vigged prior (1.0 = pure model) and ``exec_edge_buffer``
+    is the safety margin required on ``prob * market_odds`` before staking."""
     rows: list[Prediction] = []
     if champion_1x2 is not None:
         if probs_1x2 is None:
@@ -136,7 +186,16 @@ def build_prediction_rows(
             values = predict_proba(champion_1x2.model, [feature_row.features])[0]
             probs_1x2 = {outcome: float(values[i]) for i, outcome in enumerate(OUTCOMES_1X2)}
         rows.extend(
-            _rows_for(upcoming, champion_1x2, TARGET_1X2, probs_1x2, prior, threshold)
+            _rows_for(
+                upcoming,
+                champion_1x2,
+                TARGET_1X2,
+                probs_1x2,
+                prior,
+                threshold,
+                blend_weight,
+                exec_edge_buffer,
+            )
         )
     if champion_handicap is not None and prior is not None and prior.hdc_line is not None:
         if not is_whole_or_half(prior.hdc_line):
@@ -147,7 +206,14 @@ def build_prediction_rows(
             probs_handicap = {"H": home_prob, "A": 1.0 - home_prob}
         rows.extend(
             _rows_for(
-                upcoming, champion_handicap, TARGET_HANDICAP, probs_handicap, prior, threshold
+                upcoming,
+                champion_handicap,
+                TARGET_HANDICAP,
+                probs_handicap,
+                prior,
+                threshold,
+                blend_weight,
+                exec_edge_buffer,
             )
         )
     return rows
@@ -253,6 +319,8 @@ async def predict_upcoming_matches(
                 champion_handicap,
                 priors[match.match_id],
                 settings.ml_value_edge_threshold,
+                settings.ml_blend_weight,
+                settings.ml_exec_edge_buffer,
             )
         )
     return rows
@@ -287,4 +355,6 @@ async def predict_match(
         champion_handicap,
         prior,
         settings.ml_value_edge_threshold,
+        settings.ml_blend_weight,
+        settings.ml_exec_edge_buffer,
     )

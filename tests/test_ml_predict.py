@@ -1,6 +1,7 @@
 import math
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from ml_helpers import make_db, seed_context, seed_finished_match, seed_team
 
 from app.config import Settings
@@ -10,6 +11,7 @@ from app.ml.models import TARGET_1X2, save_artifact, train_1x2
 from app.ml.predict import (
     Champion,
     UpcomingMatch,
+    blend_probs,
     build_prediction_rows,
     load_champion,
     predict_match,
@@ -144,3 +146,207 @@ async def test_predict_upcoming_matches_equals_per_match_predictions(tmp_path) -
             }
     finally:
         await db.dispose()
+
+
+def test_build_prediction_rows_stores_blended_prob() -> None:
+    kickoff = datetime(2026, 8, 1, tzinfo=UTC)
+    upcoming = UpcomingMatch(1, kickoff, 1, 2, "EPL", "2026/27")
+    prior = MarketPrior(
+        had_probs={"H": 0.40, "D": 0.35, "A": 0.25},
+        had_odds={"H": 2.5, "D": 3.3, "A": 3.3},
+    )
+    champion = Champion(version=type("V", (), {"id": 7})(), model=None)
+    rows = build_prediction_rows(
+        upcoming,
+        _feature_row(1, kickoff),
+        champion_1x2=champion,
+        champion_handicap=None,
+        prior=prior,
+        threshold=0.02,
+        blend_weight=0.5,
+        exec_edge_buffer=0.03,
+        probs_1x2={"H": 0.50, "D": 0.30, "A": 0.20},
+    )
+    home = next(r for r in rows if r.outcome == "H")
+    # w=0.5 geometric mean: sqrt(0.50*0.40)=0.44721360, sqrt(0.30*0.35)=0.32403703,
+    # sqrt(0.20*0.25)=0.22360680; normalised -> 0.44952531 / 0.32571203 / 0.22476266
+    assert home.prob == pytest.approx(0.44952531, abs=1e-6)
+    assert home.implied_prob == 0.40
+    assert home.edge == pytest.approx(0.04952531, abs=1e-6)
+    assert home.fair_odds == pytest.approx(1.0 / 0.44952531, abs=1e-6)
+    assert home.recommended_fraction > 0
+
+
+def test_build_prediction_rows_buffer_blocks_thin_edge() -> None:
+    kickoff = datetime(2026, 8, 1, tzinfo=UTC)
+    upcoming = UpcomingMatch(1, kickoff, 1, 2, "EPL", "2026/27")
+    prior = MarketPrior(
+        had_probs={"H": 0.40, "D": 0.30, "A": 0.30},
+        had_odds={"H": 2.2, "D": 3.3, "A": 3.3},
+    )
+    champion = Champion(version=type("V", (), {"id": 7})(), model=None)
+    probs = {"H": 0.46, "D": 0.29, "A": 0.25}
+    blocked = build_prediction_rows(
+        upcoming,
+        _feature_row(1, kickoff),
+        champion_1x2=champion,
+        champion_handicap=None,
+        prior=prior,
+        threshold=0.02,
+        blend_weight=1.0,
+        exec_edge_buffer=0.03,
+        probs_1x2=probs,
+    )
+    home = next(r for r in blocked if r.outcome == "H")
+    assert home.edge > 0.02
+    assert home.prob * home.market_odds <= 1.03
+    assert home.recommended_fraction == 0.0
+    # without the buffer the same bet clears kelly > 0 (p*odds = 1.012 > 1.0)
+    unbuffered = build_prediction_rows(
+        upcoming,
+        _feature_row(1, kickoff),
+        champion_1x2=champion,
+        champion_handicap=None,
+        prior=prior,
+        threshold=0.02,
+        blend_weight=1.0,
+        exec_edge_buffer=0.0,
+        probs_1x2=probs,
+    )
+    assert next(r for r in unbuffered if r.outcome == "H").recommended_fraction > 0
+
+
+def test_build_prediction_rows_buffer_allows_clear_edge() -> None:
+    kickoff = datetime(2026, 8, 1, tzinfo=UTC)
+    upcoming = UpcomingMatch(1, kickoff, 1, 2, "EPL", "2026/27")
+    prior = MarketPrior(
+        had_probs={"H": 0.40, "D": 0.30, "A": 0.30},
+        had_odds={"H": 2.2, "D": 3.3, "A": 3.3},
+    )
+    champion = Champion(version=type("V", (), {"id": 7})(), model=None)
+    rows = build_prediction_rows(
+        upcoming,
+        _feature_row(1, kickoff),
+        champion_1x2=champion,
+        champion_handicap=None,
+        prior=prior,
+        threshold=0.02,
+        blend_weight=1.0,
+        exec_edge_buffer=0.03,
+        probs_1x2={"H": 0.50, "D": 0.28, "A": 0.22},
+    )
+    home = next(r for r in rows if r.outcome == "H")
+    assert home.prob * home.market_odds > 1.03
+    assert home.recommended_fraction > 0
+
+
+def test_build_prediction_rows_buffer_uses_blended_prob() -> None:
+    # model H=0.55 clears the buffer on its own (0.55*2.2=1.21) but the blended
+    # H=0.41325848 does not (0.90917 <= 1.03) -> the buffer must use the blend.
+    kickoff = datetime(2026, 8, 1, tzinfo=UTC)
+    upcoming = UpcomingMatch(1, kickoff, 1, 2, "EPL", "2026/27")
+    prior = MarketPrior(
+        had_probs={"H": 0.38, "D": 0.31, "A": 0.31},
+        had_odds={"H": 2.2, "D": 3.3, "A": 3.3},
+    )
+    champion = Champion(version=type("V", (), {"id": 7})(), model=None)
+    rows = build_prediction_rows(
+        upcoming,
+        _feature_row(1, kickoff),
+        champion_1x2=champion,
+        champion_handicap=None,
+        prior=prior,
+        threshold=0.02,
+        blend_weight=0.2,
+        exec_edge_buffer=0.03,
+        probs_1x2={"H": 0.55, "D": 0.25, "A": 0.20},
+    )
+    home = next(r for r in rows if r.outcome == "H")
+    assert home.edge > 0.02
+    assert home.prob * home.market_odds <= 1.03
+    assert home.recommended_fraction == 0.0
+
+
+def test_build_prediction_rows_missing_prior_uses_model_prob() -> None:
+    kickoff = datetime(2026, 8, 1, tzinfo=UTC)
+    upcoming = UpcomingMatch(1, kickoff, 1, 2, "EPL", "2026/27")
+    champion = Champion(version=type("V", (), {"id": 7})(), model=None)
+    probs = {"H": 0.50, "D": 0.30, "A": 0.20}
+    for prior in (None, MarketPrior()):
+        rows = build_prediction_rows(
+            upcoming,
+            _feature_row(1, kickoff),
+            champion_1x2=champion,
+            champion_handicap=None,
+            prior=prior,
+            threshold=0.02,
+            blend_weight=0.2,
+            exec_edge_buffer=0.03,
+            probs_1x2=probs,
+        )
+        assert {r.outcome: r.prob for r in rows} == probs
+        assert all(r.implied_prob is None and r.edge is None for r in rows)
+        assert all(r.recommended_fraction == 0.0 for r in rows)
+
+
+def test_blend_probs_weight_zero_returns_prior() -> None:
+    model = {"H": 0.50, "D": 0.30, "A": 0.20}
+    prior = {"H": 0.40, "D": 0.35, "A": 0.25}
+    blended = blend_probs(model, prior, 0.0)
+    assert blended["H"] == pytest.approx(0.40, abs=1e-9)
+    assert blended["D"] == pytest.approx(0.35, abs=1e-9)
+    assert blended["A"] == pytest.approx(0.25, abs=1e-9)
+
+
+def test_blend_probs_weight_one_returns_model() -> None:
+    model = {"H": 0.50, "D": 0.30, "A": 0.20}
+    prior = {"H": 0.40, "D": 0.35, "A": 0.25}
+    assert blend_probs(model, prior, 1.0) == model
+
+
+def test_blend_probs_intermediate_matches_geometric_mean() -> None:
+    # w=0.5 -> p_blend ∝ sqrt(p_model × p_prior), normalised:
+    # H sqrt(0.50×0.40)=0.44721360, D sqrt(0.30×0.35)=0.32403703,
+    # A sqrt(0.20×0.25)=0.22360680; sum 0.99485743
+    # -> 0.44952531 / 0.32571203 / 0.22476266
+    model = {"H": 0.50, "D": 0.30, "A": 0.20}
+    prior = {"H": 0.40, "D": 0.35, "A": 0.25}
+    blended = blend_probs(model, prior, 0.5)
+    assert blended["H"] == pytest.approx(0.44952531, abs=1e-6)
+    assert blended["D"] == pytest.approx(0.32571203, abs=1e-6)
+    assert blended["A"] == pytest.approx(0.22476266, abs=1e-6)
+
+
+def test_blend_probs_missing_prior_falls_back_to_model() -> None:
+    model = {"H": 0.50, "D": 0.30, "A": 0.20}
+    assert blend_probs(model, None, 0.2) == model
+    assert blend_probs(model, {"H": 0.4, "D": 0.6}, 0.2) == model
+
+
+def test_build_prediction_rows_handicap_uses_blend_and_buffer() -> None:
+    kickoff = datetime(2026, 8, 1, tzinfo=UTC)
+    upcoming = UpcomingMatch(1, kickoff, 1, 2, "EPL", "2026/27")
+    prior = MarketPrior(
+        hdc_line=-0.5,
+        hdc_probs={"H": 0.45, "A": 0.55},
+        hdc_odds={"H": 2.0, "A": 1.8},
+    )
+    champion = Champion(version=type("V", (), {"id": 7})(), model=None)
+    rows = build_prediction_rows(
+        upcoming,
+        _feature_row(1, kickoff),
+        champion_1x2=None,
+        champion_handicap=champion,
+        prior=prior,
+        threshold=0.02,
+        blend_weight=0.5,
+        exec_edge_buffer=0.03,
+        probs_handicap={"H": 0.60, "A": 0.40},
+    )
+    home = next(r for r in rows if r.outcome == "H")
+    # w=0.5 geometric mean: sqrt(0.60*0.45)=0.51961524, sqrt(0.40*0.55)=0.46904158
+    # sum=0.98865682 -> H=0.52557696
+    assert home.prob == pytest.approx(0.52557696, abs=1e-6)
+    assert home.implied_prob == 0.45
+    assert home.edge == pytest.approx(0.07557696, abs=1e-6)
+    assert home.recommended_fraction > 0
