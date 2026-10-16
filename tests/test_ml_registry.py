@@ -20,6 +20,8 @@ def _metrics(**overrides) -> dict:
         "ece": 0.03,
         "clv_mean_edge": 0.01,
         "roi": 0.02,
+        "roi_real": 0.02,
+        "n_bets_real": 120,
     }
     return {**base, **overrides}
 
@@ -82,6 +84,43 @@ def test_gate_allows_structurally_zero_clv() -> None:
 
 def test_gate_blocks_negative_roi() -> None:
     assert not gate_passes(_metrics(roi=-0.01, brier=0.54), _metrics(roi=0.02), 0.0)
+
+
+def test_gate_blocks_a_degenerate_all_no_bet_configuration() -> None:
+    """A configuration that places ZERO bets at the real price reports
+    ``roi_real = 0.0``, which would satisfy ``>= 0`` trivially. The bet-count
+    floor is what stops "no bets" from reading as "break-even and acceptable"."""
+    challenger = _metrics(logloss=0.94, brier=0.54, roi_real=0.0, n_bets_real=0)
+    assert not gate_passes(challenger, _metrics(), 0.0)
+
+
+def test_gate_blocks_negative_real_roi() -> None:
+    challenger = _metrics(logloss=0.94, brier=0.54, roi_real=-0.10, n_bets_real=500)
+    assert not gate_passes(challenger, _metrics(), 0.0)
+
+
+def test_gate_promotes_when_real_roi_and_bet_count_clear_the_floor() -> None:
+    challenger = _metrics(logloss=0.94, brier=0.54, roi_real=0.02, n_bets_real=120)
+    assert gate_passes(challenger, _metrics(), 0.0)
+
+
+def test_gate_blocks_a_real_bet_count_below_the_floor() -> None:
+    challenger = _metrics(logloss=0.94, brier=0.54, roi_real=0.02, n_bets_real=10)
+    assert not gate_passes(challenger, _metrics(), 0.0)
+
+
+def test_gate_ignores_real_roi_when_absent() -> None:
+    """The handicap target never computes ``roi_real``/``n_bets_real``; requiring
+    them would freeze that target forever (the failure mode a previous fix hit)."""
+    challenger = {"logloss": 0.94, "brier": 0.54, "n": 10}
+    champion = {"logloss": 0.95, "brier": 0.55, "n": 10}
+    assert gate_passes(challenger, champion, 0.0)
+
+
+def test_gate_honours_a_custom_real_bet_floor() -> None:
+    challenger = _metrics(logloss=0.94, brier=0.54, roi_real=0.02, n_bets_real=10)
+    assert not gate_passes(challenger, _metrics(), 0.0)
+    assert gate_passes(challenger, _metrics(), 0.0, min_real_bets=10)
 
 
 @pytest.mark.parametrize("key", ["logloss", "brier"])

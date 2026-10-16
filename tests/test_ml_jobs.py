@@ -13,6 +13,7 @@ from app.ml.jobs import (
     PREDICT_JOB_ID,
     RETRAIN_JOB_ID,
     _blended_1x2,
+    _economic_metrics,
     build_ml_scheduler,
     predict_upcoming,
     retrain,
@@ -105,10 +106,10 @@ async def test_retrain_gates_on_fresh_champion_metrics(tmp_path) -> None:
     gate used the fresh champion metrics from the current window.
 
     This test proves the WIRING, not model quality: at 40 matches ``min_child_samples=30``
-    blocks every split, so both models are constant predictors. The synthetic eval window
-    carries no closing odds, so neither side reports ``ece`` or ``clv_mean_edge`` and the
-    gate governs on the mandatory logloss/brier pair alone (the comparative and absolute
-    conditions are covered in ``tests/test_ml_registry.py``).
+    blocks every split, so both models are constant predictors. The synthetic window has
+    no market priors, so nothing can clear the economics of a real price; the bet-count
+    floor is therefore switched off here to keep this a wiring test. The economics of the
+    gate — including the floor — are covered in ``tests/test_ml_registry.py``.
     """
     db = await make_db(tmp_path)
     try:
@@ -118,6 +119,7 @@ async def test_retrain_gates_on_fresh_champion_metrics(tmp_path) -> None:
             ml_min_train_rows=20,
             ml_history_from_year=2020,
             ml_artifact_dir=str(tmp_path / "artifacts"),
+            ml_gate_min_real_bets=0,
         )
         base = datetime(2026, 8, 1, 15, 0, tzinfo=UTC)
         async with db.session_factory() as session:
@@ -229,3 +231,20 @@ def test_blended_1x2_without_a_market_prior_returns_the_model_probs() -> None:
     frame = pd.DataFrame([{"market_home": np.nan, "market_draw": 0.30, "market_away": 0.30}])
     probs = np.array([[0.5, 0.28, 0.22]])
     assert np.allclose(_blended_1x2(probs, frame, 0.2), probs)
+
+
+def test_economic_metrics_reports_the_fair_and_the_real_price() -> None:
+    settings = Settings(
+        ml_value_edge_threshold=0.02,
+        ml_exec_edge_buffer=0.0,
+        ml_exec_overround=1.13,
+    )
+    served = np.array([[0.6, 0.3, 0.1]])
+    market = np.array([[0.4, 0.35, 0.25]])
+    real_price = 1.0 / (0.4 * 1.13)
+    result = _economic_metrics(served, market, ["H"], settings)
+    assert set(result) == {"roi", "n_bets", "roi_real", "n_bets_real"}
+    assert result["roi"] == pytest.approx(1.5)
+    assert result["n_bets"] == 1
+    assert result["roi_real"] == pytest.approx(real_price - 1.0)
+    assert result["n_bets_real"] == 1

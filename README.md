@@ -90,6 +90,7 @@ docker compose up -d
 | `ML_PRIOR_LEAD_HOURS` | 48 | 市場先驗對齊時點：訓練／評估／服務都用「開賽前 N 小時的最後一筆 HKJC 快照」（`0`＝舊行為：賽前最後一筆；CLV 恆用真實收盤） |
 | `ML_RETRAIN_INTERVAL` | 604800 | 重訓間隔（秒，預設每週） |
 | `ML_EXEC_OVERROUND` | `1.13` | 閘門經濟指標用的抽水：`roi` 用公平價（`1.0`，理論值、買不到），`roi_real` 用此值（實測 HKJC HAD 中位 `1.1327`）＝實際可下注價。`n_bets_real` 一併記錄：**`0` 注 ＝ 這個配置在真實價下一注都不會下**，不是「打平」 |
+| `ML_GATE_MIN_REAL_BETS` | `50` | 閘門要求 `n_bets_real` 至少這麼多注，`roi_real` 才可信：真實價下 **0 注** 會讓 `roi_real = 0.0`，沒有這個下限時「一注都不下」會靠絕對條件通過。設 `0` 可關閉（測試用）|
 | `LEDGER_ENABLE` | `true` | 是否啟用帳本排程 |
 | `LEDGER_INITIAL_BANKROLL` | `1000` | 模擬本金（HKD） |
 | `LEDGER_MIN_STAKE` | `10` | 最低一注（HKD＝HKJC bet unit；低於跳過，不上夾） |
