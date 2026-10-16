@@ -1,4 +1,4 @@
-"""LightGBM training + isotonic calibration for the 1X2 and handicap targets."""
+"""LightGBM training + calibration for the 1X2 (temperature scaling) and handicap (isotonic) targets."""
 
 from __future__ import annotations
 
@@ -51,6 +51,7 @@ VAL_FRACTION = 0.15
 MIN_ROWS_FOR_VAL = 10
 MIN_TRAIN_ROWS = 20
 CALIBRATION_EPSILON = 1e-6
+TEMPERATURE_BOUNDS = (0.05, 20.0)
 
 
 @dataclass
@@ -58,6 +59,7 @@ class TrainedModel:
     target: str
     booster: lgb.Booster
     calibrators: list[IsotonicRegression]
+    temperature: float | None = None
     feature_columns: list[str] = field(default_factory=lambda: list(FEATURE_COLUMNS))
     feature_version: str = FEATURE_VERSION
     metrics: dict = field(default_factory=dict)
@@ -120,6 +122,41 @@ def _apply_isotonic_multiclass(
     return calibrated / totals
 
 
+def _softmax(logits: np.ndarray) -> np.ndarray:
+    shifted = logits - np.max(logits, axis=1, keepdims=True)
+    exp = np.exp(shifted)
+    return exp / exp.sum(axis=1, keepdims=True)
+
+
+def _temperature_nll(logits: np.ndarray, labels: np.ndarray, temperature: float) -> float:
+    probs = _softmax(logits / temperature)
+    picked = probs[np.arange(len(labels)), labels]
+    return float(-np.mean(np.log(np.clip(picked, 1e-12, 1.0))))
+
+
+def _fit_temperature(logits: np.ndarray, labels: np.ndarray) -> float:
+    """Fit a positive scalar T minimising the multiclass NLL of softmax(logits / T).
+
+    Golden-section search over ``TEMPERATURE_BOUNDS``; the NLL is unimodal in T.
+    """
+    lower, upper = TEMPERATURE_BOUNDS
+    inv_phi = (np.sqrt(5.0) - 1.0) / 2.0
+    x1 = upper - inv_phi * (upper - lower)
+    x2 = lower + inv_phi * (upper - lower)
+    f1 = _temperature_nll(logits, labels, x1)
+    f2 = _temperature_nll(logits, labels, x2)
+    for _ in range(64):
+        if f1 < f2:
+            upper, x2, f2 = x2, x1, f1
+            x1 = upper - inv_phi * (upper - lower)
+            f1 = _temperature_nll(logits, labels, x1)
+        else:
+            lower, x1, f1 = x1, x2, f2
+            x2 = lower + inv_phi * (upper - lower)
+            f2 = _temperature_nll(logits, labels, x2)
+    return float((lower + upper) / 2.0)
+
+
 def _train_booster(
     fit_df: pd.DataFrame,
     val_df: pd.DataFrame | None,
@@ -154,11 +191,13 @@ def train_1x2(
         raise ValueError("no 1x2 calibration rows")
     fit_df, val_df = _temporal_val_split(train_df)
     booster = _train_booster(fit_df, val_df, _labels_1x2, {**DEFAULT_1X2_PARAMS, **(params or {})})
-    raw_calibration = np.asarray(booster.predict(_matrix(calibration_df))).reshape(
-        len(calibration_df), 3
+    raw_logits = np.asarray(
+        booster.predict(_matrix(calibration_df), raw_score=True)
+    ).reshape(len(calibration_df), 3)
+    temperature = _fit_temperature(raw_logits, _labels_1x2(calibration_df))
+    model = TrainedModel(
+        target=TARGET_1X2, booster=booster, calibrators=[], temperature=temperature
     )
-    calibrators = _fit_isotonic_multiclass(raw_calibration, _labels_1x2(calibration_df))
-    model = TrainedModel(target=TARGET_1X2, booster=booster, calibrators=calibrators)
     if not eval_df.empty:
         probs = predict_proba(model, eval_df[FEATURE_COLUMNS].to_dict("records"))
         model.metrics = evaluate_1x2(probs, eval_df["label_1x2"].tolist())
@@ -206,12 +245,17 @@ def predict_proba(
         ],
         columns=model.feature_columns,
     )
-    raw = np.asarray(model.booster.predict(frame))
     if model.target == TARGET_1X2:
-        raw = raw.reshape(len(features), 3)
+        if calibrated and model.temperature is not None:
+            logits = np.asarray(model.booster.predict(frame, raw_score=True)).reshape(
+                len(features), 3
+            )
+            return _softmax(logits / model.temperature)
+        raw = np.asarray(model.booster.predict(frame)).reshape(len(features), 3)
         if calibrated and model.calibrators:
             return _apply_isotonic_multiclass(model.calibrators, raw)
         return raw
+    raw = np.asarray(model.booster.predict(frame))
     raw = raw.reshape(len(features))
     if calibrated and model.calibrators:
         return _apply_isotonic_binary(model.calibrators, raw)
@@ -239,6 +283,7 @@ def save_artifact(model: TrainedModel, path: str | Path) -> None:
             "target": model.target,
             "booster": model.booster,
             "calibrators": model.calibrators,
+            "temperature": model.temperature,
             "feature_columns": model.feature_columns,
             "feature_version": model.feature_version,
         },
@@ -252,6 +297,7 @@ def load_artifact(path: str | Path) -> TrainedModel:
         target=payload["target"],
         booster=payload["booster"],
         calibrators=payload["calibrators"],
+        temperature=payload.get("temperature"),
         feature_columns=payload["feature_columns"],
         feature_version=payload["feature_version"],
     )
