@@ -4,7 +4,10 @@
 `https://wc.<你的網域>` 的 HTTPS 網址，並用 Zero Trust Access 加一道「只有你能進」的 email OTP 門禁。
 
 ```
-訪客 ──HTTPS──▶ Cloudflare 邊緣（TLS/WAF）──▶ Access 驗證 ──▶ Tunnel ──▶ 你的主機 app:8000
+訪客 ──HTTPS──▶ Cloudflare 邊緣（TLS/WAF）──▶ Access 驗證 ──▶ Tunnel ──▶ 你的主機 web:3000
+                                                                          │（compose 網路，服務名互連）
+                                                                          ▼
+                                                                        app:8000 ──▶ Postgres
 ```
 
 ---
@@ -44,12 +47,13 @@ docker compose logs -f cloudflared   # 看到 "Registered tunnel connection" 即
 | Subdomain | `wc` |
 | Domain | `你的網域`（下拉選） |
 | Service · Type | `HTTP` |
-| Service · URL | `app:8000` |
+| Service · URL | `web:3000` |
 
-> URL 用 `app:8000` 是因為 cloudflared 與 app 同屬 compose 網路，可用服務名互連。
+> URL 用 `web:3000` 是因為 cloudflared 與 web 同屬 compose 網路，可用服務名互連；公開入口是
+> dashboard 容器，它再從 compose 網路內部呼叫 `app:8000`。API 刻意不對外公開。
 > 不需要 `http://` 前綴以外的東西，也不要在這裡填主機的對外 IP。
 
-存檔後 Cloudflare 會自動建立一筆 DNS 記錄。等 1–2 分鐘，`https://wc.你的網域/health` 應該可以連到。
+存檔後 Cloudflare 會自動建立一筆 DNS 記錄。等 1–2 分鐘，`https://wc.你的網域/` 應該可以連到 dashboard。
 
 ## 4. 加一道 Access 門禁（email OTP）
 
@@ -59,26 +63,32 @@ docker compose logs -f cloudflared   # 看到 "Registered tunnel connection" 即
 4. **Policies** → Add a policy：Action = `Allow`；Include → Selector `Emails` → 你的 email。
 5. Save。（登入方式：Zero Trust → Settings → Authentication，預設可用 **One-time PIN** 寄 OTP，也可接 Google/GitHub。）
 
-之後任何人連 `https://wc.你的網域` 都會先看到 Cloudflare 登入頁，通過才進到你的 FastAPI。
+之後任何人連 `https://wc.你的網域` 都會先看到 Cloudflare 登入頁，通過才進到你的 dashboard。
 **不需要自己寫任何登入程式碼。**
 
-驗證：`curl -sI https://wc.你的網域/health` 應回傳 302 導向 Cloudflare Access 登入（代表門禁生效）；
-用瀏覽器登入後應看到 `{"status":"ok"}`。
+驗證：`curl -sI https://wc.你的網域/` 應回傳 302 導向 Cloudflare Access 登入（代表門禁生效）；
+用瀏覽器登入後應看到 dashboard。
 
-## 5. 給未來的 Next.js（子系統 D）／排程用：Service Token
+## 5. 機器對機器呼叫（非 dashboard）：Service Token
 
-機器對機器的呼叫（前端或 cron）沒法做 email OTP，改用 **Service Token**：
+> **已作廢（dashboard 部分）**：子系統 D 現在是 compose 服務（`web`），在伺服器端呼叫 API
+> （`http://app:8000`），瀏覽器從不直接打 API。因此 dashboard **不需要** Service Token，也**不需要**
+> CORS；FastAPI 應用程式**永遠不會**為了 CORS 被修改。原本「部署在 Cloudflare Pages + Service Token + CORS」
+> 的計畫已由 compose 服務取代。
 
-1. Zero Trust → Access → **Service Auth → Create Service Token**（例如 `worldcup-ui`）→ 複製 `Client ID` / `Client Secret`（只顯示一次）。
-2. 回到該 Application 的 Policy，加一條 `Include → Service Token → worldcup-ui`（或另建 policy）。
-3. 前端呼叫 API 時帶上 header：
+本節僅保留給**非 dashboard** 的機器對機器呼叫者（例如 cron、外部腳本）：
+
+1. Zero Trust → Access → **Service Auth → Create Service Token**（例如 `worldcup-cron`）→ 複製 `Client ID` / `Client Secret`（只顯示一次）。
+2. 回到該 Application 的 Policy，加一條 `Include → Service Token → worldcup-cron`（或另建 policy）。
+3. 呼叫端帶上 header：
    `CF-Access-Client-Id: <id>`、`CF-Access-Client-Secret: <secret>`。
-4. 之後子系統 D 部署在 Cloudflare Pages，用這組 token 呼叫 API；同時記得在 FastAPI 設 CORS（前端網域）。
 
 ## 6. 注意事項
 
+- **API 不再對外公開**：公開入口是 dashboard（`web:3000`），API 只在 compose 網路內（`app:8000`）與主機本機（`127.0.0.1:8000`）可達。這是刻意的，順帶關掉了先前唯讀 `/ops/*` 端點的對外暴露。
 - **不要對 API 開快取**：Cloudflare 預設只快取靜態資源；不要為 `wc.你的網域` 建 Cache Rules 去快取 `/predictions`、`/bets` 這類動態 JSON。
 - **本機直連不受影響**：compose 把 app 綁在 `127.0.0.1:8000`，主機上仍可直接 `curl localhost:8000/health`（繞過 Access，適合自己在機器上維運）。
+- **`web` 不發布任何主機埠**：dashboard 只透過 compose 網路被 cloudflared 存取，主機上沒有對外 port。
 - Cloudflare 掛掉時外部連不到（內網／localhost 不受影響）。
 - 換 token／改網域後：`docker compose up -d cloudflared`（重啟該容器）。
 
@@ -87,6 +97,10 @@ docker compose logs -f cloudflared   # 看到 "Registered tunnel connection" 即
 不需要 Access、網址是隨機的 `*.trycloudflare.com`，每次重啟就換：
 
 ```bash
+# 看 dashboard（公開入口）
+docker compose run --rm cloudflared tunnel --no-autoupdate --url http://web:3000
+
+# 直接看 API（除錯用；正常對外不該這樣開）
 docker compose run --rm cloudflared tunnel --no-autoupdate --url http://app:8000
 ```
 
@@ -99,6 +113,6 @@ docker compose run --rm cloudflared tunnel --no-autoupdate --url http://app:8000
 | 症狀 | 檢查 |
 |---|---|
 | `cloudflared` 一直重啟 | `docker compose logs cloudflared`；多半是 `TUNNEL_TOKEN` 錯／過期，或 tunnel 已被刪 |
-| 網站 502 / 1033 | Public Hostname 的 Service URL 不是 `app:8000`，或 app 容器不健康（`docker compose ps`、`curl localhost:8000/health`） |
+| 網站 502 / 1033 | Public Hostname 的 Service URL 不是 `web:3000`，或 web 容器不健康（`docker compose ps`）；若 dashboard 起得來但顯示 API 錯誤，改查 app 的健康（`curl localhost:8000/health`） |
 | 一直跳 Access 登入 | 正常；檢查 Policy 的 email 是否正確，或改用 Service Token |
 | DNS 沒生效 | 等幾分鐘；確認網域 NS 已指向 Cloudflare |

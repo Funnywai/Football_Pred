@@ -90,10 +90,10 @@ curl -s localhost:8000/bets/summary
 
 - [ ] Zero Trust → Tunnel 建立 → token 寫入 `.env`，並加 `COMPOSE_PROFILES=tunnel`
 - [ ] `docker compose up -d`；`docker compose logs -f cloudflared` 見 "Registered tunnel connection"
-- [ ] Public hostname：`wc.你的網域` → Service `HTTP` / `app:8000`
+- [ ] Public hostname：`wc.你的網域` → Service `HTTP` / `web:3000`（公開入口是 dashboard；API 不對外）
 - [ ] Access 應用 + 政策：Action `Allow`、Include `Emails` = 你的 email
-- [ ] 驗證：未登入 `curl -I https://wc.你的網域/health` 應為 302（被 Access 攔）；瀏覽器登入後見 `{"status":"ok"}`
-- [ ] （未來 UI 用）建 Access **Service Token**，前端帶 `CF-Access-Client-Id/Secret`
+- [ ] 驗證：未登入 `curl -sI https://wc.你的網域/` 應為 302（被 Access 攔）；瀏覽器登入後見 dashboard
+- [ ] （僅非 dashboard 的機器對機器呼叫需要）建 Access **Service Token**，呼叫端帶 `CF-Access-Client-Id/Secret`
 
 ## 8. 上線後維運（例行）
 
@@ -114,7 +114,7 @@ curl -s localhost:8000/bets/summary
 | HKJC 拉不到資料 | 主機出口被擋 → 換 IP/區域；不要調小 `HKJC_THROTTLE_SECONDS` |
 | 重複輪詢 / 重複注單 | 你開了多個 app 實例 → 收回到單一 instance |
 | 模型檔不見（artifact missing） | `artifacts` volume 被刪 → 重新 `retrain` |
-| 網站 502/1033 | Tunnel 的 Service URL 不是 `app:8000`，或 app 不健康 |
+| 網站 502/1033 | Tunnel 的 Service URL 不是 `web:3000`，或 web 不健康；dashboard 起得來但顯示 API 錯誤時改查 app |
 
 ## 10. 已知限制（判讀數據前務必知道）
 

@@ -64,6 +64,7 @@ docker compose up -d
 
 - **對外存取**：見 [`deploy/cloudflare-tunnel.md`](deploy/cloudflare-tunnel.md)
   —— 不開 firewall port、不用固定 IP、附 email OTP 門禁（Cloudflare Tunnel + Zero Trust Access）。
+  公開入口是 dashboard（`web:3000`），API 只在 compose 網路內（`app:8000`）與主機本機可達，刻意不對外。
 - **單寫入者鐵律**：`app` 服務**不可** scale 到多個實例、uvicorn **不可**多 worker。
   APScheduler 在 process 內，否則 HKJC 會被重複輪詢、帳本會被重複寫入。
 - **artifact 持久化**：`artifacts` named volume 掛在 `/app/artifacts`（`ML_ARTIFACT_DIR=artifacts/ml`）。
