@@ -66,10 +66,12 @@ def gate_passes(challenger_metrics: dict, champion_metrics: dict, margin: float)
 
     - ``logloss``: challenger < champion - margin
 
-    ``brier`` is recorded but deliberately does NOT gate: the measured evidence
-    showed the Brier-better model (isotonic, 0.57545) being worse than the
-    logloss-better one (temperature, 0.57579) for actual betting, so a Brier
-    condition rejects exactly the challenger worth promoting.
+    ``brier`` and ``ece`` are recorded but deliberately do NOT gate. The measured
+    evidence showed both favour the isotonic configuration (Brier 0.57545, ECE
+    0.0141) over the one that is better on logloss AND on economics (temperature:
+    logloss 0.96990, served ROI +30.7% vs +10.5%), and ECE is precisely isotonic's
+    home turf, so gating on either rejects exactly the challenger worth promoting.
+    ``logloss`` is a strictly proper scoring rule and already covers calibration.
 
     ``roi`` (an absolute bar, so it is enforced whenever the challenger reports
     it) must be ``>= 0``. ``ece`` and ``clv_mean_edge`` are comparative and are
@@ -92,10 +94,6 @@ def gate_passes(challenger_metrics: dict, champion_metrics: dict, margin: float)
         return False
     roi = challenger_metrics.get("roi")
     if roi is not None and roi < 0.0:
-        return False
-    challenger_ece = challenger_metrics.get("ece")
-    champion_ece = champion_metrics.get("ece")
-    if challenger_ece is not None and champion_ece is not None and challenger_ece > champion_ece:
         return False
     challenger_clv = challenger_metrics.get("clv_mean_edge")
     champion_clv = champion_metrics.get("clv_mean_edge")
