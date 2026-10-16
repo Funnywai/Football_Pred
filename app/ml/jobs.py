@@ -159,14 +159,23 @@ def _fresh_champion_metrics(
             metrics = evaluate_1x2(probs, labels)
             metrics.update(clv_metrics(_model_probs_1x2(model, frame, probs), closing_priors))
             served = _blended_1x2(probs, frame, settings.ml_blend_weight)
+            market = _market_probs_1x2(frame)
+            edge_buffer = getattr(settings, "ml_exec_edge_buffer", 0.0)
             metrics["ece"] = expected_calibration_error(served, labels)
-            metrics["roi"] = economic_backtest(
-                served,
-                _market_probs_1x2(frame),
-                labels,
-                threshold=settings.ml_value_edge_threshold,
-                exec_edge_buffer=getattr(settings, "ml_exec_edge_buffer", 0.0),
-            )["roi"]
+            for suffix, overround in (
+                ("", 1.0),
+                ("_real", getattr(settings, "ml_exec_overround", 1.0)),
+            ):
+                backtest = economic_backtest(
+                    served,
+                    market,
+                    labels,
+                    threshold=settings.ml_value_edge_threshold,
+                    exec_edge_buffer=edge_buffer,
+                    overround=overround,
+                )
+                metrics[f"roi{suffix}"] = backtest["roi"]
+                metrics[f"n_bets{suffix}"] = backtest["n_bets"]
             return metrics
         return evaluate_handicap(probs, frame["label_handicap"].tolist())
     except Exception as exc:  # a broken champion must not block retraining

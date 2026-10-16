@@ -208,6 +208,36 @@ def test_economic_backtest_skips_missing_market_prices() -> None:
     assert result["roi"] == 0.0
 
 
+def test_economic_backtest_overround_defaults_to_the_vig_free_price() -> None:
+    probs = [[0.6, 0.3, 0.1]]
+    market = [[0.4, 0.35, 0.25]]
+    default = economic_backtest(probs, market, ["H"], threshold=0.05)
+    explicit = economic_backtest(probs, market, ["H"], threshold=0.05, overround=1.0)
+    assert default == explicit
+    # H: edge 0.20 > 0.05 and 0.6 / 0.4 = 1.5 > 1.0 -> 1 unit at fair price 2.5, hit
+    assert default["roi"] == pytest.approx(1.5)
+
+
+def test_economic_backtest_overround_lowers_the_return_of_a_winning_bet() -> None:
+    probs = [[0.6, 0.3, 0.1]]
+    market = [[0.4, 0.35, 0.25]]
+    quoted_home = 0.40 * 1.10
+    result = economic_backtest(probs, market, ["H"], threshold=0.05, overround=1.10)
+    assert result["n_bets"] == 1
+    assert result["staked"] == pytest.approx(1.0)
+    assert result["returned"] == pytest.approx(1.0 / quoted_home)
+    assert result["roi"] == pytest.approx(1.0 / quoted_home - 1.0)
+
+
+def test_economic_backtest_overround_removes_a_bet_the_vig_has_eaten() -> None:
+    probs = [[0.5, 0.3, 0.2]]
+    market = [[0.4, 0.35, 0.25]]
+    assert economic_backtest(probs, market, ["H"], threshold=0.05)["n_bets"] == 1
+    eaten = economic_backtest(probs, market, ["H"], threshold=0.05, overround=1.25)
+    assert eaten["n_bets"] == 0
+    assert eaten["roi"] == 0.0
+
+
 async def test_promote_and_rollback(tmp_path) -> None:
     db = await make_db(tmp_path)
     try:

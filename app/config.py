@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     ml_value_edge_threshold: float = 0.02
     ml_blend_weight: float = 0.20
     ml_exec_edge_buffer: float = 0.03
+    ml_exec_overround: float = 1.13
     ml_retrain_interval: int = 604800
     ml_predict_lookahead_hours: int = 48
     ml_min_train_rows: int = 500
