@@ -196,3 +196,41 @@ echo <base64 的 python 腳本> | base64 -d | docker exec -i worldcup-app-1 pyth
 3. 「冠軍 `n:0` 故 Brier 不可信」→ **錯**：儲存的 0.57539 與樣本外實測 0.57545 幾乎相同 → Brier 為真，`n` 僅為記錄 bug。
 4. 「移除 isotonic 是最高 ROI 修法」→ **錯**：它是 logloss 修法；實測原始輸出 ROI **更差**。
 5. 「規則完全忽略 vig」→ **錯**：`place_bets` 已在執行價做 `kelly > 0`；真問題是**缺安全邊際**。
+
+## 附錄 C：實作後修正與驗收發現（2026-10-16）
+
+### C.1 `clv_mean_edge > 0` 是**不可能的條件** → 已移除（實作期間發現）
+`clv_metrics` 對**每個 outcome** 取平均 edge；任何歸一化預測器對歸一化去水收盤，
+每場 `Σmodel_prob = 1`、`Σclosing_prob = 1` → **每場 edge 總和恆為 0** → 平均恆為 0。
+線上挑戰者的實際值 `clv_mean_edge = −1.9e-18` 即為明證。`> 0` 會**永遠擋掉所有晉升**、凍結註冊表。
+
+**修正**：CLV 僅要求「不劣於冠軍」（含 `CLV_TOLERANCE = 1e-12` 浮點容差）；
+「打敗收盤」的意圖改由 `roi >= 0`（真實逐注模擬）承擔。
+
+### C.2 障礙盤凍結風險 → 已修正
+`gate_passes` 原設計「任一側缺指標即 fail closed」，但**障礙盤從不產生** ece/clv/roi →
+會**永久凍結障礙盤晉升**（原本 Brier-only 時可晉升）。**修正**：
+- **強制**（缺 → fail closed）：`logloss`、`brier`
+- **絕對**（挑戰者一有就套用）：`roi >= 0`
+- **比較型**（僅當**兩側都有**才比較）：`ece`、`clv_mean_edge`
+
+### C.3 驗收（真資料，新碼經唯讀 throwaway 容器執行）
+| 項目 | 結果 |
+|---|---|
+| 現有冠軍 artifact | `temperature=None`（legacy isotonic）→ 走後向相容路徑 ✓ |
+| `predict_proba`（legacy） | logloss 0.98355 ✓（與修正前一致 → 相容性成立 ✓） |
+| blend w=0.20（在 isotonic 之上） | logloss **0.96562** / brier **0.57307** ✓（與離線預測 0.96426/0.57302 吻合 ✓）|
+| `economic_backtest`（blend） | roi **+10.51%**、n_bets **239**（原規則 5294 注 ✗ → 砍 95% ✓）；roi 為**去水公平價**基準（會高估 ✓）|
+| ece | blend 0.0141 ／ temperature-only **0.0082** |
+
+### C.4 ⚠️ 未解：Brier 條件會擋掉本次修正（**需用戶決策**）
+溫度模型 logloss **更好**（0.9701 vs 0.9836）但 Brier **略差**（0.5758 vs 0.57545）→
+保留的 `brier < champion.brier − margin` 會**擋下溫度挑戰者**，使 isotonic 冠軍永久留任 ✗。
+- **無需改碼的解法**：`ML_CHAMPION_MARGIN` 設 **−0.001**（需 < −0.00034）即可放行 ✓
+- **建議的長期解**：將 Brier 降為「只記錄、不把關」——理由：本專案已**實測** Brier 會系統性選出
+  對投注更差的配置（isotonic：Brier 較好、logloss 與和局尾部較差）。
+
+### C.5 測試與 gate 狀態
+- `uv run pytest -q` → **267 passed, 2 deselected** ✓；`uv run ruff check .` → **All checks passed** ✓
+- 已移除實作期間為繞過 C.1 而加的 `clv_metrics` monkeypatch，整合測試回復誠實 ✓
+- 已知非決定性 teardown 警告：`Event loop is closed`（全套 ~6 次出現 1 次 ✗、單檔與 tracemalloc 執行皆不出現 ✓、**不影響任何測試** ✓）
