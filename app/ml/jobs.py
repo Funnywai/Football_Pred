@@ -28,6 +28,7 @@ from app.ml.models import (
     train_handicap,
 )
 from app.ml.predict import (
+    blend_probs,
     load_champion,
     load_upcoming_matches,
     predict_upcoming_matches,
@@ -102,6 +103,30 @@ def _market_probs_1x2(frame: pd.DataFrame) -> np.ndarray:
     return frame[["market_home", "market_draw", "market_away"]].to_numpy(dtype=float)
 
 
+def _blended_1x2(probs: np.ndarray, frame: pd.DataFrame, weight: float) -> np.ndarray:
+    """Blend the model's probabilities toward the market exactly as serving does.
+
+    The gate must judge the calibration and economics of what actually gets
+    deployed, and serving blends every match toward its de-vigged prior
+    (``app.ml.predict._rows_for``). Judging raw model probabilities instead made
+    the gate reject a challenger whose deployed form is profitable.
+    """
+    market = _market_probs_1x2(frame)
+    outcomes = ("H", "D", "A")
+    blended = np.empty_like(np.asarray(probs, dtype=float))
+    for index in range(len(probs)):
+        prior = (
+            {outcome: float(market[index, j]) for j, outcome in enumerate(outcomes)}
+            if np.isfinite(market[index]).all()
+            else None
+        )
+        model = {outcome: float(probs[index, j]) for j, outcome in enumerate(outcomes)}
+        mixed = blend_probs(model, prior, weight)
+        for j, outcome in enumerate(outcomes):
+            blended[index, j] = mixed[outcome]
+    return blended
+
+
 def _fresh_champion_metrics(
     target: str,
     path: str | None,
@@ -133,9 +158,10 @@ def _fresh_champion_metrics(
             labels = frame["label_1x2"].tolist()
             metrics = evaluate_1x2(probs, labels)
             metrics.update(clv_metrics(_model_probs_1x2(model, frame, probs), closing_priors))
-            metrics["ece"] = expected_calibration_error(probs, labels)
+            served = _blended_1x2(probs, frame, settings.ml_blend_weight)
+            metrics["ece"] = expected_calibration_error(served, labels)
             metrics["roi"] = economic_backtest(
-                probs,
+                served,
                 _market_probs_1x2(frame),
                 labels,
                 threshold=settings.ml_value_edge_threshold,
@@ -169,12 +195,13 @@ def _train_challenger_sync(
             probs = predict_proba(model_1x2, eval_frame[FEATURE_COLUMNS].to_dict("records"))
             labels = eval_frame["label_1x2"].tolist()
             clv = clv_metrics(_model_probs_1x2(model_1x2, eval_frame, probs), closing_priors)
+            served = _blended_1x2(probs, eval_frame, settings.ml_blend_weight)
             metrics = {
                 **model_1x2.metrics,
                 **clv,
-                "ece": expected_calibration_error(probs, labels),
+                "ece": expected_calibration_error(served, labels),
                 "roi": economic_backtest(
-                    probs,
+                    served,
                     _market_probs_1x2(eval_frame),
                     labels,
                     threshold=settings.ml_value_edge_threshold,

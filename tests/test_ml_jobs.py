@@ -1,5 +1,8 @@
 from datetime import UTC, datetime, timedelta
 
+import numpy as np
+import pandas as pd
+import pytest
 from ml_helpers import make_db, seed_context, seed_finished_match, seed_team
 from sqlalchemy import select
 
@@ -9,11 +12,13 @@ from app.ml.dataset import build_dataset
 from app.ml.jobs import (
     PREDICT_JOB_ID,
     RETRAIN_JOB_ID,
+    _blended_1x2,
     build_ml_scheduler,
     predict_upcoming,
     retrain,
 )
 from app.ml.models import TARGET_1X2, save_artifact, train_1x2
+from app.ml.predict import blend_probs
 from app.ml.registry import (
     STATUS_RETIRED,
     get_champion,
@@ -196,3 +201,31 @@ async def test_retrain_trains_handicap_when_only_its_labels_are_new(tmp_path) ->
         assert {version.status for version in versions} == {"champion"}
     finally:
         await db.dispose()
+
+
+def _market_frame():
+    return pd.DataFrame([{"market_home": 0.40, "market_draw": 0.30, "market_away": 0.30}])
+
+
+def test_blended_1x2_matches_the_deployed_blend() -> None:
+    probs = np.array([[0.5, 0.28, 0.22]])
+    got = _blended_1x2(probs, _market_frame(), 0.2)
+    expected = list(
+        blend_probs(
+            {"H": 0.5, "D": 0.28, "A": 0.22},
+            {"H": 0.40, "D": 0.30, "A": 0.30},
+            0.2,
+        ).values()
+    )
+    assert np.allclose(got, [expected])
+
+
+def test_blended_1x2_with_full_weight_returns_the_model_probs() -> None:
+    probs = np.array([[0.5, 0.28, 0.22]])
+    assert _blended_1x2(probs, _market_frame(), 1.0) == pytest.approx(probs)
+
+
+def test_blended_1x2_without_a_market_prior_returns_the_model_probs() -> None:
+    frame = pd.DataFrame([{"market_home": np.nan, "market_draw": 0.30, "market_away": 0.30}])
+    probs = np.array([[0.5, 0.28, 0.22]])
+    assert np.allclose(_blended_1x2(probs, frame, 0.2), probs)
