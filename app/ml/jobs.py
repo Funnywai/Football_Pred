@@ -7,6 +7,7 @@ import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings
 from app.ml.dataset import Dataset, build_dataset, load_hkjc_priors
 from app.ml.features import FEATURE_COLUMNS, MatchRow
+from app.ml.metrics import economic_backtest, expected_calibration_error
 from app.ml.models import (
     TARGET_1X2,
     TARGET_HANDICAP,
@@ -95,8 +97,17 @@ def _model_probs_1x2(model, frame: pd.DataFrame, probs=None) -> dict[int, dict[s
     }
 
 
+def _market_probs_1x2(frame: pd.DataFrame) -> np.ndarray:
+    """De-vigged market probabilities from the eval frame's serving-time prior columns."""
+    return frame[["market_home", "market_draw", "market_away"]].to_numpy(dtype=float)
+
+
 def _fresh_champion_metrics(
-    target: str, path: str | None, eval_df: pd.DataFrame, closing_priors: dict
+    target: str,
+    path: str | None,
+    eval_df: pd.DataFrame,
+    closing_priors: dict,
+    settings: Settings,
 ) -> dict | None:
     """Re-evaluate a stored champion on the CURRENT eval window (fix #6).
 
@@ -119,8 +130,17 @@ def _fresh_champion_metrics(
         model = load_artifact(path)
         probs = predict_proba(model, frame[FEATURE_COLUMNS].to_dict("records"))
         if target == TARGET_1X2:
-            metrics = evaluate_1x2(probs, frame["label_1x2"].tolist())
+            labels = frame["label_1x2"].tolist()
+            metrics = evaluate_1x2(probs, labels)
             metrics.update(clv_metrics(_model_probs_1x2(model, frame, probs), closing_priors))
+            metrics["ece"] = expected_calibration_error(probs, labels)
+            metrics["roi"] = economic_backtest(
+                probs,
+                _market_probs_1x2(frame),
+                labels,
+                threshold=settings.ml_value_edge_threshold,
+                exec_edge_buffer=getattr(settings, "ml_exec_edge_buffer", 0.0),
+            )["roi"]
             return metrics
         return evaluate_handicap(probs, frame["label_handicap"].tolist())
     except Exception as exc:  # a broken champion must not block retraining
@@ -145,8 +165,22 @@ def _train_challenger_sync(
         except ValueError as exc:
             logger.warning("1x2 training skipped: %s", exc)
         else:
-            clv = clv_metrics(_model_probs_1x2(model_1x2, dataset_1x2.eval), closing_priors)
-            metrics = {**model_1x2.metrics, **clv}
+            eval_frame = dataset_1x2.eval
+            probs = predict_proba(model_1x2, eval_frame[FEATURE_COLUMNS].to_dict("records"))
+            labels = eval_frame["label_1x2"].tolist()
+            clv = clv_metrics(_model_probs_1x2(model_1x2, eval_frame, probs), closing_priors)
+            metrics = {
+                **model_1x2.metrics,
+                **clv,
+                "ece": expected_calibration_error(probs, labels),
+                "roi": economic_backtest(
+                    probs,
+                    _market_probs_1x2(eval_frame),
+                    labels,
+                    threshold=settings.ml_value_edge_threshold,
+                    exec_edge_buffer=getattr(settings, "ml_exec_edge_buffer", 0.0),
+                )["roi"],
+            }
             path = artifact_dir / f"1x2-{stamp}.joblib"
             save_artifact(model_1x2, path)
             result[TARGET_1X2] = {
@@ -154,7 +188,11 @@ def _train_challenger_sync(
                 "params": {"num_trees": int(model_1x2.booster.num_trees())},
                 "metrics": metrics,
                 "champion_metrics": _fresh_champion_metrics(
-                    TARGET_1X2, champion_paths.get(TARGET_1X2), dataset_1x2.eval, closing_priors
+                    TARGET_1X2,
+                    champion_paths.get(TARGET_1X2),
+                    eval_frame,
+                    closing_priors,
+                    settings,
                 ),
             }
     elif dataset_1x2 is not None:
@@ -182,6 +220,7 @@ def _train_challenger_sync(
                     champion_paths.get(TARGET_HANDICAP),
                     dataset_handicap.eval,
                     closing_priors,
+                    settings,
                 ),
             }
     elif dataset_handicap is not None:

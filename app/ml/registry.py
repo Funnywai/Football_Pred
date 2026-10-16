@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -45,20 +46,62 @@ async def register_challenger(
     return version
 
 
+GATE_MANDATORY = ("logloss", "brier")
+CLV_TOLERANCE = 1e-12
+
+
+def _gate_values(metrics: dict, keys: tuple[str, ...]) -> dict[str, float] | None:
+    values = {key: metrics.get(key) for key in keys}
+    if any(value is None for value in values.values()):
+        return None
+    return cast("dict[str, float]", values)
+
+
 def gate_passes(challenger_metrics: dict, champion_metrics: dict, margin: float) -> bool:
-    """Promote only when the challenger is at least ``margin`` better on Brier and
-    its CLV mean edge is not worse (missing CLV on either side passes)."""
-    challenger_brier = challenger_metrics.get("brier")
-    champion_brier = champion_metrics.get("brier")
-    if challenger_brier is None or champion_brier is None:
+    """Promote only when the challenger beats the champion on every usable metric.
+
+    ``logloss`` and ``brier`` are mandatory to report: a missing/None value on
+    either side fails closed (never promote on absent evidence). Only ``logloss``
+    gates the promotion:
+
+    - ``logloss``: challenger < champion - margin
+
+    ``brier`` is recorded but deliberately does NOT gate: the measured evidence
+    showed the Brier-better model (isotonic, 0.57545) being worse than the
+    logloss-better one (temperature, 0.57579) for actual betting, so a Brier
+    condition rejects exactly the challenger worth promoting.
+
+    ``roi`` (an absolute bar, so it is enforced whenever the challenger reports
+    it) must be ``>= 0``. ``ece`` and ``clv_mean_edge`` are comparative and are
+    therefore only checked when BOTH sides report them: the handicap target
+    computes neither, and failing closed on metrics a target never produces would
+    freeze that target permanently.
+
+    ``clv_mean_edge`` requires "not worse than the champion" (within
+    ``CLV_TOLERANCE``), NOT "> 0": ``clv_metrics`` averages the edge over every
+    outcome, so a normalised predictor's mean edge against a normalised de-vigged
+    close is ~0 by construction (the live challenger stored -1.9e-18). A "> 0"
+    requirement would reject every challenger forever. The "beats the close"
+    intent is carried by ``roi``, which comes from a per-bet simulation.
+    """
+    challenger = _gate_values(challenger_metrics, GATE_MANDATORY)
+    champion = _gate_values(champion_metrics, GATE_MANDATORY)
+    if challenger is None or champion is None:
         return False
-    if challenger_brier >= champion_brier - margin:
+    if not challenger["logloss"] < champion["logloss"] - margin:
+        return False
+    roi = challenger_metrics.get("roi")
+    if roi is not None and roi < 0.0:
+        return False
+    challenger_ece = challenger_metrics.get("ece")
+    champion_ece = champion_metrics.get("ece")
+    if challenger_ece is not None and champion_ece is not None and challenger_ece > champion_ece:
         return False
     challenger_clv = challenger_metrics.get("clv_mean_edge")
     champion_clv = champion_metrics.get("clv_mean_edge")
-    return not (
-        challenger_clv is not None and champion_clv is not None and challenger_clv < champion_clv
-    )
+    if challenger_clv is not None and champion_clv is not None:
+        return challenger_clv >= champion_clv - CLV_TOLERANCE
+    return True
 
 
 async def promote(session: AsyncSession, version: ModelVersion) -> None:

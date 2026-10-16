@@ -88,7 +88,7 @@ def test_fresh_champion_metrics_returns_none_for_missing_artifact(tmp_path) -> N
 
     frame = pd.DataFrame([{column: 0.0 for column in FEATURE_COLUMNS}])
     frame["label_1x2"] = ["H"]
-    assert _fresh_champion_metrics(TARGET_1X2, "/nope.joblib", frame, {}) is None
+    assert _fresh_champion_metrics(TARGET_1X2, "/nope.joblib", frame, {}, _settings()) is None
 
 
 async def test_retrain_gates_on_fresh_champion_metrics(tmp_path) -> None:
@@ -100,12 +100,10 @@ async def test_retrain_gates_on_fresh_champion_metrics(tmp_path) -> None:
     gate used the fresh champion metrics from the current window.
 
     This test proves the WIRING, not model quality: at 40 matches ``min_child_samples=30``
-    blocks every split, so both models are constant predictors. Odds payloads are
-    deliberately ABSENT: with them, both sides' ``clv_mean_edge`` would be ≈0 (any
-    normalized predictor has mean edge ≈0 — both distributions sum to 1), so the gate's
-    "CLV not worse" check would compare floating-point noise and could block the
-    promotion arbitrarily — the test would be fragile rather than deterministic. (The
-    CLV-worse case itself is covered by ``tests/test_ml_registry.py::test_gate_passes``.)
+    blocks every split, so both models are constant predictors. The synthetic eval window
+    carries no closing odds, so neither side reports ``ece`` or ``clv_mean_edge`` and the
+    gate governs on the mandatory logloss/brier pair alone (the comparative and absolute
+    conditions are covered in ``tests/test_ml_registry.py``).
     """
     db = await make_db(tmp_path)
     try:
@@ -153,6 +151,7 @@ async def test_retrain_gates_on_fresh_champion_metrics(tmp_path) -> None:
             champion = await get_champion(session, TARGET_1X2)
             assert champion is not None and champion.id != weak_id
             assert champion.metrics["brier"] < weak_model.metrics["brier"]
+            assert "ece" in champion.metrics and "roi" in champion.metrics
             retired = await session.get(ModelVersion, weak_id)
             assert retired is not None and retired.status == STATUS_RETIRED
     finally:
