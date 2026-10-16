@@ -89,6 +89,7 @@ docker compose up -d
 | `ML_ARTIFACT_DIR` | `artifacts/ml` | 模型 artifact 目錄（需持久化） |
 | `ML_PRIOR_LEAD_HOURS` | 48 | 市場先驗對齊時點：訓練／評估／服務都用「開賽前 N 小時的最後一筆 HKJC 快照」（`0`＝舊行為：賽前最後一筆；CLV 恆用真實收盤） |
 | `ML_RETRAIN_INTERVAL` | 604800 | 重訓間隔（秒，預設每週） |
+| `ML_EXEC_OVERROUND` | `1.13` | 閘門經濟指標用的抽水：`roi` 用公平價（`1.0`，理論值、買不到），`roi_real` 用此值（實測 HKJC HAD 中位 `1.1327`）＝實際可下注價。`n_bets_real` 一併記錄：**`0` 注 ＝ 這個配置在真實價下一注都不會下**，不是「打平」 |
 | `LEDGER_ENABLE` | `true` | 是否啟用帳本排程 |
 | `LEDGER_INITIAL_BANKROLL` | `1000` | 模擬本金（HKD） |
 | `LEDGER_MIN_STAKE` | `10` | 最低一注（HKD＝HKJC bet unit；低於跳過，不上夾） |

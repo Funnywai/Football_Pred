@@ -57,20 +57,21 @@ def economic_backtest(
     labels: Sequence[str] | Sequence[int],
     threshold: float,
     exec_edge_buffer: float = 0.0,
+    overround: float = 1.0,
 ) -> dict:
-    """Flat 1-unit stake backtest over de-vigged market probabilities.
+    """Flat 1-unit stake backtest at the overround-adjusted market price.
 
-    A bet is placed on outcome ``j`` of match ``i`` when both
-    ``probs[i, j] - market_probs[i, j] > threshold`` and
-    ``probs[i, j] * (1 / market_probs[i, j]) > 1 + exec_edge_buffer``.
-
-    The payout uses the de-vigged fair price ``1 / market_probs[i, j]`` as the
-    reference price: a deliberately vig-free, documented approximation of the
-    executable price (real books charge vig, so this overstates returns). Rows
-    with missing (NaN) or non-positive market probabilities are skipped.
+    ``market_probs`` are de-vigged (they sum to 1). ``overround`` restores the
+    quoted, vig-inclusive probabilities of the venue the bet would actually be
+    placed at — a real book's implied probabilities sum to more than 1, and
+    HKJC's HAD pool measures ~1.132 — so both the edge test and the payout pay
+    the vig. The default 1.0 keeps the legacy vig-free price, which no bookmaker
+    offers: a positive ROI at 1.0 is not evidence that money can be made, and a
+    caller that leaves it at 1.0 overstates returns by roughly the overround.
 
     Returns ``{"roi", "n_bets", "staked", "returned"}`` with
-    ``roi = returned / staked - 1`` and ``roi = 0.0`` when there are no bets.
+    ``roi = returned / staked - 1``. Rows with missing (NaN) or non-positive
+    market probabilities are skipped.
     """
     probabilities = np.asarray(probs, dtype=float)
     market = np.asarray(market_probs, dtype=float)
@@ -78,8 +79,9 @@ def economic_backtest(
     if probabilities.size == 0 or market.size == 0 or indices.size == 0:
         return {"roi": 0.0, "n_bets": 0, "staked": 0.0, "returned": 0.0}
     valid = np.isfinite(probabilities) & np.isfinite(market) & (market > 0.0)
-    price = 1.0 / np.where(valid, market, 1.0)
-    bets = valid & (probabilities - market > threshold) & (
+    quoted = np.where(valid, market * overround, 1.0)
+    price = 1.0 / quoted
+    bets = valid & (probabilities - quoted > threshold) & (
         probabilities * price > 1.0 + exec_edge_buffer
     )
     n_bets = int(bets.sum())
