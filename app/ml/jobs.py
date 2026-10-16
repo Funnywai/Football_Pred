@@ -127,6 +127,38 @@ def _blended_1x2(probs: np.ndarray, frame: pd.DataFrame, weight: float) -> np.nd
     return blended
 
 
+def _economic_metrics(
+    served: np.ndarray,
+    market: np.ndarray,
+    labels: list[str],
+    settings: Settings,
+) -> dict:
+    """Economy of the served probabilities at the fair price and at the real one.
+
+    One home for both: the champion re-evaluation and a fresh challenger must report
+    the same keys, or the gate reads stale evidence — which is exactly how
+    ``roi_real``/``n_bets_real`` ended up missing from every challenger while the
+    gate was being taught to require them.
+    """
+    edge_buffer = getattr(settings, "ml_exec_edge_buffer", 0.0)
+    metrics: dict = {}
+    for suffix, overround in (
+        ("", 1.0),
+        ("_real", getattr(settings, "ml_exec_overround", 1.0)),
+    ):
+        backtest = economic_backtest(
+            served,
+            market,
+            labels,
+            threshold=settings.ml_value_edge_threshold,
+            exec_edge_buffer=edge_buffer,
+            overround=overround,
+        )
+        metrics[f"roi{suffix}"] = backtest["roi"]
+        metrics[f"n_bets{suffix}"] = backtest["n_bets"]
+    return metrics
+
+
 def _fresh_champion_metrics(
     target: str,
     path: str | None,
@@ -160,22 +192,8 @@ def _fresh_champion_metrics(
             metrics.update(clv_metrics(_model_probs_1x2(model, frame, probs), closing_priors))
             served = _blended_1x2(probs, frame, settings.ml_blend_weight)
             market = _market_probs_1x2(frame)
-            edge_buffer = getattr(settings, "ml_exec_edge_buffer", 0.0)
             metrics["ece"] = expected_calibration_error(served, labels)
-            for suffix, overround in (
-                ("", 1.0),
-                ("_real", getattr(settings, "ml_exec_overround", 1.0)),
-            ):
-                backtest = economic_backtest(
-                    served,
-                    market,
-                    labels,
-                    threshold=settings.ml_value_edge_threshold,
-                    exec_edge_buffer=edge_buffer,
-                    overround=overround,
-                )
-                metrics[f"roi{suffix}"] = backtest["roi"]
-                metrics[f"n_bets{suffix}"] = backtest["n_bets"]
+            metrics.update(_economic_metrics(served, market, labels, settings))
             return metrics
         return evaluate_handicap(probs, frame["label_handicap"].tolist())
     except Exception as exc:  # a broken champion must not block retraining
@@ -209,13 +227,9 @@ def _train_challenger_sync(
                 **model_1x2.metrics,
                 **clv,
                 "ece": expected_calibration_error(served, labels),
-                "roi": economic_backtest(
-                    served,
-                    _market_probs_1x2(eval_frame),
-                    labels,
-                    threshold=settings.ml_value_edge_threshold,
-                    exec_edge_buffer=getattr(settings, "ml_exec_edge_buffer", 0.0),
-                )["roi"],
+                **_economic_metrics(
+                    served, _market_probs_1x2(eval_frame), labels, settings
+                ),
             }
             path = artifact_dir / f"1x2-{stamp}.joblib"
             save_artifact(model_1x2, path)
@@ -316,6 +330,7 @@ async def retrain(
                 version,
                 settings.ml_champion_margin,
                 champion_metrics=payload.get("champion_metrics"),
+                min_real_bets=settings.ml_gate_min_real_bets,
             ):
                 promoted += 1
         return promoted
