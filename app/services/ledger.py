@@ -345,11 +345,23 @@ class LedgerSummary(NamedTuple):
     yield_pct: float
 
 
-async def summary(session: AsyncSession, settings: Settings) -> LedgerSummary:
-    """Aggregate every summary value from the bets table (single source of truth)."""
-    rows = (
-        await session.execute(select(LedgerBet.status, LedgerBet.stake, LedgerBet.profit))
-    ).all()
+async def _champion_ids(session: AsyncSession) -> list[int]:
+    stmt = select(ModelVersion.id).where(ModelVersion.status == STATUS_CHAMPION)
+    return list((await session.execute(stmt)).scalars().all())
+
+
+async def summary(
+    session: AsyncSession, settings: Settings, champion_only: bool = True
+) -> LedgerSummary:
+    """Aggregate every summary value from the bets table (single source of truth).
+
+    By default only the current champion's bets count, so a retired model's
+    record is not read as the current system's performance.
+    """
+    stmt = select(LedgerBet.status, LedgerBet.stake, LedgerBet.profit)
+    if champion_only:
+        stmt = stmt.where(LedgerBet.model_version_id.in_(await _champion_ids(session)))
+    rows = (await session.execute(stmt)).all()
     settled = [
         (status, stake, profit) for status, stake, profit in rows if status != "pending"
     ]
@@ -376,21 +388,22 @@ class EquityPoint(NamedTuple):
     bankroll: float
 
 
-async def equity_curve(session: AsyncSession, settings: Settings) -> list[EquityPoint]:
+async def equity_curve(
+    session: AsyncSession, settings: Settings, champion_only: bool = True
+) -> list[EquityPoint]:
     """Realized-wealth points: the initial bankroll, one point per settlement, final = now.
 
     At each settlement event the bankroll equals the initial bankroll plus
     settled profit so far, minus the stakes that are open as of that event
     (placed by then and settled strictly later, or never). Settlement events
-    with the same timestamp are ordered by bet id (deterministic).
+    with the same timestamp are ordered by bet id (deterministic). By default
+    only the current champion's bets are plotted, so a retired model's record
+    is not read as the current system's performance.
     """
-    bets = (
-        (
-            await session.execute(select(LedgerBet).order_by(LedgerBet.placed_at, LedgerBet.id))
-        )
-        .scalars()
-        .all()
-    )
+    stmt = select(LedgerBet).order_by(LedgerBet.placed_at, LedgerBet.id)
+    if champion_only:
+        stmt = stmt.where(LedgerBet.model_version_id.in_(await _champion_ids(session)))
+    bets = (await session.execute(stmt)).scalars().all()
     settled = sorted(
         [bet for bet in bets if bet.status != "pending"],
         key=lambda bet: (bet.settled_at, bet.id),
@@ -408,7 +421,14 @@ async def equity_curve(session: AsyncSession, settings: Settings) -> list[Equity
         points.append(
             EquityPoint(t=t_i, bankroll=settings.ledger_initial_bankroll + realized - open_at)
         )
+    realized_now = sum(
+        bet.profit if bet.profit is not None else 0.0 for bet in bets if bet.status != "pending"
+    )
+    open_now = sum(bet.stake for bet in bets if bet.status == "pending")
     points.append(
-        EquityPoint(t=datetime.now(UTC), bankroll=await _bankroll_now(session, settings))
+        EquityPoint(
+            t=datetime.now(UTC),
+            bankroll=settings.ledger_initial_bankroll + realized_now - open_now,
+        )
     )
     return points

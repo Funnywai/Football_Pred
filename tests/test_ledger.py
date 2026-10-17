@@ -19,9 +19,11 @@ from app.services.ledger import (
     _round_dividend,
     _settle_handicap,
     _size_stake,
+    equity_curve,
     place_bets,
     settle_bets,
 )
+from app.services.ledger import summary as ledger_summary
 
 KICKOFF = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
 
@@ -511,3 +513,163 @@ async def test_place_skips_handicap_quarter_line(tmp_path) -> None:
     async with db.session_factory() as session:
         rows = (await session.execute(select(LedgerBet))).scalars().all()
         assert rows == []
+
+
+async def _seed_two_generations(tmp_path) -> tuple:
+    """Champion + retired versions, each with one settled and one pending bet.
+
+    Champion: settled won (stake 15, profit +16.5, settled 2026-08-02 18:00) and
+    pending (stake 20). Retired: settled lost (stake 10, profit -10, settled
+    2026-08-02 06:00) and pending (stake 760). Returns ``(db, champion_id,
+    retired_id)``.
+    """
+    db = await make_db(tmp_path)
+    async with db.session_factory() as session:
+        league, season = await seed_context(session)
+        home = await seed_team(session, "Home")
+        away = await seed_team(session, "Away")
+        champion_match = await seed_finished_match(
+            session, league, season, home, away,
+            match_id_label="M_CHAMP", kickoff=KICKOFF, home_score=2, away_score=1,
+        )
+        retired_match = await seed_finished_match(
+            session, league, season, home, away,
+            match_id_label="M_RETIRED", kickoff=KICKOFF + timedelta(days=1),
+            home_score=2, away_score=1,
+        )
+        champion = ModelVersion(
+            target="1x2", algorithm="lightgbm", params={}, metrics={},
+            artifact_path="/tmp/champ.joblib", status="champion",
+        )
+        retired = ModelVersion(
+            target="1x2", algorithm="lightgbm", params={}, metrics={},
+            artifact_path="/tmp/retired.joblib", status="retired",
+        )
+        session.add_all([champion, retired])
+        await session.flush()
+        t0 = datetime(2026, 8, 1, 12, 0, tzinfo=UTC)
+        t1 = datetime(2026, 8, 2, 6, 0, tzinfo=UTC)
+        t2 = datetime(2026, 8, 2, 12, 0, tzinfo=UTC)
+        t3 = datetime(2026, 8, 2, 18, 0, tzinfo=UTC)
+        session.add_all([
+            LedgerBet(
+                match_id=champion_match.id, target="1x2", outcome="H",
+                model_version_id=champion.id, odds=2.1, stake=15.0,
+                bankroll_at_place=1000.0, kelly_multiplier=0.5,
+                status="won", placed_at=t0, settled_at=t3, payout=31.5, profit=16.5,
+            ),
+            LedgerBet(
+                match_id=champion_match.id, target="1x2", outcome="D",
+                model_version_id=champion.id, odds=3.4, stake=20.0,
+                bankroll_at_place=1000.0, kelly_multiplier=0.5,
+                status="pending", placed_at=t2,
+            ),
+            LedgerBet(
+                match_id=retired_match.id, target="1x2", outcome="H",
+                model_version_id=retired.id, odds=2.1, stake=10.0,
+                bankroll_at_place=1000.0, kelly_multiplier=0.5,
+                status="lost", placed_at=t0, settled_at=t1, payout=0.0, profit=-10.0,
+            ),
+            LedgerBet(
+                match_id=retired_match.id, target="1x2", outcome="D",
+                model_version_id=retired.id, odds=3.4, stake=760.0,
+                bankroll_at_place=1000.0, kelly_multiplier=0.5,
+                status="pending", placed_at=t2,
+            ),
+        ])
+        await session.commit()
+    return db, champion.id, retired.id
+
+
+async def test_summary_scopes_to_the_current_champion_by_default(tmp_path) -> None:
+    db, _champion_id, _retired_id = await _seed_two_generations(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            scoped = await ledger_summary(session, _settings())
+            assert scoped.n_bets == 2
+            assert scoped.n_settled == 1
+            assert scoped.n_open == 1
+            assert scoped.stakes_total == pytest.approx(35.0)
+            assert scoped.open_stakes == pytest.approx(20.0)
+            assert scoped.realized_profit == pytest.approx(16.5)
+            assert scoped.bankroll == pytest.approx(996.5)
+            assert scoped.roi == pytest.approx(16.5 / 15.0)
+            assert scoped.yield_pct == pytest.approx(16.5 / 35.0)
+
+            full = await ledger_summary(session, _settings(), champion_only=False)
+            assert full.n_bets == 4
+            assert full.n_settled == 2
+            assert full.n_open == 2
+            assert full.stakes_total == pytest.approx(805.0)
+            assert full.open_stakes == pytest.approx(780.0)
+            assert full.realized_profit == pytest.approx(6.5)
+            assert full.bankroll == pytest.approx(226.5)
+            assert full.roi == pytest.approx(6.5 / 25.0)
+            assert full.yield_pct == pytest.approx(6.5 / 805.0)
+    finally:
+        await db.dispose()
+
+
+async def test_equity_curve_scopes_to_the_current_champion_by_default(tmp_path) -> None:
+    db, _champion_id, _retired_id = await _seed_two_generations(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            scoped = await equity_curve(session, _settings())
+            assert [p.bankroll for p in scoped] == pytest.approx([1000.0, 996.5, 996.5])
+
+            full = await equity_curve(session, _settings(), champion_only=False)
+            assert [p.bankroll for p in full] == pytest.approx(
+                [1000.0, 975.0, 226.5, 226.5]
+            )
+    finally:
+        await db.dispose()
+
+
+async def test_reports_without_a_champion_yield_nothing(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            match = await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=KICKOFF, home_score=2, away_score=1,
+            )
+            retired = ModelVersion(
+                target="1x2", algorithm="lightgbm", params={}, metrics={},
+                artifact_path="/tmp/retired.joblib", status="retired",
+            )
+            session.add(retired)
+            await session.flush()
+            session.add(
+                LedgerBet(
+                    match_id=match.id, target="1x2", outcome="H",
+                    model_version_id=retired.id, odds=2.1, stake=15.0,
+                    bankroll_at_place=1000.0, kelly_multiplier=0.5,
+                    status="won", placed_at=KICKOFF, settled_at=KICKOFF,
+                    payout=31.5, profit=16.5,
+                )
+            )
+            await session.commit()
+
+        async with db.session_factory() as session:
+            values = await ledger_summary(session, _settings())
+            assert values.n_bets == 0
+            assert values.n_settled == 0
+            assert values.n_open == 0
+            assert values.stakes_total == 0.0
+            assert values.open_stakes == 0.0
+            assert values.realized_profit == 0.0
+            assert values.bankroll == pytest.approx(1000.0)
+            assert values.roi == 0.0
+            assert values.yield_pct == 0.0
+
+            curve = await equity_curve(session, _settings())
+            assert [p.bankroll for p in curve] == pytest.approx([1000.0, 1000.0])
+
+            full = await ledger_summary(session, _settings(), champion_only=False)
+            assert full.n_bets == 1
+            assert full.realized_profit == pytest.approx(16.5)
+    finally:
+        await db.dispose()

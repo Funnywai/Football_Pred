@@ -245,6 +245,7 @@ async def list_bets(
     status: str | None = None,
     match_id: int | None = None,
     target: str | None = None,
+    champion_only: bool = True,
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[BetOut]:
@@ -266,6 +267,10 @@ async def list_bets(
         stmt = stmt.where(LedgerBet.match_id == match_id)
     if target is not None:
         stmt = stmt.where(LedgerBet.target == target)
+    if champion_only:
+        stmt = stmt.join(
+            ModelVersion, ModelVersion.id == LedgerBet.model_version_id
+        ).where(ModelVersion.status == "champion")
     rows = (await session.execute(stmt)).all()
     return [
         BetOut(
@@ -295,8 +300,10 @@ async def list_bets(
 
 
 @router.get("/bets/summary", response_model=BetSummary)
-async def bets_summary(session: SessionDep, request: Request) -> BetSummary:
-    values = await ledger_summary(session, request.app.state.settings)
+async def bets_summary(
+    session: SessionDep, request: Request, champion_only: bool = True
+) -> BetSummary:
+    values = await ledger_summary(session, request.app.state.settings, champion_only)
     return BetSummary(
         initial_bankroll=values.initial_bankroll,
         bankroll=values.bankroll,
@@ -313,7 +320,7 @@ async def bets_summary(session: SessionDep, request: Request) -> BetSummary:
 
 @router.get("/bets/equity-curve", response_model=list[EquityPointOut])
 async def bets_equity_curve(
-    session: SessionDep, request: Request
+    session: SessionDep, request: Request, champion_only: bool = True
 ) -> list[EquityPointOut]:
-    points = await ledger_equity_curve(session, request.app.state.settings)
+    points = await ledger_equity_curve(session, request.app.state.settings, champion_only)
     return [EquityPointOut(t=p.t, bankroll=p.bankroll) for p in points]
