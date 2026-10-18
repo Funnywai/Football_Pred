@@ -171,7 +171,7 @@ describe("EquityCurve", () => {
 });
 
 describe("PipelineFlow", () => {
-  it("renders all six stages with their statuses", () => {
+  it("renders all seven stages with their statuses", () => {
     render(
       <PipelineFlow
         jobs={[
@@ -183,7 +183,7 @@ describe("PipelineFlow", () => {
         now={NOW}
       />,
     );
-    for (const label of ["INGEST", "FEATURES", "PREDICT", "BET", "SETTLE", "RETRAIN"]) {
+    for (const label of ["INGEST", "FEATURES", "PREDICT", "BET", "SETTLE", "CLV", "RETRAIN"]) {
       expect(screen.getAllByText(label).length).toBeGreaterThanOrEqual(1);
     }
     expect(screen.getAllByText("running").length).toBeGreaterThanOrEqual(1);

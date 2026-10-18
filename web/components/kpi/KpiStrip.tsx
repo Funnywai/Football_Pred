@@ -2,8 +2,10 @@ import { Inbox } from "lucide-react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { RollingNumber } from "@/components/ui/RollingNumber";
+import { TermTip } from "@/components/ui/TermTip";
 import { isTruncated, type BetsWindow } from "@/lib/bets-window";
 import { formatCount, formatHkd, formatPercent } from "@/lib/format";
+import type { GlossaryKey } from "@/lib/glossary";
 import { bankrollBullet, breakevenBullet, winRateFrom, type WinRate } from "@/lib/kpi";
 import type { BetSummary } from "@/lib/types";
 
@@ -32,43 +34,47 @@ export function KpiStrip({ summary, bets }: KpiStripProps) {
     <div className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border-default bg-border-hairline md:grid-cols-4 xl:grid-cols-7">
         <KpiTile
-          label="Bankroll"
+          label={<TermTip term="bankroll">Bankroll</TermTip>}
           value={<RollingNumber value={summary.bankroll} format="hkd" />}
           bullet={bankrollBullet(summary.bankroll, summary.initial_bankroll)}
           bulletLabel={`Bankroll ${formatHkd(summary.bankroll)} against initial ${formatHkd(summary.initial_bankroll)}`}
           hint={`initial ${formatHkd(summary.initial_bankroll)}`}
         />
         <KpiTile
-          label="Realised"
+          label={<TermTip term="profit">Realised</TermTip>}
           value={<RollingNumber value={summary.realized_profit} format="signed-hkd" />}
           trend={profitPositive ? "up" : "down"}
         />
         <KpiTile
-          label="ROI"
+          label={<TermTip term="roi">ROI</TermTip>}
           value={<RollingNumber value={summary.roi} format="percent" />}
           bullet={breakevenBullet(summary.roi)}
           bulletLabel={`ROI ${formatPercent(summary.roi)} against breakeven`}
           hint="vs settled stakes"
         />
         <KpiTile
-          label="Yield"
+          label={<TermTip term="yield_pct">Yield</TermTip>}
           value={<RollingNumber value={summary.yield_pct} format="percent" />}
           bullet={breakevenBullet(summary.yield_pct)}
           bulletLabel={`Yield ${formatPercent(summary.yield_pct)} against breakeven`}
           hint="vs total stakes"
         />
         <KpiTile
-          label="Open stakes"
+          label={<TermTip term="open_stakes">Open stakes</TermTip>}
           value={<RollingNumber value={summary.open_stakes} format="hkd" />}
           hint={`${formatCount(summary.n_open)} open`}
         />
         <KpiTile
-          label="Bets"
+          label={<TermTip term="bets">Bets</TermTip>}
           value={<RollingNumber value={summary.n_bets} format="count" />}
-          hint={`${formatCount(summary.n_settled)} settled`}
+          hint={
+            <>
+              {formatCount(summary.n_settled)} <TermTip term="settled">settled</TermTip>
+            </>
+          }
         />
         <KpiTile
-          label="Win rate"
+          label={<TermTip term="win_rate">Win rate</TermTip>}
           value={
             winRate === null || winRate.rate === null ? (
               "—"
@@ -97,6 +103,18 @@ function winRateHint(winRate: WinRate | null, bets: BetsWindow | null): string {
   return record;
 }
 
+const FALLBACK_TERM: Record<string, GlossaryKey> = {
+  Bankroll: "bankroll",
+  "Initial bankroll": "bankroll",
+  "Realised profit": "profit",
+  ROI: "roi",
+  Yield: "yield_pct",
+  "Open stakes": "open_stakes",
+  Bets: "bets",
+  Settled: "settled",
+  "Win rate": "win_rate",
+};
+
 function KpiTableFallback({ summary, winRate }: { summary: BetSummary; winRate: WinRate | null }) {
   const rows: Array<[string, string]> = [
     ["Bankroll", formatHkd(summary.bankroll)],
@@ -115,14 +133,17 @@ function KpiTableFallback({ summary, winRate }: { summary: BetSummary; winRate: 
       <table className="mt-2 w-full border-collapse text-data">
         <caption className="sr-only">KPI strip values</caption>
         <tbody>
-          {rows.map(([label, value]) => (
-            <tr key={label} className="border-b border-border-hairline">
-              <th scope="row" className="py-1 text-left font-normal text-text-secondary">
-                {label}
-              </th>
-              <td className="py-1 text-right tnum text-text-primary">{value}</td>
-            </tr>
-          ))}
+          {rows.map(([label, value]) => {
+            const term = FALLBACK_TERM[label];
+            return (
+              <tr key={label} className="border-b border-border-hairline">
+                <th scope="row" className="py-1 text-left font-normal text-text-secondary">
+                  {term === undefined ? label : <TermTip term={term}>{label}</TermTip>}
+                </th>
+                <td className="py-1 text-right tnum text-text-primary">{value}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </details>

@@ -9,6 +9,7 @@ from sqlalchemy.orm import aliased
 from app.api.schemas import (
     BetOut,
     BetSummary,
+    ClvSummaryOut,
     EquityPointOut,
     MatchOut,
     ModelOut,
@@ -27,6 +28,7 @@ from app.db.models import (
     Result,
     Team,
 )
+from app.services.clv import summary as clv_summary
 from app.services.ledger import equity_curve as ledger_equity_curve
 from app.services.ledger import summary as ledger_summary
 
@@ -317,3 +319,22 @@ async def bets_equity_curve(
 ) -> list[EquityPointOut]:
     points = await ledger_equity_curve(session, request.app.state.settings)
     return [EquityPointOut(t=p.t, bankroll=p.bankroll) for p in points]
+
+
+@router.get("/clv/summary", response_model=ClvSummaryOut)
+async def clv_summary_endpoint(
+    session: SessionDep,
+    request: Request,
+    source: str = Query("hkjc", pattern="^(hkjc|football_data|all)$"),
+    model_version_id: int | None = None,
+    target: str | None = None,
+    value_only: bool = False,
+) -> dict[str, object]:
+    return await clv_summary(
+        session,
+        request.app.state.settings,
+        source=source,
+        model_version_id=model_version_id,
+        target=target,
+        value_only=value_only,
+    )

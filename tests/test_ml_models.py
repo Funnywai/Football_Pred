@@ -4,6 +4,17 @@ import pandas as pd
 import pytest
 
 from app.ml.features import FEATURE_COLUMNS, FEATURE_VERSION
+
+STATS_COLUMNS = [
+    "sot_for_home",
+    "sot_against_home",
+    "sot_for_away",
+    "sot_against_away",
+    "sot_diff_for",
+    "sot_diff_against",
+    "shot_accuracy_home",
+    "shot_accuracy_away",
+]
 from app.ml.models import (
     TARGET_1X2,
     TrainedModel,
@@ -106,6 +117,32 @@ class _StubBooster:
         shifted = logits - logits.max(axis=1, keepdims=True)
         exp = np.exp(shifted)
         return exp / exp.sum(axis=1, keepdims=True)
+
+
+class _RecordingBooster:
+    def __init__(self) -> None:
+        self.columns: list[str] = []
+
+    def predict(self, frame, raw_score: bool = False) -> np.ndarray:
+        self.columns = list(frame.columns)
+        return np.array([[1.0, 0.0, -1.0]])
+
+
+def test_v1_artifact_ignores_v2_columns() -> None:
+    v1_columns = [column for column in FEATURE_COLUMNS if column not in STATS_COLUMNS]
+    booster = _RecordingBooster()
+    model = TrainedModel(
+        target=TARGET_1X2,
+        booster=booster,
+        calibrators=[],
+        temperature=2.0,
+        feature_columns=v1_columns,
+        feature_version="v1",
+    )
+    features = {column: 0.0 for column in FEATURE_COLUMNS}
+    probs = predict_proba(model, [features])
+    assert probs.shape == (1, 3)
+    assert booster.columns == v1_columns
 
 
 def test_train_1x2_fits_temperature_and_valid_distribution() -> None:

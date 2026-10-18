@@ -99,6 +99,84 @@ async def test_fetch_historical_parses_pinnacle():
     await provider.aclose()
 
 
+async def test_fetch_historical_parses_shot_stats():
+    csv_text = (
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,FTR,"
+        "HS,AS,HST,AST,HC,AC,HxG,AxG\n"
+        "E0,21/08/2026,20:00,Arsenal,Coventry,3,0,H,18,7,8,2,9,3,2.45,0.62\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=csv_text.encode())
+
+    provider = FootballDataProvider(
+        BASE_URL, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)), divisions=["E0"]
+    )
+    records = await provider.fetch_historical(2026)
+    assert len(records) == 1
+    record = records[0]
+    assert record.home_shots == 18
+    assert record.away_shots == 7
+    assert record.home_sot == 8
+    assert record.away_sot == 2
+    assert record.home_corners == 9
+    assert record.away_corners == 3
+    assert record.home_xg == 2.45
+    assert record.away_xg == 0.62
+    await provider.aclose()
+
+
+async def test_fetch_historical_missing_shot_stats_are_none():
+    csv_text = (
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,FTR\n"
+        "E0,21/08/2026,20:00,Arsenal,Coventry,3,0,H\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=csv_text.encode())
+
+    provider = FootballDataProvider(
+        BASE_URL, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)), divisions=["E0"]
+    )
+    records = await provider.fetch_historical(2026)
+    record = records[0]
+    assert record.home_shots is None
+    assert record.away_shots is None
+    assert record.home_sot is None
+    assert record.away_sot is None
+    assert record.home_corners is None
+    assert record.away_corners is None
+    assert record.home_xg is None
+    assert record.away_xg is None
+    await provider.aclose()
+
+
+async def test_fetch_historical_blank_shot_stats_are_none():
+    csv_text = (
+        "Div,Date,Time,HomeTeam,AwayTeam,FTHG,FTAG,FTR,"
+        "HS,AS,HST,AST,HC,AC,HxG,AxG\n"
+        "E0,21/08/2026,20:00,Arsenal,Coventry,3,0,H,,,,,,,\n"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=csv_text.encode())
+
+    provider = FootballDataProvider(
+        BASE_URL, client=httpx.AsyncClient(transport=httpx.MockTransport(handler)), divisions=["E0"]
+    )
+    records = await provider.fetch_historical(2026)
+    record = records[0]
+    assert record.home_shots is None
+    assert record.away_shots is None
+    assert record.home_sot is None
+    assert record.away_sot is None
+    assert record.home_corners is None
+    assert record.away_corners is None
+    assert record.home_xg is None
+    assert record.away_xg is None
+    await provider.aclose()
+
+
 async def test_fetch_historical_returns_empty_for_missing_division():
     provider = FootballDataProvider(BASE_URL, client=_client(), divisions=["SP1"])
     assert await provider.fetch_historical(2026) == []

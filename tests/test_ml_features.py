@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 
 from app.ml.features import (
     FEATURE_COLUMNS,
+    FEATURE_VERSION,
     MarketPrior,
     MatchRow,
     build_feature_rows,
@@ -10,6 +11,17 @@ from app.ml.features import (
     hkjc_had_odds,
     hkjc_hdc_main,
 )
+
+STATS_COLUMNS = [
+    "sot_for_home",
+    "sot_against_home",
+    "sot_for_away",
+    "sot_against_away",
+    "sot_diff_for",
+    "sot_diff_against",
+    "shot_accuracy_home",
+    "shot_accuracy_away",
+]
 
 HAD_PAYLOAD = {
     "lines": [
@@ -42,6 +54,39 @@ def _row(mid, ko, home, away, hs=None, as_=None, code="EPL", season="2026/27"):
     return MatchRow(
         match_id=mid, kickoff_time=ko, home_team_id=home, away_team_id=away,
         league_code=code, season_label=season, home_score=hs, away_score=as_,
+    )
+
+
+def _stats_row(
+    mid,
+    ko,
+    home,
+    away,
+    *,
+    hs,
+    as_,
+    home_shots,
+    away_shots,
+    home_sot,
+    away_sot,
+    available_at,
+    code="EPL",
+    season="2026/27",
+):
+    return MatchRow(
+        match_id=mid,
+        kickoff_time=ko,
+        home_team_id=home,
+        away_team_id=away,
+        league_code=code,
+        season_label=season,
+        home_score=hs,
+        away_score=as_,
+        home_shots=home_shots,
+        away_shots=away_shots,
+        home_sot=home_sot,
+        away_sot=away_sot,
+        stats_available_at=available_at,
     )
 
 
@@ -87,6 +132,167 @@ def test_same_kickoff_does_not_leak() -> None:
     paired = {r.match_id: r.features for r in build_feature_rows([a, b])}
     solo = {r.match_id: r.features for r in build_feature_rows([b])}
     _equal(paired[2], solo[2])
+
+
+def test_feature_version_is_v2_and_stats_columns_present() -> None:
+    assert FEATURE_VERSION == "v2"
+    for column in STATS_COLUMNS:
+        assert column in FEATURE_COLUMNS
+
+
+def test_stats_features_are_nan_without_history() -> None:
+    t = datetime(2026, 8, 1, tzinfo=UTC)
+    rows = build_feature_rows([_row(1, t, 1, 2)])
+    for column in STATS_COLUMNS:
+        assert math.isnan(rows[0].features[column])
+
+
+def test_stats_are_used_only_when_available_48h_before_kickoff() -> None:
+    t = datetime(2026, 8, 1, tzinfo=UTC)
+    played = _stats_row(
+        1,
+        t,
+        1,
+        2,
+        hs=2,
+        as_=0,
+        home_shots=12,
+        away_shots=8,
+        home_sot=6,
+        away_sot=2,
+        available_at=t + timedelta(hours=24),
+    )
+    included = _row(2, t + timedelta(days=3), 1, 3)
+    excluded = _row(3, t + timedelta(days=1), 1, 4)
+    features = {r.match_id: r.features for r in build_feature_rows([played, included, excluded])}
+    assert features[2]["sot_for_home"] == 6.0
+    assert features[2]["sot_against_home"] == 2.0
+    assert features[2]["shot_accuracy_home"] == 0.5
+    assert math.isnan(features[3]["sot_for_home"])
+    assert math.isnan(features[3]["shot_accuracy_home"])
+
+
+def test_stats_features_use_both_teams_and_diffs() -> None:
+    t = datetime(2026, 8, 1, tzinfo=UTC)
+    first = _stats_row(
+        1,
+        t,
+        1,
+        2,
+        hs=2,
+        as_=0,
+        home_shots=10,
+        away_shots=20,
+        home_sot=4,
+        away_sot=8,
+        available_at=t + timedelta(hours=24),
+    )
+    second = _stats_row(
+        2,
+        t + timedelta(days=3),
+        2,
+        1,
+        hs=1,
+        as_=1,
+        home_shots=14,
+        away_shots=6,
+        home_sot=7,
+        away_sot=3,
+        available_at=t + timedelta(days=3, hours=24),
+    )
+    target = _row(3, t + timedelta(days=6), 1, 2)
+    features = {r.match_id: r.features for r in build_feature_rows([first, second, target])}[3]
+    assert features["sot_for_home"] == 3.5
+    assert features["sot_against_home"] == 7.5
+    assert features["sot_for_away"] == 7.5
+    assert features["sot_against_away"] == 3.5
+    assert features["sot_diff_for"] == -4.0
+    assert features["sot_diff_against"] == 4.0
+
+
+def test_shot_accuracy_skips_zero_shot_matches() -> None:
+    t = datetime(2026, 8, 1, tzinfo=UTC)
+    first = _stats_row(
+        1,
+        t,
+        1,
+        2,
+        hs=1,
+        as_=0,
+        home_shots=10,
+        away_shots=5,
+        home_sot=5,
+        away_sot=1,
+        available_at=t + timedelta(hours=24),
+    )
+    second = _stats_row(
+        2,
+        t + timedelta(days=1),
+        1,
+        3,
+        hs=0,
+        as_=0,
+        home_shots=0,
+        away_shots=4,
+        home_sot=0,
+        away_sot=2,
+        available_at=t + timedelta(days=1, hours=24),
+    )
+    target = _row(3, t + timedelta(days=4), 1, 4)
+    features = {r.match_id: r.features for r in build_feature_rows([first, second, target])}[3]
+    assert features["shot_accuracy_home"] == 0.5
+    assert features["sot_for_home"] == 2.5
+
+
+def test_stats_window_uses_last_ten_matches() -> None:
+    t = datetime(2026, 8, 1, tzinfo=UTC)
+    rows = [
+        _stats_row(
+            index + 1,
+            t + timedelta(days=index * 3),
+            1,
+            2,
+            hs=1,
+            as_=0,
+            home_shots=10,
+            away_shots=10,
+            home_sot=index,
+            away_sot=0,
+            available_at=t + timedelta(days=index * 3, hours=24),
+        )
+        for index in range(12)
+    ]
+    target = _row(100, t + timedelta(days=36), 1, 3)
+    features = {r.match_id: r.features for r in build_feature_rows([*rows, target])}[100]
+    assert features["sot_for_home"] == 6.5
+
+
+def test_stats_do_not_change_v1_features() -> None:
+    t = datetime(2026, 8, 1, tzinfo=UTC)
+    played = _stats_row(
+        1,
+        t,
+        1,
+        2,
+        hs=2,
+        as_=0,
+        home_shots=12,
+        away_shots=8,
+        home_sot=6,
+        away_sot=2,
+        available_at=t + timedelta(hours=24),
+    )
+    target = _row(2, t + timedelta(days=3), 1, 3)
+    with_stats = {r.match_id: r.features for r in build_feature_rows([played, target])}
+    without_stats = {
+        r.match_id: r.features
+        for r in build_feature_rows([_row(1, t, 1, 2, hs=2, as_=0), target])
+    }
+    v1_columns = [column for column in FEATURE_COLUMNS if column not in STATS_COLUMNS]
+    _equal(
+        {column: with_stats[2][column] for column in v1_columns},
+        {column: without_stats[2][column] for column in v1_columns},
+    )
 
 
 def test_market_prior_features() -> None:

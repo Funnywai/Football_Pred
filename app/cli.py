@@ -1,22 +1,30 @@
 import argparse
 import asyncio
-from datetime import UTC, datetime
+import json
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.config import configure_logging, get_settings
+from app.config import Settings, configure_logging, get_settings
 from app.data.leagues import seed_leagues
-from app.db.models import League, Match, OddsSnapshot, Result, Season, Team
+from app.db.models import League, Match, MatchStat, OddsSnapshot, Result, Season, Team
 from app.db.session import Database
+from app.ml.backtest import format_report, run_backtest
 from app.ml.jobs import predict_upcoming, retrain
 from app.providers.football_data.provider import FootballDataProvider, HistoricalMatchRecord
+from app.services import reset as reset_service
 from app.services.alias import TeamMatcher
 from app.services.fixtures import season_bounds
-from app.services.ledger import ledger_update
+from app.services.ledger import ledger_update, summary
 from app.services.runs import track_run
 
 DEFAULT_DIVISIONS = ["E0", "SP1", "I1", "D1", "F1"]
+
+# football-data.co.uk publishes results/stats after the match; 24h is a conservative
+# availability timestamp. Feature building additionally requires a 48h lead, so a
+# match's stats never enter a feature row for a kickoff within 48h of that match.
+STATS_AVAILABLE_AFTER = timedelta(hours=24)
 
 
 async def backfill(
@@ -87,6 +95,7 @@ async def _upsert_history(session: AsyncSession, records: list[HistoricalMatchRe
             session.add(match)
             await session.flush()
         await _upsert_result(session, match, record)
+        await _upsert_match_stats(session, match, record)
         existing = (
             await session.execute(
                 select(OddsSnapshot).where(
@@ -141,6 +150,64 @@ async def _upsert_result(
         existing.source = "football_data"
         existing.confirmed = True
         existing.confirmed_at = datetime.now(UTC)
+    await session.flush()
+
+
+def _has_stats(record: HistoricalMatchRecord) -> bool:
+    return any(
+        value is not None
+        for value in (
+            record.home_shots,
+            record.away_shots,
+            record.home_sot,
+            record.away_sot,
+            record.home_xg,
+            record.away_xg,
+            record.home_corners,
+            record.away_corners,
+        )
+    )
+
+
+async def _upsert_match_stats(
+    session: AsyncSession, match: Match, record: HistoricalMatchRecord
+) -> None:
+    if not _has_stats(record):
+        return
+    existing = (
+        await session.execute(
+            select(MatchStat).where(
+                MatchStat.match_id == match.id, MatchStat.source == "football_data"
+            )
+        )
+    ).scalar_one_or_none()
+    available_at = record.kickoff_time + STATS_AVAILABLE_AFTER
+    if existing is None:
+        session.add(
+            MatchStat(
+                match_id=match.id,
+                source="football_data",
+                home_shots=record.home_shots,
+                away_shots=record.away_shots,
+                home_sot=record.home_sot,
+                away_sot=record.away_sot,
+                home_xg=record.home_xg,
+                away_xg=record.away_xg,
+                home_corners=record.home_corners,
+                away_corners=record.away_corners,
+                available_at=available_at,
+            )
+        )
+    else:
+        existing.home_shots = record.home_shots
+        existing.away_shots = record.away_shots
+        existing.home_sot = record.home_sot
+        existing.away_sot = record.away_sot
+        existing.home_xg = record.home_xg
+        existing.away_xg = record.away_xg
+        existing.home_corners = record.home_corners
+        existing.away_corners = record.away_corners
+        existing.available_at = available_at
     await session.flush()
 
 
@@ -214,6 +281,122 @@ async def _run_ledger() -> None:
         await db.dispose()
 
 
+def _print_reset_counts(title: str, counts: dict[str, int], names: tuple[str, ...]) -> None:
+    print(title)
+    for name in names:
+        print(f"  {name}: {counts.get(name, 0)}")
+
+
+def _print_artifact_note(settings: Settings) -> None:
+    directory = settings.ml_artifact_dir
+    count = reset_service.artifact_file_count(directory)
+    print(f"  artifacts: {directory} ({count} file(s) remain; not deleted)")
+
+
+async def _run_reset_paper(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    execute = args.yes and not args.dry_run
+    if args.backup and execute:
+        try:
+            reset_service.backup_database(settings.database_url, args.backup)
+        except reset_service.ResetError as exc:
+            raise SystemExit(f"reset-paper aborted: {exc}") from exc
+        print(f"backup written to {args.backup}")
+    elif args.backup:
+        print(f"backup skipped in dry-run: {args.backup}")
+    db = Database(settings.database_url)
+    try:
+        async with db.session_factory() as session:
+            try:
+                before = await summary(session, settings)
+                plan = reset_service.ResetPlan(
+                    include_history=args.include_history,
+                    include_runs=args.include_runs,
+                    keep_models=args.keep_models,
+                )
+                counts = await reset_service.inspect(
+                    session,
+                    include_history=args.include_history,
+                    include_runs=args.include_runs,
+                    keep_models=args.keep_models,
+                )
+                scoped = plan.scoped_tables()
+                history = "delete" if args.include_history else "keep"
+                runs = "delete" if args.include_runs else "keep"
+                models = "keep" if args.keep_models else "delete"
+                print("reset-paper plan" + ("" if execute else " (dry-run)"))
+                print(f"  scope: history={history} runs={runs} models={models}")
+                _print_reset_counts("  would delete:", counts, scoped)
+                _print_reset_counts("  would keep:", counts, plan.kept_tables())
+                print(
+                    f"  bankroll: {before.bankroll:.2f} -> {settings.ledger_initial_bankroll:.2f}"
+                )
+                if not args.keep_models:
+                    _print_artifact_note(settings)
+                if not execute:
+                    print("nothing deleted; pass --yes to execute")
+                    return
+                deleted = await reset_service.reset(
+                    session,
+                    settings,
+                    include_history=args.include_history,
+                    include_runs=args.include_runs,
+                    keep_models=args.keep_models,
+                )
+                after = await summary(session, settings)
+                remaining = await reset_service.inspect(
+                    session,
+                    include_history=args.include_history,
+                    include_runs=args.include_runs,
+                    keep_models=args.keep_models,
+                )
+                await session.commit()
+                print("reset-paper executed")
+                _print_reset_counts("  deleted:", deleted, scoped)
+                _print_reset_counts("  remaining:", remaining, reset_service.ALL_TABLES)
+                print(f"  bankroll: {before.bankroll:.2f} -> {after.bankroll:.2f}")
+                if not args.keep_models:
+                    _print_artifact_note(settings)
+            except Exception as exc:
+                await session.rollback()
+                raise SystemExit(f"reset-paper failed: {exc}") from exc
+    finally:
+        await db.dispose()
+
+
+def _parse_iso(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+async def _run_backtest(args: argparse.Namespace) -> None:
+    """Read-only backtest: no commit, no writes, no migrations."""
+    settings = get_settings()
+    db = Database(settings.database_url)
+    try:
+        async with db.session_factory() as session:
+            report = await run_backtest(
+                session,
+                settings,
+                months=args.months,
+                target=args.target,
+                since=_parse_iso(args.since),
+                until=_parse_iso(args.until),
+            )
+        if args.json:
+            print(json.dumps(report, indent=2, sort_keys=True))
+        else:
+            print(format_report(report))
+    except ValueError as exc:
+        raise SystemExit(f"backtest failed: {exc}") from exc
+    finally:
+        await db.dispose()
+
+
 def main(argv: list[str] | None = None) -> None:
     configure_logging(get_settings().log_level)
     parser = argparse.ArgumentParser(prog="app.cli")
@@ -233,6 +416,38 @@ def main(argv: list[str] | None = None) -> None:
     subparsers.add_parser("predict", help="Run the champion prediction pass now")
     subparsers.add_parser("ledger", help="Run the paper-ledger settle+place pass now")
 
+    reset_parser = subparsers.add_parser(
+        "reset-paper",
+        help="Reset paper/shadow ledger state (dry-run unless --yes)",
+    )
+    reset_parser.add_argument(
+        "--dry-run", action="store_true", help="Print the plan only (default)"
+    )
+    reset_parser.add_argument("--yes", action="store_true", help="Execute the reset")
+    reset_parser.add_argument(
+        "--keep-models", action="store_true", help="Keep model_versions and artifacts"
+    )
+    reset_parser.add_argument(
+        "--include-runs", action="store_true", help="Also delete ingestion_runs"
+    )
+    reset_parser.add_argument(
+        "--include-history",
+        action="store_true",
+        help="Also delete odds_snapshots, results, and matches",
+    )
+    reset_parser.add_argument(
+        "--backup", metavar="PATH", default=None, help="Run pg_dump to PATH before deleting"
+    )
+
+    backtest_parser = subparsers.add_parser(
+        "backtest", help="Read-only backtest of the deployed 1x2 rule"
+    )
+    backtest_parser.add_argument("--months", type=int, default=24)
+    backtest_parser.add_argument("--target", default="1x2")
+    backtest_parser.add_argument("--since", default=None, help="ISO date/datetime lower bound")
+    backtest_parser.add_argument("--until", default=None, help="ISO date/datetime upper bound")
+    backtest_parser.add_argument("--json", action="store_true", help="Print JSON only")
+
     args = parser.parse_args(argv)
     if args.command == "backfill":
         asyncio.run(_run_backfill(args))
@@ -244,6 +459,10 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_run_predict())
     elif args.command == "ledger":
         asyncio.run(_run_ledger())
+    elif args.command == "reset-paper":
+        asyncio.run(_run_reset_paper(args))
+    elif args.command == "backtest":
+        asyncio.run(_run_backtest(args))
 
 
 if __name__ == "__main__":

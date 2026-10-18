@@ -1,4 +1,4 @@
-// Six-stage AI pipeline derivation. Every field comes from the real /ops/* surface:
+// Seven-stage AI pipeline derivation. Every field comes from the real /ops/* surface:
 // /ops/jobs (each job's normalised last_run and next_run_time), /ops/runs (stuck-running
 // detection), and /ops/data (the features-built timestamp). No heartbeat or status field
 // is invented.
@@ -41,6 +41,7 @@ export const STAGE_THRESHOLDS: Record<string, AgeThresholds> = {
   PREDICT: { degradedMs: 2 * HOUR, staleMs: 6 * HOUR },
   BET: { degradedMs: 2 * HOUR, staleMs: 6 * HOUR },
   SETTLE: { degradedMs: 1 * HOUR, staleMs: 6 * HOUR },
+  CLV: { degradedMs: 2 * HOUR, staleMs: 6 * HOUR },
   RETRAIN: { degradedMs: 8 * DAY, staleMs: 15 * DAY },
 };
 
@@ -56,6 +57,7 @@ const STAGE_DEFS: StageDef[] = [
   { id: "PREDICT", label: "PREDICT", jobId: "ml_predict" },
   { id: "BET", label: "BET", jobId: "ledger_update" },
   { id: "SETTLE", label: "SETTLE", jobId: "settle_results" },
+  { id: "CLV", label: "CLV", jobId: "clv_update" },
   { id: "RETRAIN", label: "RETRAIN", jobId: "ml_retrain" },
 ];
 

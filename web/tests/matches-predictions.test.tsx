@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import { MatchesPredictionsTable } from "@/components/tables/MatchesPredictionsTable";
@@ -80,6 +80,70 @@ describe("MatchesPredictionsTable", () => {
       />,
     );
     expect(screen.getByText("no bet")).toBeInTheDocument();
+  });
+
+  it("renders one row per model version and shows the model id", () => {
+    render(
+      <MatchesPredictionsTable
+        predictions={[
+          prediction({ id: 1, match_id: 1, outcome: "H", model_version_id: 1 }),
+          prediction({ id: 2, match_id: 1, outcome: "H", model_version_id: 2 }),
+        ]}
+        bets={windowOf([], 0)}
+      />,
+    );
+    expect(screen.getAllByRole("row")).toHaveLength(3); // header + 2 versions
+    expect(screen.getByText("#1")).toBeInTheDocument();
+    expect(screen.getByText("#2")).toBeInTheDocument();
+  });
+
+  it("marks only the prediction row of the bet's own model version as placed", () => {
+    render(
+      <MatchesPredictionsTable
+        predictions={[
+          prediction({ id: 1, match_id: 1, outcome: "H", model_version_id: 1 }),
+          prediction({ id: 2, match_id: 1, outcome: "H", model_version_id: 2 }),
+        ]}
+        bets={windowOf([bet({ id: 7, match_id: 1, outcome: "H", model_version_id: 2 })], 1)}
+      />,
+    );
+    const rows = screen.getAllByRole("row").slice(1);
+    expect(within(rows[0]!).getByText("no bet")).toBeInTheDocument();
+    expect(within(rows[0]!).queryByText("placed")).not.toBeInTheDocument();
+    expect(within(rows[1]!).getByText("placed")).toBeInTheDocument();
+  });
+
+  it("orders H, D and A rows of one match and model version in that order", () => {
+    render(
+      <MatchesPredictionsTable
+        predictions={[
+          prediction({ id: 1, match_id: 1, outcome: "A", model_version_id: 1 }),
+          prediction({ id: 2, match_id: 1, outcome: "H", model_version_id: 1 }),
+          prediction({ id: 3, match_id: 1, outcome: "D", model_version_id: 1 }),
+        ]}
+        bets={windowOf([], 0)}
+      />,
+    );
+    const outcomes = screen
+      .getAllByRole("row")
+      .slice(1)
+      .map((row) => within(row).getByText(/^[HDA]$/).textContent);
+    expect(outcomes).toEqual(["H", "D", "A"]);
+  });
+
+  it("searches by model id", () => {
+    render(
+      <MatchesPredictionsTable
+        predictions={[
+          prediction({ id: 1, match_id: 1, model_version_id: 1 }),
+          prediction({ id: 2, match_id: 2, model_version_id: 4 }),
+        ]}
+        bets={windowOf([], 0)}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Search predictions"), { target: { value: "#4" } });
+    expect(screen.getAllByRole("row")).toHaveLength(2); // header + the #4 row
+    expect(screen.getByText("#4")).toBeInTheDocument();
   });
 
   it("states the fetched window, the display order and the join counts", () => {

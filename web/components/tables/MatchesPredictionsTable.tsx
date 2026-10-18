@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Note } from "@/components/ui/Note";
 import { RevealFooter } from "@/components/ui/RevealFooter";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { TermTip } from "@/components/ui/TermTip";
 import { isTruncated, type BetsWindow } from "@/lib/bets-window";
 import {
   formatDateTime,
@@ -46,24 +47,29 @@ const COLUMNS: Column<PredictionBetRow>[] = [
     header: "Match",
     render: (row) => `${row.prediction.home_team} v ${row.prediction.away_team}`,
   },
+  {
+    key: "model",
+    header: <TermTip term="model">Model</TermTip>,
+    render: (row) => `#${row.prediction.model_version_id}`,
+  },
   { key: "target", header: "Target", render: (row) => row.prediction.target },
   { key: "outcome", header: "Outcome", render: (row) => row.prediction.outcome },
   {
     key: "prob",
-    header: "Prob",
+    header: <TermTip term="prob">Prob</TermTip>,
     numeric: true,
     render: (row) => formatPercent(row.prediction.prob),
   },
   {
     key: "implied",
-    header: "Implied",
+    header: <TermTip term="implied_prob">Implied</TermTip>,
     numeric: true,
     render: (row) =>
       row.prediction.implied_prob === null ? "—" : formatPercent(row.prediction.implied_prob),
   },
   {
     key: "edge",
-    header: "Edge",
+    header: <TermTip term="edge">Edge</TermTip>,
     numeric: true,
     render: (row) =>
       row.prediction.edge === null ? "—" : <EdgeCell value={row.prediction.edge} />,
@@ -80,13 +86,13 @@ const COLUMNS: Column<PredictionBetRow>[] = [
   },
   {
     key: "bet-odds",
-    header: "Bet odds",
+    header: <TermTip term="market_odds">Bet odds</TermTip>,
     numeric: true,
     render: (row) => (row.bet === null ? "—" : formatOdds(row.bet.odds)),
   },
   {
     key: "bet-stake",
-    header: "Bet stake",
+    header: <TermTip term="stake">Bet stake</TermTip>,
     numeric: true,
     render: (row) => (row.bet === null ? "—" : formatHkd(row.bet.stake)),
   },
@@ -98,6 +104,7 @@ function predictionMatches(row: PredictionBetRow, query: string): boolean {
       row.prediction.home_team,
       row.prediction.away_team,
       row.prediction.league_code,
+      `#${row.prediction.model_version_id}`,
       row.prediction.target,
       row.prediction.outcome,
       row.bet === null ? "no bet" : "placed",
@@ -155,7 +162,8 @@ export function MatchesPredictionsTable({ predictions, bets }: MatchesPrediction
       />
       <Note>
         Window: {predictionsWindowPhrase(predictions.length, PREDICTIONS_PAGE_SIZE)}. Rows
-        are shown newest kickoff first within that window.{" "}
+        are shown newest kickoff first within that window. Each row is one model
+        version&apos;s prediction.{" "}
         {joinSummaryPhrase(matched, unmatched, isTruncated(bets) || !bets.newestFirst, summaryBase)}
       </Note>
       <DataTable

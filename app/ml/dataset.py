@@ -6,11 +6,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 import pandas as pd
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.db.models import League, Match, OddsSnapshot, Result, Season
+from app.db.models import League, Match, MatchStat, OddsSnapshot, Result, Season
 from app.ml.deviq import devig_multiplicative
 from app.ml.features import (
     FEATURE_VERSION,
@@ -43,10 +43,28 @@ async def load_training_rows(
 ) -> list[MatchRow]:
     """Confirmed results from the configured history window, oldest first."""
     stmt = (
-        select(Match, Result, League.code, Season.label)
+        select(
+            Match,
+            Result,
+            League.code,
+            Season.label,
+            MatchStat.home_shots,
+            MatchStat.away_shots,
+            MatchStat.home_sot,
+            MatchStat.away_sot,
+            MatchStat.home_xg,
+            MatchStat.away_xg,
+            MatchStat.home_corners,
+            MatchStat.away_corners,
+            MatchStat.available_at,
+        )
         .join(Result, Result.match_id == Match.id)
         .join(League, League.id == Match.league_id)
         .join(Season, Season.id == Match.season_id)
+        .outerjoin(
+            MatchStat,
+            and_(MatchStat.match_id == Match.id, MatchStat.source == "football_data"),
+        )
         .where(Result.confirmed.is_(True))
         .where(Match.kickoff_time >= datetime(settings.ml_history_from_year, 7, 1, tzinfo=UTC))
         .where(League.code.in_(settings.league_whitelist))
@@ -65,8 +83,31 @@ async def load_training_rows(
             season_label=season_label,
             home_score=result.home_score,
             away_score=result.away_score,
+            home_shots=home_shots,
+            away_shots=away_shots,
+            home_sot=home_sot,
+            away_sot=away_sot,
+            home_xg=home_xg,
+            away_xg=away_xg,
+            home_corners=home_corners,
+            away_corners=away_corners,
+            stats_available_at=available_at,
         )
-        for match, result, league_code, season_label in rows
+        for (
+            match,
+            result,
+            league_code,
+            season_label,
+            home_shots,
+            away_shots,
+            home_sot,
+            away_sot,
+            home_xg,
+            away_xg,
+            home_corners,
+            away_corners,
+            available_at,
+        ) in rows
     ]
 
 

@@ -143,6 +143,38 @@ class Result(Base):
     match: Mapped[Match] = relationship(back_populates="result")
 
 
+class MatchStat(Base):
+    """Per-match shot statistics from an external source.
+
+    ``available_at`` is the leakage guard: a feature row may only use this match's
+    stats when ``available_at <= kickoff - 48h``. football-data.co.uk publishes
+    after the match, so the backfill stores ``kickoff + 24h`` conservatively.
+    """
+
+    __tablename__ = "match_stats"
+    __table_args__ = (
+        UniqueConstraint("match_id", "source", name="uq_match_stats_match_source"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    match_id: Mapped[int] = mapped_column(
+        ForeignKey("matches.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    home_shots: Mapped[int | None] = mapped_column(Integer)
+    away_shots: Mapped[int | None] = mapped_column(Integer)
+    home_sot: Mapped[int | None] = mapped_column(Integer)
+    away_sot: Mapped[int | None] = mapped_column(Integer)
+    home_corners: Mapped[int | None] = mapped_column(Integer)
+    away_corners: Mapped[int | None] = mapped_column(Integer)
+    home_xg: Mapped[float | None] = mapped_column(Float)
+    away_xg: Mapped[float | None] = mapped_column(Float)
+    available_at: Mapped[datetime] = mapped_column(UtcDateTime, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, nullable=False, server_default=func.now()
+    )
+
+
 class IngestionRun(Base):
     __tablename__ = "ingestion_runs"
 
@@ -219,6 +251,42 @@ class MatchFeature(Base):
         UtcDateTime, nullable=False, server_default=func.now()
     )
     features: Mapped[dict] = mapped_column(_json_type(), nullable=False, default=dict)
+
+
+class ClvRecord(Base):
+    """Closing-line value for one prediction, computed after kickoff.
+
+    One row per prediction (unique ``prediction_id``); ``label`` stays nullable
+    until a confirmed result exists, so CLV can be recorded before settlement.
+    """
+
+    __tablename__ = "clv_records"
+    __table_args__ = (
+        Index("ix_clv_records_model_version_computed", "model_version_id", "computed_at"),
+        Index("ix_clv_records_source_computed", "source", "computed_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    prediction_id: Mapped[int] = mapped_column(
+        ForeignKey("predictions.id", ondelete="CASCADE"), unique=True, nullable=False
+    )
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), nullable=False, index=True)
+    model_version_id: Mapped[int] = mapped_column(
+        ForeignKey("model_versions.id"), nullable=False, index=True
+    )
+    target: Mapped[str] = mapped_column(String(20), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(10), nullable=False)
+    model_prob: Mapped[float] = mapped_column(Float, nullable=False)
+    closing_prob: Mapped[float] = mapped_column(Float, nullable=False)
+    closing_odds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    edge: Mapped[float] = mapped_column(Float, nullable=False)
+    beat: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    is_value: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    label: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    computed_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, nullable=False, server_default=func.now()
+    )
 
 
 class LedgerBet(Base):

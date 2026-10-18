@@ -51,7 +51,7 @@ function stageOf(stages: ReturnType<typeof pipelineStages>, id: string) {
 }
 
 describe("pipelineStages", () => {
-  it("always returns the six stages in order", () => {
+  it("always returns the seven stages in order", () => {
     const stages = pipelineStages({ jobs: [], runs: [], data: null, now: NOW });
     expect(stages.map((stage) => stage.id)).toEqual([
       "INGEST",
@@ -59,8 +59,27 @@ describe("pipelineStages", () => {
       "PREDICT",
       "BET",
       "SETTLE",
+      "CLV",
       "RETRAIN",
     ]);
+  });
+
+  it("derives the CLV stage from the clv_update job", () => {
+    const stages = pipelineStages({
+      jobs: [
+        job("clv_update", {
+          status: "success",
+          finished_at: "2026-10-15T11:58:00Z",
+          records_upserted: 12,
+          error: null,
+        }),
+      ],
+      runs: [],
+      data: null,
+      now: NOW,
+    });
+    expect(stageOf(stages, "CLV").status).toBe("success");
+    expect(stageOf(stages, "CLV").lastActionAt).toBe("2026-10-15T11:58:00Z");
   });
 
   it("marks a stage never-tracked when its job has no last_run", () => {
@@ -311,7 +330,7 @@ describe("partial degradation", () => {
       data: data("2026-10-15T11:00:00Z"),
       now: NOW,
     });
-    for (const id of ["INGEST", "PREDICT", "BET", "SETTLE", "RETRAIN"]) {
+    for (const id of ["INGEST", "PREDICT", "BET", "SETTLE", "CLV", "RETRAIN"]) {
       expect(stageOf(stages, id).status).toBe("unavailable");
     }
     expect(stageOf(stages, "FEATURES").status).toBe("success");

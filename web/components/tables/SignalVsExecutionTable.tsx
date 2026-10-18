@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Note } from "@/components/ui/Note";
 import { RevealFooter } from "@/components/ui/RevealFooter";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { TermTip } from "@/components/ui/TermTip";
 import { betsWindowPhrase, type BetsWindow } from "@/lib/bets-window";
 import { formatDateTime, formatOdds, formatSignedPercent } from "@/lib/format";
 import { matchesQuery } from "@/lib/row-search";
@@ -37,20 +38,25 @@ const COLUMNS: Column<SignalExecutionRow>[] = [
   { key: "outcome", header: "Outcome", render: (row) => row.outcome },
   {
     key: "signal",
-    header: "Signal",
+    header: <TermTip term="signal">Signal</TermTip>,
     numeric: true,
     render: (row) => (row.signalOdds === null ? "—" : formatOdds(row.signalOdds)),
   },
-  { key: "execution", header: "Execution", numeric: true, render: (row) => formatOdds(row.executionOdds) },
+  {
+    key: "execution",
+    header: <TermTip term="execution">Execution</TermTip>,
+    numeric: true,
+    render: (row) => formatOdds(row.executionOdds),
+  },
   {
     key: "abs",
-    header: "Δ abs",
+    header: <TermTip term="delta_abs">Δ abs</TermTip>,
     numeric: true,
     render: (row) => (row.absDiff === null ? "—" : <DiffCell value={row.absDiff} />),
   },
   {
     key: "pct",
-    header: "Δ %",
+    header: <TermTip term="delta_pct">Δ %</TermTip>,
     numeric: true,
     render: (row) => (row.pctDiff === null ? "—" : <DiffCell value={row.pctDiff} percent />),
   },

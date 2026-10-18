@@ -119,3 +119,61 @@ class BetSummary(BaseModel):
 class EquityPointOut(BaseModel):
     t: datetime | None
     bankroll: float
+
+
+class ClvMetricsOut(BaseModel):
+    n: int
+    mean_edge: float | None
+    beat_fraction: float | None
+    beat_ci95: list[float] | None
+    mean_edge_ci95: list[float] | None
+
+
+class ClvModelOut(ClvMetricsOut):
+    model_version_id: int
+    target: str
+    status: str
+    algorithm: str
+
+
+class ClvCalibrationOut(BaseModel):
+    model_brier: float | None
+    model_logloss: float | None
+    market_brier: float | None
+    market_logloss: float | None
+    n_matches: int
+
+
+class ClvCriterionOut(BaseModel):
+    key: str
+    passed: bool
+    actual: int | float | None
+    required: int | float | None
+
+
+class ClvGateOut(BaseModel):
+    ready: bool
+    verdict: str
+    days_elapsed: int
+    days_remaining: int
+    criteria: list[ClvCriterionOut]
+
+
+class ClvSummaryOut(BaseModel):
+    source: str
+    n: int
+    mean_edge: float | None
+    beat_fraction: float | None
+    beat_ci95: list[float] | None
+    mean_edge_ci95: list[float] | None
+    by_outcome: dict[str, ClvMetricsOut]
+    by_model: list[ClvModelOut]
+    value: ClvMetricsOut
+    source_counts: dict[str, int]
+    fallback: int
+    calibration: ClvCalibrationOut
+    roi_real: float | None
+    roi_real_ci95: list[float] | None
+    n_settled_bets: int
+    settled_stakes: float
+    gate: ClvGateOut

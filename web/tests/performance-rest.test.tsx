@@ -148,7 +148,7 @@ describe("ResultsTable", () => {
 
 describe("ClvCard", () => {
   it("renders the five metrics, the champion identity and the three mandatory notes", () => {
-    render(<ClvCard models={[model({})]} />);
+    render(<ClvCard models={[model({})]} summary={null} />);
     expect(screen.getByText("+1.2%")).toBeInTheDocument();
     expect(screen.getByText("58.3%")).toBeInTheDocument();
     expect(screen.getByText("36")).toBeInTheDocument();
@@ -168,17 +168,17 @@ describe("ClvCard", () => {
   });
 
   it("renders an explicit unavailable state when /models is missing", () => {
-    render(<ClvCard models={null} />);
+    render(<ClvCard models={null} summary={null} />);
     expect(screen.getByText("CLV unavailable")).toBeInTheDocument();
   });
 
   it("says so when the registry has no champion 1x2 version", () => {
-    render(<ClvCard models={[model({ id: 3, target: "handicap", status: "champion" })]} />);
+    render(<ClvCard models={[model({ id: 3, target: "handicap", status: "champion" })]} summary={null} />);
     expect(screen.getByText("No champion 1x2 version")).toBeInTheDocument();
   });
 
   it("keeps the champion identity and says so when the version reports no metrics", () => {
-    render(<ClvCard models={[model({ metrics: {} })]} />);
+    render(<ClvCard models={[model({ metrics: {} })]} summary={null} />);
     expect(screen.getByText("No metrics reported")).toBeInTheDocument();
     expect(screen.getByText("#2")).toBeInTheDocument();
   });

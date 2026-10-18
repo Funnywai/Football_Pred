@@ -20,6 +20,7 @@ vi.mock("@/lib/performance-data", () => ({
     runs: null,
     data: null,
     models: null,
+    clv: null,
   }),
 }));
 

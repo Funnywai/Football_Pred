@@ -6,17 +6,18 @@ import type { BulletSpec } from "@/lib/kpi";
 import { BulletChart } from "./BulletChart";
 
 export interface KpiTileProps {
-  label: string;
+  label: ReactNode;
   value: ReactNode;
   trend?: "up" | "down";
   bullet?: BulletSpec;
   bulletLabel?: string;
-  hint?: string;
+  hint?: ReactNode;
 }
 
 export function KpiTile({ label, value, trend, bullet, bulletLabel, hint }: KpiTileProps) {
   const trendClass =
     trend === "up" ? "text-accent-mint" : trend === "down" ? "text-status-neg" : "text-text-primary";
+  const bulletText = bulletLabel ?? (typeof label === "string" ? label : "KPI value");
   return (
     <div className="flex flex-col gap-2 bg-surface-base px-4 py-4">
       <span className="text-overline uppercase text-text-tertiary">{label}</span>
@@ -26,7 +27,7 @@ export function KpiTile({ label, value, trend, bullet, bulletLabel, hint }: KpiT
         <span className="tnum">{value}</span>
       </span>
       {bullet === undefined ? null : (
-        <BulletChart spec={bullet} label={bulletLabel ?? label} />
+        <BulletChart spec={bullet} label={bulletText} />
       )}
       {hint === undefined ? null : (
         <span className="text-caption text-text-tertiary">{hint}</span>

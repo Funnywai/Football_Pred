@@ -91,8 +91,8 @@ export default async function PerformancePage() {
         <ResultsTable results={data.results} />
       </Panel>
 
-      <Panel id="clv" title="CLV card" action={<Source>/models</Source>}>
-        <ClvCard models={data.models} />
+      <Panel id="clv" title="CLV card" action={<Source>/clv/summary + /models</Source>}>
+        <ClvCard models={data.models} summary={data.clv} />
       </Panel>
     </div>
   );

@@ -3,6 +3,7 @@ import "server-only";
 import {
   getBetSummary,
   getBets,
+  getClvSummary,
   getEquityCurve,
   getModels,
   getPredictions,
@@ -14,6 +15,7 @@ import { PREDICTIONS_PAGE_SIZE } from "./predictions-window";
 import { RESULTS_PAGE_SIZE } from "./results-window";
 import type {
   BetSummary,
+  ClvSummary,
   EquityPoint,
   ModelVersion,
   OpsData,
@@ -43,6 +45,7 @@ export interface PerformanceData {
   runs: OpsRun[] | null;
   data: OpsData | null;
   models: ModelVersion[] | null;
+  clv: ClvSummary | null;
 }
 
 /**
@@ -52,16 +55,18 @@ export interface PerformanceData {
  */
 export async function loadPerformanceData(): Promise<PerformanceData> {
   const now = new Date();
-  const [summary, equity, predictions, results, jobs, runs, data, models] = await Promise.all([
-    getBetSummary(),
-    getEquityCurve(),
-    getPredictions(PREDICTIONS_PAGE_SIZE, false),
-    getResults(RESULTS_PAGE_SIZE),
-    getOpsJobs(),
-    getOpsRuns(RUNS_PAGE_SIZE),
-    getOpsData(),
-    getModels(),
-  ]);
+  const [summary, equity, predictions, results, jobs, runs, data, models, clv] =
+    await Promise.all([
+      getBetSummary(),
+      getEquityCurve(),
+      getPredictions(PREDICTIONS_PAGE_SIZE, false),
+      getResults(RESULTS_PAGE_SIZE),
+      getOpsJobs(),
+      getOpsRuns(RUNS_PAGE_SIZE),
+      getOpsData(),
+      getModels(),
+      getClvSummary(),
+    ]);
 
   const bets = await loadBetsWindow(summary.ok ? summary.data.n_bets : null);
 
@@ -76,6 +81,7 @@ export async function loadPerformanceData(): Promise<PerformanceData> {
     runs: runs.ok ? runs.data.runs : null,
     data: data.ok ? data.data : null,
     models: models.ok ? models.data : null,
+    clv: clv.ok ? clv.data : null,
   };
 }
 

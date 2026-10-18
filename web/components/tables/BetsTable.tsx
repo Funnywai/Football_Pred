@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Note } from "@/components/ui/Note";
 import { RevealFooter } from "@/components/ui/RevealFooter";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { TermTip } from "@/components/ui/TermTip";
 import { betsWindowPhrase, isTruncated, type BetsWindow } from "@/lib/bets-window";
 import {
   formatDateTime,
@@ -42,27 +43,27 @@ const COLUMNS: Column<Bet>[] = [
   { key: "teams", header: "Teams", render: (bet) => `${bet.home_team} v ${bet.away_team}` },
   { key: "target", header: "Target", render: (bet) => bet.target },
   { key: "outcome", header: "Outcome", render: (bet) => bet.outcome },
-  { key: "odds", header: "Odds", numeric: true, render: (bet) => formatOdds(bet.odds) },
+  { key: "odds", header: <TermTip term="execution">Odds</TermTip>, numeric: true, render: (bet) => formatOdds(bet.odds) },
   {
     key: "edge",
-    header: "Edge",
+    header: <TermTip term="edge">Edge</TermTip>,
     numeric: true,
     render: (bet) => (bet.edge === null ? "—" : formatPercent(bet.edge)),
   },
-  { key: "stake", header: "Stake", numeric: true, render: (bet) => formatHkd(bet.stake) },
+  { key: "stake", header: <TermTip term="stake">Stake</TermTip>, numeric: true, render: (bet) => formatHkd(bet.stake) },
   {
     key: "payout",
-    header: "Payout",
+    header: <TermTip term="payout">Payout</TermTip>,
     numeric: true,
     render: (bet) => (bet.payout === null ? "—" : formatHkd(bet.payout)),
   },
   {
     key: "profit",
-    header: "Profit",
+    header: <TermTip term="profit">Profit</TermTip>,
     numeric: true,
     render: (bet) => (bet.profit === null ? "—" : <ProfitCell value={bet.profit} />),
   },
-  { key: "status", header: "Status", render: (bet) => <BetStatusPill status={bet.status} /> },
+  { key: "status", header: <TermTip term="status">Status</TermTip>, render: (bet) => <BetStatusPill status={bet.status} /> },
   { key: "placed", header: "Placed", render: (bet) => formatDateTime(bet.placed_at) },
 ];
 
