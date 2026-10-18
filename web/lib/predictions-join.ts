@@ -1,6 +1,8 @@
 // Matches x predictions: joins /predictions to /bets in memory on (match_id, target,
-// outcome) — the key the spec names (docs/superpowers/specs/2026-10-15-dashboard-design.md
-// section 5.2f). The API has no join endpoint. The ledger places at most one bet per key
+// outcome, model_version_id) — the same key the ledger and signal-vs-execution join use.
+// `/predictions` is fetched with champion_only=false, so the same match/outcome appears
+// once per model version; the version is part of the key so a bet only marks its own
+// version's row. The API has no join endpoint. The ledger places at most one bet per key
 // (app/services/ledger.py skips keys already in the ledger); if a key ever carries
 // several, the most recently placed bet is shown. Pure and free of `server-only`.
 
@@ -15,7 +17,7 @@ export interface PredictionBetRow {
 export function predictionBetRows(predictions: Prediction[], bets: Bet[]): PredictionBetRow[] {
   const index = new Map<string, Bet>();
   for (const bet of bets) {
-    const key = joinKey(bet.match_id, bet.target, bet.outcome);
+    const key = joinKey(bet.match_id, bet.target, bet.outcome, bet.model_version_id);
     const current = index.get(key);
     if (current === undefined || placedAtMs(bet) >= placedAtMs(current)) {
       index.set(key, bet);
@@ -24,13 +26,26 @@ export function predictionBetRows(predictions: Prediction[], bets: Bet[]): Predi
 
   const rows = predictions.map((prediction) => ({
     prediction,
-    bet: index.get(joinKey(prediction.match_id, prediction.target, prediction.outcome)) ?? null,
+    bet:
+      index.get(
+        joinKey(
+          prediction.match_id,
+          prediction.target,
+          prediction.outcome,
+          prediction.model_version_id,
+        ),
+      ) ?? null,
   }));
   return rows.sort(byKickoffDesc);
 }
 
-function joinKey(matchId: number, target: string, outcome: string): string {
-  return `${matchId}|${target}|${outcome}`;
+function joinKey(
+  matchId: number,
+  target: string,
+  outcome: string,
+  modelVersionId: number,
+): string {
+  return `${matchId}|${target}|${outcome}|${modelVersionId}`;
 }
 
 function placedAtMs(bet: Bet): number {
@@ -43,14 +58,24 @@ function kickoffMs(prediction: Prediction): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+const OUTCOME_RANK: Record<string, number> = { H: 0, D: 1, A: 2 };
+
+function outcomeRank(outcome: string): number {
+  return OUTCOME_RANK[outcome] ?? 3;
+}
+
 function byKickoffDesc(a: PredictionBetRow, b: PredictionBetRow): number {
   const at = kickoffMs(a.prediction);
   const bt = kickoffMs(b.prediction);
   if (at !== bt) return bt - at;
+  const match = a.prediction.match_id - b.prediction.match_id;
+  if (match !== 0) return match;
   const target = a.prediction.target.localeCompare(b.prediction.target);
   if (target !== 0) return target;
-  const outcome = a.prediction.outcome.localeCompare(b.prediction.outcome);
+  const outcome = outcomeRank(a.prediction.outcome) - outcomeRank(b.prediction.outcome);
   if (outcome !== 0) return outcome;
+  const version = a.prediction.model_version_id - b.prediction.model_version_id;
+  if (version !== 0) return version;
   return b.prediction.id - a.prediction.id;
 }
 

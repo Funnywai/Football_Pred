@@ -81,7 +81,7 @@ describe("predictionBetRows", () => {
     expect(byPrediction.get(2)).toBeNull();
   });
 
-  it("matches every model version's prediction for the same key to the same bet", () => {
+  it("matches only the prediction with the same model version", () => {
     const rows = predictionBetRows(
       [
         prediction({ id: 1, model_version_id: 1 }),
@@ -89,10 +89,12 @@ describe("predictionBetRows", () => {
       ],
       [bet({ id: 7, model_version_id: 2 })],
     );
-    expect(rows.every((row) => row.bet?.id === 7)).toBe(true);
+    const byPrediction = new Map(rows.map((row) => [row.prediction.id, row.bet]));
+    expect(byPrediction.get(1)).toBeNull();
+    expect(byPrediction.get(2)?.id).toBe(7);
   });
 
-  it("orders rows by kickoff descending, then target and outcome ascending", () => {
+  it("orders rows by kickoff descending, then match, target, outcome H/D/A, model version and prediction id", () => {
     const rows = predictionBetRows(
       [
         prediction({ id: 1, match_id: 1, kickoff_time: "2026-10-10T12:00:00Z", outcome: "H" }),
@@ -101,7 +103,20 @@ describe("predictionBetRows", () => {
       ],
       [],
     );
-    expect(rows.map((row) => row.prediction.id)).toEqual([2, 3, 1]);
+    expect(rows.map((row) => row.prediction.id)).toEqual([2, 1, 3]);
+  });
+
+  it("orders H, D and A before falling back to model version and prediction id", () => {
+    const rows = predictionBetRows(
+      [
+        prediction({ id: 1, match_id: 1, outcome: "A", model_version_id: 1 }),
+        prediction({ id: 2, match_id: 1, outcome: "H", model_version_id: 2 }),
+        prediction({ id: 3, match_id: 1, outcome: "D", model_version_id: 1 }),
+        prediction({ id: 4, match_id: 1, outcome: "H", model_version_id: 1 }),
+      ],
+      [],
+    );
+    expect(rows.map((row) => row.prediction.id)).toEqual([4, 2, 3, 1]);
   });
 
   it("keeps the most recently placed bet when a key somehow carries several", () => {

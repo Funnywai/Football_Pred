@@ -120,6 +120,68 @@ export interface EquityPoint {
   bankroll: number;
 }
 
+// ---- /clv/summary (app/api/schemas.py ClvSummaryOut) ----
+
+export interface ClvMetrics {
+  n: number;
+  mean_edge: number | null;
+  beat_fraction: number | null;
+  beat_ci95: [number, number] | null;
+  mean_edge_ci95: [number, number] | null;
+}
+
+export interface ClvModel extends ClvMetrics {
+  model_version_id: number;
+  target: string;
+  status: string;
+  algorithm: string;
+}
+
+export interface ClvCalibration {
+  model_brier: number | null;
+  model_logloss: number | null;
+  market_brier: number | null;
+  market_logloss: number | null;
+  n_matches: number;
+}
+
+export interface ClvCriterion {
+  key: string;
+  passed: boolean;
+  actual: number | null;
+  required: number | null;
+}
+
+export type ClvGateVerdict = "pass" | "fail" | "collecting";
+
+export interface ClvGate {
+  ready: boolean;
+  verdict: ClvGateVerdict;
+  days_elapsed: number;
+  days_remaining: number;
+  criteria: ClvCriterion[];
+}
+
+export interface ClvSummary {
+  source: string;
+  n: number;
+  mean_edge: number | null;
+  beat_fraction: number | null;
+  beat_ci95: [number, number] | null;
+  mean_edge_ci95: [number, number] | null;
+  by_outcome: Record<string, ClvMetrics>;
+  by_model: ClvModel[];
+  value: ClvMetrics;
+  source_counts: Record<string, number>;
+  fallback: number;
+  calibration: ClvCalibration;
+  roi_real: number | null;
+  roi_real_ci95: [number, number] | null;
+  n_settled_bets: number;
+  settled_stakes: number;
+  gate: ClvGate;
+}
+
 // ---- /ops/* surface (app/api/ops.py, app/api/ops_data.py) ----
 
 export interface OpsStatus {

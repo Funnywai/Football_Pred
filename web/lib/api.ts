@@ -3,6 +3,7 @@ import "server-only";
 import type {
   Bet,
   BetSummary,
+  ClvSummary,
   EquityPoint,
   Match,
   ModelVersion,
@@ -75,3 +76,8 @@ export const getMatches = (limit = 100): Promise<ApiResult<Match[]>> =>
 
 export const getResults = (limit = 100): Promise<ApiResult<Result[]>> =>
   apiGet(`/results?limit=${limit}`);
+
+// `source` defaults to hkjc on the API; the dashboard asks for it explicitly so the card
+// never silently changes source if the server default moves.
+export const getClvSummary = (source = "hkjc"): Promise<ApiResult<ClvSummary>> =>
+  apiGet(`/clv/summary?source=${encodeURIComponent(source)}`);
