@@ -37,6 +37,14 @@ class HistoricalMatchRecord(BaseModel):
     home_score: int
     away_score: int
     odds: dict[str, dict[str, list[float | None]]] = Field(default_factory=dict)
+    home_shots: int | None = None
+    away_shots: int | None = None
+    home_sot: int | None = None
+    away_sot: int | None = None
+    home_xg: float | None = None
+    away_xg: float | None = None
+    home_corners: int | None = None
+    away_corners: int | None = None
 
 
 def season_code(year: int) -> str:
@@ -178,6 +186,14 @@ class FootballDataProvider:
                         home_score=home_score,
                         away_score=away_score,
                         odds=_parse_odds(row),
+                        home_shots=_to_int(row.get("HS")),
+                        away_shots=_to_int(row.get("AS")),
+                        home_sot=_to_int(row.get("HST")),
+                        away_sot=_to_int(row.get("AST")),
+                        home_xg=_to_float(row.get("HxG")),
+                        away_xg=_to_float(row.get("AxG")),
+                        home_corners=_to_int(row.get("HC")),
+                        away_corners=_to_int(row.get("AC")),
                     )
                 )
         return records

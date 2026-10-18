@@ -5,7 +5,7 @@ import pytest
 from ml_helpers import make_db, seed_context, seed_finished_match, seed_team
 
 from app.config import Settings
-from app.db.models import OddsSnapshot
+from app.db.models import MatchStat, OddsSnapshot
 from app.ml.dataset import build_dataset, load_market_priors, load_training_rows, temporal_split
 
 HAD = {"lines": [{"combinations": [
@@ -62,6 +62,87 @@ async def test_load_training_rows_and_market_priors(tmp_path) -> None:
             assert abs(sum(prior.had_probs.values()) - 1.0) < 1e-9
             assert prior.hdc_line == -0.5
             assert prior.source == "hkjc"
+    finally:
+        await db.dispose()
+
+
+async def test_load_training_rows_fills_match_stats(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        t = datetime(2026, 8, 1, 18, 0, tzinfo=UTC)
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            home = await seed_team(session, "Home")
+            away = await seed_team(session, "Away")
+            match = await seed_finished_match(
+                session, league, season, home, away,
+                match_id_label="M1", kickoff=t, home_score=2, away_score=1,
+            )
+            session.add(
+                MatchStat(
+                    match_id=match.id,
+                    source="football_data",
+                    home_shots=15,
+                    away_shots=9,
+                    home_sot=6,
+                    away_sot=3,
+                    home_xg=1.8,
+                    away_xg=0.9,
+                    home_corners=7,
+                    away_corners=4,
+                    available_at=t + timedelta(hours=24),
+                )
+            )
+            await session.commit()
+        async with db.session_factory() as session:
+            rows = await load_training_rows(session, _settings())
+            row = rows[0]
+            assert row.home_shots == 15
+            assert row.away_shots == 9
+            assert row.home_sot == 6
+            assert row.away_sot == 3
+            assert row.home_xg == 1.8
+            assert row.away_xg == 0.9
+            assert row.home_corners == 7
+            assert row.away_corners == 4
+            assert row.stats_available_at == t + timedelta(hours=24)
+    finally:
+        await db.dispose()
+
+
+async def test_build_dataset_handles_rows_with_and_without_match_stats(tmp_path) -> None:
+    db = await make_db(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            league, season = await seed_context(session)
+            teams = [await seed_team(session, f"T{i}") for i in range(6)]
+            base = datetime(2026, 8, 1, 15, 0, tzinfo=UTC)
+            for index in range(40):
+                match = await seed_finished_match(
+                    session, league, season, teams[index % 6], teams[(index + 1) % 6],
+                    match_id_label=f"M{index}", kickoff=base + timedelta(days=index),
+                    home_score=index % 4, away_score=(index + 1) % 3,
+                    had_payload=HAD, hdc_payload=HDC,
+                )
+                if index < 20:
+                    session.add(
+                        MatchStat(
+                            match_id=match.id,
+                            source="football_data",
+                            home_shots=10,
+                            away_shots=8,
+                            home_sot=4,
+                            away_sot=2,
+                            available_at=match.kickoff_time + timedelta(hours=24),
+                        )
+                    )
+            await session.commit()
+        async with db.session_factory() as session:
+            dataset = await build_dataset(session, _settings())
+        frame = pd.concat([dataset.train, dataset.calibration, dataset.eval])
+        assert "sot_for_home" in frame.columns
+        assert frame["sot_for_home"].notna().any()
+        assert frame["sot_for_home"].isna().any()
     finally:
         await db.dispose()
 

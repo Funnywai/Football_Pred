@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings
 from app.ml.jobs import build_ml_scheduler
 from app.providers.base import Provider
+from app.services.clv import clv_update
 from app.services.ledger import ledger_update
 from app.services.odds import OddsSync, compact_odds_snapshots, prune_odds_snapshots
 from app.services.results import ResultReconciler
@@ -61,6 +62,16 @@ def build_scheduler(
             max_instances=1,
             coalesce=True,
         )
+    if settings.clv_enable:
+        scheduler.add_job(
+            _clv_update_job,
+            "interval",
+            seconds=settings.clv_update_interval,
+            args=[settings, session_factory],
+            id="clv_update",
+            max_instances=1,
+            coalesce=True,
+        )
     return scheduler
 
 
@@ -86,6 +97,16 @@ async def _settle_results_job(
         await ResultReconciler(session_factory, hkjc_provider, fallback_provider, settings).run()
     except Exception:
         logger.exception("settle_results job failed")
+
+
+async def _clv_update_job(
+    settings: Settings,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    try:
+        await clv_update(session_factory, settings)
+    except Exception:
+        logger.exception("clv_update job failed")
 
 
 async def _prune_odds_job(

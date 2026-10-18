@@ -9,11 +9,11 @@ sharing a kickoff time cannot leak into each other.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.ml.labels import parse_handicap_line
 
-FEATURE_VERSION = "v1"
+FEATURE_VERSION = "v2"
 
 ELO_INITIAL = 1500.0
 ELO_K = 20.0
@@ -22,6 +22,8 @@ FORM_WINDOW = 5
 STRENGTH_WINDOW = 10
 H2H_WINDOW = 5
 DEFAULT_REST_DAYS = 7.0
+STATS_WINDOW = 10
+STATS_AVAILABILITY_LEAD = timedelta(hours=48)
 
 LEAGUE_CODES: dict[str, int] = {
     "EPL": 0,
@@ -36,6 +38,8 @@ FEATURE_COLUMNS: list[str] = [
     "elo_home", "elo_away", "elo_diff",
     "attack_home", "defense_home", "attack_away", "defense_away",
     "attack_diff", "defense_diff",
+    "sot_for_home", "sot_against_home", "sot_for_away", "sot_against_away",
+    "sot_diff_for", "sot_diff_against", "shot_accuracy_home", "shot_accuracy_away",
     "form_points_home", "form_gd_home", "form_points_away", "form_gd_away",
     "home_form_points", "away_form_points",
     "rest_days_home", "rest_days_away",
@@ -59,6 +63,15 @@ class MatchRow:
     season_label: str
     home_score: int | None = None
     away_score: int | None = None
+    home_shots: int | None = None
+    away_shots: int | None = None
+    home_sot: int | None = None
+    away_sot: int | None = None
+    home_xg: float | None = None
+    away_xg: float | None = None
+    home_corners: int | None = None
+    away_corners: int | None = None
+    stats_available_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -133,11 +146,21 @@ def football_data_close_odds(payload: dict) -> dict[str, float] | None:
     return None
 
 
+@dataclass(frozen=True)
+class _TeamStats:
+    available_at: datetime
+    sot_for: int
+    sot_against: int
+    shots_for: int | None
+    shots_against: int | None
+
+
 @dataclass
 class _TeamHistory:
     results: list[tuple[int, int]] = field(default_factory=list)
     home_results: list[tuple[int, int]] = field(default_factory=list)
     away_results: list[tuple[int, int]] = field(default_factory=list)
+    stats: list[_TeamStats] = field(default_factory=list)
     last_kickoff: datetime | None = None
     season_counts: dict[str, int] = field(default_factory=dict)
 
@@ -204,6 +227,54 @@ def _h2h_net(state: _State, home_team_id: int, away_team_id: int) -> float:
     return _mean([float(value) for value in nets])
 
 
+def _stats_window(history: _TeamHistory, kickoff: datetime) -> list[_TeamStats]:
+    """Last ``STATS_WINDOW`` matches whose stats were available 48h before kickoff.
+
+    The guard is time-based, not match-order-based: football-data publishes after
+    the match, so a match played inside the 48h window must not contribute even
+    though it is chronologically earlier.
+    """
+    cutoff = kickoff - STATS_AVAILABILITY_LEAD
+    eligible = [entry for entry in history.stats if entry.available_at <= cutoff]
+    return eligible[-STATS_WINDOW:]
+
+
+def _shot_accuracy(entries: list[_TeamStats]) -> float:
+    """Mean SOT/shots; matches with zero or missing shots are skipped (NaN)."""
+    values = [
+        entry.sot_for / entry.shots_for
+        for entry in entries
+        if entry.shots_for is not None and entry.shots_for > 0
+    ]
+    return _mean(values) if values else float("nan")
+
+
+def _stats_features(
+    home: _TeamHistory, away: _TeamHistory, kickoff: datetime
+) -> dict[str, float]:
+    nan = float("nan")
+    home_window = _stats_window(home, kickoff)
+    away_window = _stats_window(away, kickoff)
+    sot_for_home = _mean([float(entry.sot_for) for entry in home_window]) if home_window else nan
+    sot_against_home = (
+        _mean([float(entry.sot_against) for entry in home_window]) if home_window else nan
+    )
+    sot_for_away = _mean([float(entry.sot_for) for entry in away_window]) if away_window else nan
+    sot_against_away = (
+        _mean([float(entry.sot_against) for entry in away_window]) if away_window else nan
+    )
+    return {
+        "sot_for_home": sot_for_home,
+        "sot_against_home": sot_against_home,
+        "sot_for_away": sot_for_away,
+        "sot_against_away": sot_against_away,
+        "sot_diff_for": sot_for_home - sot_for_away,
+        "sot_diff_against": sot_against_home - sot_against_away,
+        "shot_accuracy_home": _shot_accuracy(home_window),
+        "shot_accuracy_away": _shot_accuracy(away_window),
+    }
+
+
 def _features_for(state: _State, row: MatchRow, prior: MarketPrior | None) -> dict[str, float]:
     home = state.team(row.home_team_id)
     away = state.team(row.away_team_id)
@@ -228,6 +299,7 @@ def _features_for(state: _State, row: MatchRow, prior: MarketPrior | None) -> di
         "defense_away": defense_away,
         "attack_diff": attack_home - attack_away,
         "defense_diff": defense_home - defense_away,
+        **_stats_features(home, away, row.kickoff_time),
         "form_points_home": form_points_home,
         "form_gd_home": form_gd_home,
         "form_points_away": form_points_away,
@@ -291,6 +363,29 @@ def _update(state: _State, row: MatchRow) -> None:
     state.elo[row.away_team_id] = elo_away + ELO_K * ((1.0 - actual_home) - (1.0 - expected_home))
     key = (min(row.home_team_id, row.away_team_id), max(row.home_team_id, row.away_team_id))
     state.h2h.setdefault(key, []).append((row.home_team_id, home_score - away_score))
+    if (
+        row.stats_available_at is not None
+        and row.home_sot is not None
+        and row.away_sot is not None
+    ):
+        home.stats.append(
+            _TeamStats(
+                available_at=row.stats_available_at,
+                sot_for=row.home_sot,
+                sot_against=row.away_sot,
+                shots_for=row.home_shots,
+                shots_against=row.away_shots,
+            )
+        )
+        away.stats.append(
+            _TeamStats(
+                available_at=row.stats_available_at,
+                sot_for=row.away_sot,
+                sot_against=row.home_sot,
+                shots_for=row.away_shots,
+                shots_against=row.home_shots,
+            )
+        )
 
 
 def build_feature_rows(

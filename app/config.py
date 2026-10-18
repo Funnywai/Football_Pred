@@ -62,6 +62,16 @@ class Settings(BaseSettings):
     ledger_max_stake_fraction: float = 0.05
     ledger_min_stake: float = 10.0
 
+    # Live CLV tracking + paper-validation stop/go gate (sub-system C follow-up)
+    clv_enable: bool = True
+    clv_update_interval: int = 3600
+    clv_gate_min_n: int = 200
+    clv_gate_min_fraction: float = 0.52
+    clv_gate_min_bets: int = 500
+    clv_gate_min_roi: float = 0.0
+    clv_gate_days: int = 90
+    clv_gate_start_date: str | None = None
+
     @field_validator("league_whitelist", mode="before")
     @classmethod
     def _parse_whitelist(cls, value: object) -> object:
