@@ -159,6 +159,20 @@ async def test_seed_leagues_backfills_hkjc_tourn_id(tmp_path):
         await db.dispose()
 
 
+async def test_seed_leagues_seeds_bundesliga_and_ligue1_tourn_ids(tmp_path):
+    db = await _db(tmp_path)
+    try:
+        async with db.session_factory() as session:
+            leagues = {
+                league.code: league
+                for league in (await session.execute(select(League))).scalars().all()
+            }
+            assert leagues["BUNDESLIGA"].hkjc_tourn_id == "50072572"
+            assert leagues["LIGUE1"].hkjc_tourn_id == "50072542"
+    finally:
+        await db.dispose()
+
+
 async def test_fixture_sync_updates_existing_match(tmp_path):
     db = await _db(tmp_path)
     try:

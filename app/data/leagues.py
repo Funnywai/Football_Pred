@@ -30,12 +30,14 @@ LEAGUE_SEED: list[dict[str, str]] = [
         "name_en": "German Bundesliga",
         "name_ch": "德國甲組聯賽",
         "country": "Germany",
+        "hkjc_tourn_id": "50072572",
     },
     {
         "code": "LIGUE1",
         "name_en": "French Ligue 1",
         "name_ch": "法國甲組聯賽",
         "country": "France",
+        "hkjc_tourn_id": "50072542",
     },
     {
         "code": "UCL",
