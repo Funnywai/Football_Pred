@@ -15,6 +15,7 @@ from app.db.models import (
     LedgerBet,
     ModelVersion,
     Prediction,
+    Result,
     Season,
     Team,
 )
@@ -159,7 +160,7 @@ async def _add_clv_match(
     version_id: int,
     model_probs: dict[str, float],
     closing_probs: dict[str, float],
-    label: str,
+    label: str | None,
     source: str = "hkjc",
     is_value: bool = True,
     outcomes: tuple[str, ...] = ("H", "D", "A"),
@@ -265,6 +266,65 @@ async def test_update_clv_is_idempotent(tmp_path) -> None:
                 await session.execute(select(func.count()).select_from(ClvRecord))
             ).scalar_one()
         assert count == 3
+    finally:
+        await db.dispose()
+
+
+async def test_update_clv_backfills_label_after_result_confirmed(tmp_path) -> None:
+    db, version_id, match_ids, *_ = await _seed_world(tmp_path)
+    try:
+        await _add_predictions(db, match_ids, version_id)
+        async with db.session_factory() as session:
+            result = (
+                await session.execute(select(Result).where(Result.match_id == match_ids[0]))
+            ).scalar_one()
+            result.confirmed = False
+            await session.commit()
+
+        settings = Settings(_env_file=None)
+        async with db.session_factory() as session:
+            assert await update_clv(session, settings) == 3
+            await session.commit()
+        async with db.session_factory() as session:
+            labels = (
+                (await session.execute(select(ClvRecord.label))).scalars().all()
+            )
+        assert labels == [None, None, None]
+
+        async with db.session_factory() as session:
+            result = (
+                await session.execute(select(Result).where(Result.match_id == match_ids[0]))
+            ).scalar_one()
+            result.confirmed = True
+            await session.commit()
+
+        async with db.session_factory() as session:
+            assert await update_clv(session, settings) == 3
+            await session.commit()
+        async with db.session_factory() as session:
+            records = (await session.execute(select(ClvRecord))).scalars().all()
+        assert len(records) == 3
+        assert {record.label for record in records} == {"H"}
+    finally:
+        await db.dispose()
+
+
+async def test_summary_calibration_uses_confirmed_result_when_label_missing(tmp_path) -> None:
+    db, version_id, match_ids, *_ = await _seed_world(tmp_path)
+    try:
+        await _add_clv_match(
+            db,
+            match_id=match_ids[0],
+            version_id=version_id,
+            model_probs=MODEL,
+            closing_probs=CLOSING,
+            label=None,
+        )
+        async with db.session_factory() as session:
+            result = await summary(session, Settings(_env_file=None))
+        assert result["calibration"]["n_matches"] == 1
+        assert result["calibration"]["model_brier"] is not None
+        assert result["calibration"]["market_brier"] is not None
     finally:
         await db.dispose()
 

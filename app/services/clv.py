@@ -70,6 +70,27 @@ class Gate(TypedDict):
     criteria: list[Criterion]
 
 
+async def _backfill_labels(session: AsyncSession) -> int:
+    """Fill ``label`` on records inserted before the result was confirmed.
+
+    ``update_clv`` skips predictions that already have a CLV record, so a record
+    created while the match had no confirmed result would otherwise keep
+    ``label=None`` forever and calibration would stay empty. This pass is
+    idempotent and only touches confirmed results.
+    """
+    rows = (
+        await session.execute(
+            select(ClvRecord, Result)
+            .join(Result, Result.match_id == ClvRecord.match_id)
+            .where(ClvRecord.label.is_(None))
+            .where(Result.confirmed.is_(True))
+        )
+    ).all()
+    for record, result in rows:
+        record.label = label_1x2(result.home_score, result.away_score)
+    return len(rows)
+
+
 async def update_clv(
     session: AsyncSession, settings: Settings, limit: int = 5000
 ) -> int:
@@ -77,8 +98,11 @@ async def update_clv(
 
     Predictions already carrying a record are skipped, so repeated runs are
     idempotent. Predictions without a usable closing price are left unrecorded
-    and retried on the next run. Returns the number of records inserted.
+    and retried on the next run. Records whose match result was not confirmed at
+    insertion time get their label backfilled on a later run. Returns the number
+    of inserted records plus backfilled labels.
     """
+    backfilled = await _backfill_labels(session)
     now = datetime.now(UTC)
     stmt = (
         select(Prediction, Match, Result)
@@ -92,7 +116,8 @@ async def update_clv(
     )
     rows = (await session.execute(stmt)).all()
     if not rows:
-        return 0
+        await session.flush()
+        return backfilled
     match_rows = [
         MatchRow(
             match_id=match.id,
@@ -142,7 +167,7 @@ async def update_clv(
         )
         inserted += 1
     await session.flush()
-    return inserted
+    return inserted + backfilled
 
 
 async def clv_update(
@@ -223,14 +248,23 @@ async def _calibration(
         filters.append(ClvRecord.source == source)
     if model_version_id is not None:
         filters.append(ClvRecord.model_version_id == model_version_id)
-    records = (
-        (await session.execute(select(ClvRecord).where(*filters))).scalars().all()
-    )
+    rows = (
+        await session.execute(
+            select(ClvRecord, Result)
+            .outerjoin(Result, Result.match_id == ClvRecord.match_id)
+            .where(*filters)
+        )
+    ).all()
     by_match: dict[int, dict[str, ClvRecord]] = {}
-    for record in records:
-        if record.label is None:
+    label_by_match: dict[int, str] = {}
+    for record, result in rows:
+        label = record.label
+        if label is None and result is not None and result.confirmed:
+            label = label_1x2(result.home_score, result.away_score)
+        if label is None:
             continue
         by_match.setdefault(record.match_id, {})[record.outcome] = record
+        label_by_match[record.match_id] = label
     model_probs: list[list[float]] = []
     market_probs: list[list[float]] = []
     labels: list[str] = []
@@ -240,7 +274,7 @@ async def _calibration(
             continue
         model_probs.append([float(outcomes[outcome].model_prob) for outcome in OUTCOMES])
         market_probs.append([float(outcomes[outcome].closing_prob) for outcome in OUTCOMES])
-        labels.append(str(outcomes["H"].label))
+        labels.append(label_by_match[match_id])
     if not model_probs:
         return _empty_calibration()
     model = np.asarray(model_probs, dtype=float)
