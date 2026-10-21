@@ -1,4 +1,4 @@
-# WorldCup Mission Control (`web`)
+# Football_Pred Mission Control (`web`)
 
 Read-only Next.js dashboard for the football betting model (sub-system D). It is a
 sibling compose service that reads the existing FastAPI API **server-side only** — the

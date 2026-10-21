@@ -1,4 +1,4 @@
-# WorldCup Mission Control Design System
+# Football_Pred Mission Control Design System
 
 > Scope: the `web` service (sub-system D), a read-only Next.js dashboard for the football
 > betting model. This file is the implementation contract. Every colour, font size, spacing
