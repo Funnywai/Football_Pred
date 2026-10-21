@@ -16,7 +16,7 @@
 ## 1. 取得程式碼與設定
 
 ```bash
-git clone <repo> WorldCup && cd WorldCup     # main 已含 A 資料層 + B ML 引擎 + C 帳本 + 部署包
+git clone <repo> Football_Pred && cd Football_Pred     # main 已含 A 資料層 + B ML 引擎 + C 帳本 + 部署包
 cp deploy/env.example .env
 chmod 600 .env
 # 至少修改：POSTGRES_PASSWORD 與 DATABASE_URL（host 必須是 compose 服務名 `postgres`，密碼與 POSTGRES_PASSWORD 一致）
@@ -90,9 +90,9 @@ curl -s localhost:8000/bets/summary
 
 - [ ] Zero Trust → Tunnel 建立 → token 寫入 `.env`，並加 `COMPOSE_PROFILES=tunnel`
 - [ ] `docker compose up -d`；`docker compose logs -f cloudflared` 見 "Registered tunnel connection"
-- [ ] Public hostname：`wc.你的網域` → Service `HTTP` / `web:3000`（公開入口是 dashboard；API 不對外）
+- [ ] Public hostname：`fp.你的網域` → Service `HTTP` / `web:3000`（公開入口是 dashboard；API 不對外）
 - [ ] Access 應用 + 政策：Action `Allow`、Include `Emails` = 你的 email
-- [ ] 驗證：未登入 `curl -sI https://wc.你的網域/` 應為 302（被 Access 攔）；瀏覽器登入後見 dashboard
+- [ ] 驗證：未登入 `curl -sI https://fp.你的網域/` 應為 302（被 Access 攔）；瀏覽器登入後見 dashboard
 - [ ] （僅非 dashboard 的機器對機器呼叫需要）建 Access **Service Token**，呼叫端帶 `CF-Access-Client-Id/Secret`
 
 ## 8. 上線後維運（例行）

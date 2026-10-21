@@ -1,7 +1,7 @@
 # Cloudflare Tunnel + Access（自架主機的對外門面）
 
 目標：讓你家／機房的 Linux 主機在不開任何 firewall port、不用固定 IP 的前提下，提供一個
-`https://wc.<你的網域>` 的 HTTPS 網址，並用 Zero Trust Access 加一道「只有你能進」的 email OTP 門禁。
+`https://fp.<你的網域>` 的 HTTPS 網址，並用 Zero Trust Access 加一道「只有你能進」的 email OTP 門禁。
 
 ```
 訪客 ──HTTPS──▶ Cloudflare 邊緣（TLS/WAF）──▶ Access 驗證 ──▶ Tunnel ──▶ 你的主機 web:3000
@@ -23,7 +23,7 @@
 ## 1. 建 Tunnel 並拿 token
 
 1. 登入 **Zero Trust**（`one.dash.cloudflare.com`）→ **Networks → Tunnels → Create a tunnel**。
-2. Connector 選 **Cloudflared**，名稱例如 `worldcup` → Save。
+2. Connector 選 **Cloudflared**，名稱例如 `football-pred` → Save。
 3. 該頁會給安裝指令，把其中的 **token**（`--token` 後那串）複製起來。
 
 ## 2. 把 token 放進 `.env` 並啟動容器
@@ -53,20 +53,20 @@ docker compose logs -f cloudflared   # 看到 "Registered tunnel connection" 即
 > dashboard 容器，它再從 compose 網路內部呼叫 `app:8000`。API 刻意不對外公開。
 > 不需要 `http://` 前綴以外的東西，也不要在這裡填主機的對外 IP。
 
-存檔後 Cloudflare 會自動建立一筆 DNS 記錄。等 1–2 分鐘，`https://wc.你的網域/` 應該可以連到 dashboard。
+存檔後 Cloudflare 會自動建立一筆 DNS 記錄。等 1–2 分鐘，`https://fp.你的網域/` 應該可以連到 dashboard。
 
 ## 4. 加一道 Access 門禁（email OTP）
 
 1. Zero Trust → **Access → Applications → Add an application → Self-hosted**。
-2. Name：`WorldCup`；Session Duration 隨意（例如 24h）。
+2. Name：`Football_Pred`；Session Duration 隨意（例如 24h）。
 3. Public hostname：`wc` / `你的網域`（就是第 3 步那個）。
 4. **Policies** → Add a policy：Action = `Allow`；Include → Selector `Emails` → 你的 email。
 5. Save。（登入方式：Zero Trust → Settings → Authentication，預設可用 **One-time PIN** 寄 OTP，也可接 Google/GitHub。）
 
-之後任何人連 `https://wc.你的網域` 都會先看到 Cloudflare 登入頁，通過才進到你的 dashboard。
+之後任何人連 `https://fp.你的網域` 都會先看到 Cloudflare 登入頁，通過才進到你的 dashboard。
 **不需要自己寫任何登入程式碼。**
 
-驗證：`curl -sI https://wc.你的網域/` 應回傳 302 導向 Cloudflare Access 登入（代表門禁生效）；
+驗證：`curl -sI https://fp.你的網域/` 應回傳 302 導向 Cloudflare Access 登入（代表門禁生效）；
 用瀏覽器登入後應看到 dashboard。
 
 ## 5. 機器對機器呼叫（非 dashboard）：Service Token
@@ -78,15 +78,15 @@ docker compose logs -f cloudflared   # 看到 "Registered tunnel connection" 即
 
 本節僅保留給**非 dashboard** 的機器對機器呼叫者（例如 cron、外部腳本）：
 
-1. Zero Trust → Access → **Service Auth → Create Service Token**（例如 `worldcup-cron`）→ 複製 `Client ID` / `Client Secret`（只顯示一次）。
-2. 回到該 Application 的 Policy，加一條 `Include → Service Token → worldcup-cron`（或另建 policy）。
+1. Zero Trust → Access → **Service Auth → Create Service Token**（例如 `football-pred-cron`）→ 複製 `Client ID` / `Client Secret`（只顯示一次）。
+2. 回到該 Application 的 Policy，加一條 `Include → Service Token → football-pred-cron`（或另建 policy）。
 3. 呼叫端帶上 header：
    `CF-Access-Client-Id: <id>`、`CF-Access-Client-Secret: <secret>`。
 
 ## 6. 注意事項
 
 - **API 不再對外公開**：公開入口是 dashboard（`web:3000`），API 只在 compose 網路內（`app:8000`）與主機本機（`127.0.0.1:8000`）可達。這是刻意的，順帶關掉了先前唯讀 `/ops/*` 端點的對外暴露。
-- **不要對 API 開快取**：Cloudflare 預設只快取靜態資源；不要為 `wc.你的網域` 建 Cache Rules 去快取 `/predictions`、`/bets` 這類動態 JSON。
+- **不要對 API 開快取**：Cloudflare 預設只快取靜態資源；不要為 `fp.你的網域` 建 Cache Rules 去快取 `/predictions`、`/bets` 這類動態 JSON。
 - **本機直連不受影響**：compose 把 app 綁在 `127.0.0.1:8000`，主機上仍可直接 `curl localhost:8000/health`（繞過 Access，適合自己在機器上維運）。
 - **`web` 不發布任何主機埠**：dashboard 只透過 compose 網路被 cloudflared 存取，主機上沒有對外 port。
 - Cloudflare 掛掉時外部連不到（內網／localhost 不受影響）。
