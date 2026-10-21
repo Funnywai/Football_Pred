@@ -14,7 +14,7 @@
 #   # with a Cloudflare Tunnel:
 #   docker compose --profile tunnel up -d
 
-name: worldcup
+name: football_pred
 
 x-logging: &default-logging
   driver: json-file
@@ -100,6 +100,11 @@ services:
     restart: unless-stopped
     logging: *default-logging
 
+# Volume names are pinned explicitly: they hold the only copy of Postgres data and the ML
+# artifacts. If the compose project name changes again, these names stay put so the data is
+# not silently orphaned under the old project prefix.
 volumes:
   pgdata:
+    name: football_pred_pgdata
   artifacts:
+    name: football_pred_artifacts
