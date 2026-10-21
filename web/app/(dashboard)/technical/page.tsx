@@ -13,7 +13,7 @@ import { normalizeLogLevel } from "@/lib/logs";
 import { LOGS_LIMIT, RUNS_LIMIT, loadTechnicalData } from "@/lib/technical-data";
 
 export const metadata: Metadata = {
-  title: "Technical · WorldCup Mission Control",
+  title: "Technical · Football_Pred Mission Control",
 };
 
 function Source({ children }: { children: ReactNode }) {

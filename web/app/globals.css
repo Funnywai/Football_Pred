@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   WorldCup Mission Control — design tokens
+   Football_Pred Mission Control — design tokens
    Single source of truth: web/DESIGN.md. Every value below traces to a token
    defined there (Section 2 colour, Section 3 type, Section 4 spacing,
    Section 6 motion, Section 7 depth). No raw hex or arbitrary px outside this

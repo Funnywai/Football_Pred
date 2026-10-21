@@ -15,7 +15,7 @@ import { loadPerformanceData } from "@/lib/performance-data";
 import { pipelineStages } from "@/lib/pipeline";
 
 export const metadata: Metadata = {
-  title: "Performance · WorldCup Mission Control",
+  title: "Performance · Football_Pred Mission Control",
 };
 
 function Source({ children }: { children: ReactNode }) {

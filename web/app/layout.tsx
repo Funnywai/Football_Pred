@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WorldCup Mission Control",
+  title: "Football_Pred Mission Control",
   description: "Read-only mission-control dashboard for the football betting model.",
 };
 
