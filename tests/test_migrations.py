@@ -50,3 +50,10 @@ def test_offline_migration_creates_match_stats() -> None:
     assert "CREATE TABLE match_stats" in script
     assert "uq_match_stats_match_source" in script
     assert "ix_match_stats_match_id" in script
+
+
+def test_offline_migration_creates_shadow_ledger_bets() -> None:
+    script = generate_offline_sql()
+    assert "CREATE TABLE shadow_ledger_bets" in script
+    assert "uq_shadow_ledger_bets_match" in script
+    assert "ix_shadow_ledger_bets_match_id" in script
