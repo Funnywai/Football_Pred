@@ -18,7 +18,7 @@ import {
   formatSignedHkd,
 } from "@/lib/format";
 import { matchesQuery } from "@/lib/row-search";
-import type { Bet } from "@/lib/types";
+import type { Bet, LedgerBook } from "@/lib/types";
 import { REVEAL_INITIAL, useRowReveal } from "@/lib/use-row-reveal";
 
 function ProfitCell({ value }: { value: number }) {
@@ -76,9 +76,10 @@ function betMatches(bet: Bet, query: string): boolean {
 
 export interface BetsTableProps {
   bets: BetsWindow | null;
+  book?: LedgerBook;
 }
 
-export function BetsTable({ bets }: BetsTableProps) {
+export function BetsTable({ bets, book = "production" }: BetsTableProps) {
   const reveal = useRowReveal(bets?.rows ?? [], betMatches);
 
   if (bets === null) {
@@ -87,7 +88,7 @@ export function BetsTable({ bets }: BetsTableProps) {
     );
   }
   if (bets.rows.length === 0) {
-    return <EmptyBets bets={bets} />;
+    return <EmptyBets bets={bets} book={book} />;
   }
 
   return (
@@ -107,7 +108,9 @@ export function BetsTable({ bets }: BetsTableProps) {
         columns={COLUMNS}
         rows={reveal.shown}
         rowKey={(bet) => bet.id}
-        caption="All ledger bets"
+        caption={
+          book === "shadow" ? "All shadow ledger bets (paper only)." : "All ledger bets"
+        }
         empty={
           reveal.isFiltered ? (
             <EmptyState
@@ -144,8 +147,11 @@ function windowSentence(bets: BetsWindow): string {
   return `${bets.rows.length} bets`;
 }
 
-function EmptyBets({ bets }: { bets: BetsWindow }) {
+function EmptyBets({ bets, book }: { bets: BetsWindow; book: LedgerBook }) {
   if (bets.total === 0) {
+    if (book === "shadow") {
+      return <EmptyState icon={Inbox} title="Shadow ledger has not placed a bet." />;
+    }
     return (
       <EmptyState
         icon={Inbox}

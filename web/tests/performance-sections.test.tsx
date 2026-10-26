@@ -264,6 +264,14 @@ describe("BetsTable", () => {
     expect(screen.getByText("No bets placed yet")).toBeInTheDocument();
   });
 
+  it("uses the shadow empty state and caption copy for the shadow book", () => {
+    const { rerender } = render(<BetsTable bets={windowOf([], 0)} book="shadow" />);
+    expect(screen.getByText("Shadow ledger has not placed a bet.")).toBeInTheDocument();
+
+    rerender(<BetsTable bets={windowOf([bet({ id: 1 })], 1)} book="shadow" />);
+    expect(screen.getByText("All shadow ledger bets (paper only).")).toBeInTheDocument();
+  });
+
   it("renders an honest empty state when the fetched window is empty but the ledger is not", () => {
     render(<BetsTable bets={windowOf([], 250)} />);
     expect(screen.getByText("No bets in the fetched window")).toBeInTheDocument();
