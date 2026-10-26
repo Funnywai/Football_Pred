@@ -81,6 +81,7 @@ def test_ml_blend_defaults() -> None:
 def test_ledger_defaults() -> None:
     settings = Settings(_env_file=None)
     assert settings.ledger_enable is True
+    assert settings.shadow_ledger_enable is True
     assert settings.ledger_update_interval == 3600
     assert settings.ledger_initial_bankroll == 1000.0
     assert settings.ledger_kelly_multiplier == 0.5
@@ -90,9 +91,11 @@ def test_ledger_defaults() -> None:
 
 def test_ledger_env_override(monkeypatch) -> None:
     monkeypatch.setenv("LEDGER_ENABLE", "false")
+    monkeypatch.setenv("SHADOW_LEDGER_ENABLE", "false")
     monkeypatch.setenv("LEDGER_INITIAL_BANKROLL", "10000")
     monkeypatch.setenv("LEDGER_KELLY_MULTIPLIER", "0.25")
     settings = Settings(_env_file=None)
     assert settings.ledger_enable is False
+    assert settings.shadow_ledger_enable is False
     assert settings.ledger_initial_bankroll == 10000.0
     assert settings.ledger_kelly_multiplier == 0.25

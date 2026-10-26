@@ -8,7 +8,7 @@ from app.config import Settings
 from app.ml.jobs import build_ml_scheduler
 from app.providers.base import Provider
 from app.services.clv import clv_update
-from app.services.ledger import ledger_update
+from app.services.ledger import ledger_update, shadow_ledger_update
 from app.services.odds import OddsSync, compact_odds_snapshots, prune_odds_snapshots
 from app.services.results import ResultReconciler
 
@@ -59,6 +59,16 @@ def build_scheduler(
             seconds=settings.ledger_update_interval,
             args=[session_factory, settings],
             id="ledger_update",
+            max_instances=1,
+            coalesce=True,
+        )
+    if settings.ledger_enable and settings.shadow_ledger_enable:
+        scheduler.add_job(
+            shadow_ledger_update,
+            "interval",
+            seconds=settings.ledger_update_interval,
+            args=[session_factory, settings],
+            id="shadow_ledger_update",
             max_instances=1,
             coalesce=True,
         )

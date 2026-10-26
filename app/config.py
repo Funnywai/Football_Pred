@@ -56,6 +56,7 @@ class Settings(BaseSettings):
 
     # Paper ledger (sub-system C)
     ledger_enable: bool = True
+    shadow_ledger_enable: bool = True
     ledger_update_interval: int = 3600
     ledger_initial_bankroll: float = 1000.0
     ledger_kelly_multiplier: float = 0.5

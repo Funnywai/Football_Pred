@@ -27,12 +27,14 @@ def test_build_scheduler_registers_expected_jobs():
         "settle_results",
         "prune_odds",
         "ledger_update",
+        "shadow_ledger_update",
         "clv_update",
     }
     assert jobs["sync_odds"].trigger.interval.total_seconds() == 600
     assert jobs["settle_results"].trigger.interval.total_seconds() == 900
     assert jobs["prune_odds"].trigger.__class__.__name__ == "CronTrigger"
     assert jobs["ledger_update"].trigger.interval.total_seconds() == 3600
+    assert jobs["shadow_ledger_update"].trigger.interval.total_seconds() == 3600
     assert jobs["clv_update"].trigger.interval.total_seconds() == 3600
 
 
@@ -43,8 +45,21 @@ def test_build_scheduler_without_ledger_when_disabled():
     assert jobs == {"sync_odds", "settle_results", "prune_odds", "clv_update"}
 
 
+def test_build_scheduler_without_shadow_when_disabled():
+    settings = Settings(_env_file=None, shadow_ledger_enable=False)
+    scheduler = build_scheduler(settings, None, _FakeProvider(), _FakeProvider())
+    jobs = {job.id for job in scheduler.get_jobs()}
+    assert jobs == {"sync_odds", "settle_results", "prune_odds", "ledger_update", "clv_update"}
+
+
 def test_build_scheduler_without_clv_when_disabled():
     settings = Settings(_env_file=None, clv_enable=False)
     scheduler = build_scheduler(settings, None, _FakeProvider(), _FakeProvider())
     jobs = {job.id for job in scheduler.get_jobs()}
-    assert jobs == {"sync_odds", "settle_results", "prune_odds", "ledger_update"}
+    assert jobs == {
+        "sync_odds",
+        "settle_results",
+        "prune_odds",
+        "ledger_update",
+        "shadow_ledger_update",
+    }
