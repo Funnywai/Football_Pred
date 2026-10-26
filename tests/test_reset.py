@@ -20,6 +20,7 @@ from app.db.models import (
     OddsSnapshot,
     Prediction,
     Result,
+    ShadowLedgerBet,
 )
 from app.db.session import Database
 from app.services.ledger import summary
@@ -99,6 +100,21 @@ async def _seed(db: Database) -> None:
                 profit=16.5,
             )
         )
+        session.add(
+            ShadowLedgerBet(
+                match_id=match.id,
+                target="1x2",
+                outcome="A",
+                model_version_id=version.id,
+                odds=3.8,
+                stake=20.0,
+                bankroll_at_place=1000.0,
+                kelly_multiplier=0.5,
+                status="lost",
+                payout=0.0,
+                profit=-20.0,
+            )
+        )
         session.add(IngestionRun(job="test", started_at=KICKOFF, status="success"))
         await session.commit()
 
@@ -133,6 +149,7 @@ def test_cli_default_is_dry_run_and_deletes_nothing(
         assert "reset-paper plan (dry-run)" in out
         assert "would delete:" in out
         assert "ledger_bets: 1" in out
+        assert "shadow_ledger_bets: 1" in out
         assert "predictions: 1" in out
         assert "nothing deleted; pass --yes to execute" in out
         assert asyncio.run(_count(db, LedgerBet)) == 1
@@ -153,6 +170,7 @@ def test_cli_yes_executes_reset(
         out = capsys.readouterr().out
         assert "reset-paper executed" in out
         assert asyncio.run(_count(db, LedgerBet)) == 0
+        assert asyncio.run(_count(db, ShadowLedgerBet)) == 0
         assert asyncio.run(_count(db, Prediction)) == 0
         assert asyncio.run(_count(db, Match)) == 1
     finally:
@@ -171,11 +189,19 @@ async def test_default_reset_deletes_ml_and_bet_state_but_keeps_history(
         assert deleted == {
             "clv_records": 1,
             "ledger_bets": 1,
+            "shadow_ledger_bets": 1,
             "predictions": 1,
             "match_features": 1,
             "model_versions": 1,
         }
-        for model in (ClvRecord, LedgerBet, Prediction, MatchFeature, ModelVersion):
+        for model in (
+            ClvRecord,
+            LedgerBet,
+            ShadowLedgerBet,
+            Prediction,
+            MatchFeature,
+            ModelVersion,
+        ):
             assert await _count(db, model) == 0
         for model in (Match, Result, OddsSnapshot, IngestionRun):
             assert await _count(db, model) == 1
@@ -192,7 +218,7 @@ async def test_keep_models_preserves_model_versions(tmp_path: Path) -> None:
         )
         assert "model_versions" not in deleted
         assert await _count(db, ModelVersion) == 1
-        for model in (Prediction, LedgerBet, MatchFeature):
+        for model in (Prediction, LedgerBet, ShadowLedgerBet, MatchFeature):
             assert await _count(db, model) == 0
     finally:
         await db.dispose()
@@ -257,11 +283,50 @@ async def test_reset_is_idempotent(tmp_path: Path) -> None:
             db, include_history=False, include_runs=False, keep_models=False
         )
         assert first["ledger_bets"] == 1
+        assert first["shadow_ledger_bets"] == 1
         assert second["ledger_bets"] == 0
+        assert second["shadow_ledger_bets"] == 0
         assert second["predictions"] == 0
         assert second["model_versions"] == 0
     finally:
         await db.dispose()
+
+
+def test_cli_reset_shadow_is_dry_run_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = asyncio.run(make_db(tmp_path))
+    try:
+        asyncio.run(_seed(db))
+        _patch_cli(monkeypatch, db)
+        main(["reset-shadow"])
+        out = capsys.readouterr().out
+        assert "reset-shadow plan (dry-run)" in out
+        assert "1 shadow ledger bet(s)" in out
+        assert "nothing deleted; pass --yes to execute" in out
+        assert asyncio.run(_count(db, ShadowLedgerBet)) == 1
+        assert asyncio.run(_count(db, LedgerBet)) == 1
+        assert asyncio.run(_count(db, Prediction)) == 1
+    finally:
+        asyncio.run(db.dispose())
+
+
+def test_cli_reset_shadow_yes_deletes_shadow_rows_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    db = asyncio.run(make_db(tmp_path))
+    try:
+        asyncio.run(_seed(db))
+        _patch_cli(monkeypatch, db)
+        main(["reset-shadow", "--yes"])
+        out = capsys.readouterr().out
+        assert "reset-shadow executed: 1 shadow ledger bet(s) deleted" in out
+        assert asyncio.run(_count(db, ShadowLedgerBet)) == 0
+        assert asyncio.run(_count(db, LedgerBet)) == 1
+        assert asyncio.run(_count(db, Prediction)) == 1
+        assert asyncio.run(_count(db, Match)) == 1
+    finally:
+        asyncio.run(db.dispose())
 
 
 def test_backup_failure_aborts_without_deleting(

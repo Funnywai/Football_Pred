@@ -16,7 +16,7 @@ from app.providers.football_data.provider import FootballDataProvider, Historica
 from app.services import reset as reset_service
 from app.services.alias import TeamMatcher
 from app.services.fixtures import season_bounds
-from app.services.ledger import ledger_update, summary
+from app.services.ledger import ledger_update, shadow_ledger_update, summary
 from app.services.runs import track_run
 
 DEFAULT_DIVISIONS = ["E0", "SP1", "I1", "D1", "F1"]
@@ -281,6 +281,16 @@ async def _run_ledger() -> None:
         await db.dispose()
 
 
+async def _run_shadow_ledger() -> None:
+    settings = get_settings()
+    db = Database(settings.database_url)
+    try:
+        processed = await shadow_ledger_update(db.session_factory, settings)
+        print(f"shadow-ledger complete: {processed} bet(s) settled or placed")
+    finally:
+        await db.dispose()
+
+
 def _print_reset_counts(title: str, counts: dict[str, int], names: tuple[str, ...]) -> None:
     print(title)
     for name in names:
@@ -364,6 +374,30 @@ async def _run_reset_paper(args: argparse.Namespace) -> None:
         await db.dispose()
 
 
+async def _run_reset_shadow(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    db = Database(settings.database_url)
+    try:
+        async with db.session_factory() as session:
+            try:
+                counts = await reset_service.inspect(session)
+                count = counts.get("shadow_ledger_bets", 0)
+                if not args.yes:
+                    print(
+                        f"reset-shadow plan (dry-run): {count} shadow ledger bet(s)"
+                    )
+                    print("nothing deleted; pass --yes to execute")
+                    return
+                deleted = await reset_service.reset_shadow(session)
+                await session.commit()
+                print(f"reset-shadow executed: {deleted} shadow ledger bet(s) deleted")
+            except Exception as exc:
+                await session.rollback()
+                raise SystemExit(f"reset-shadow failed: {exc}") from exc
+    finally:
+        await db.dispose()
+
+
 def _parse_iso(value: str | None) -> datetime | None:
     if value is None:
         return None
@@ -415,6 +449,17 @@ def main(argv: list[str] | None = None) -> None:
     subparsers.add_parser("retrain", help="Train a challenger now and promote it if it passes the gate")
     subparsers.add_parser("predict", help="Run the champion prediction pass now")
     subparsers.add_parser("ledger", help="Run the paper-ledger settle+place pass now")
+    subparsers.add_parser(
+        "shadow-ledger", help="Run the shadow-ledger settle+place pass now"
+    )
+
+    reset_shadow_parser = subparsers.add_parser(
+        "reset-shadow",
+        help="Delete shadow ledger bets (dry-run unless --yes)",
+    )
+    reset_shadow_parser.add_argument(
+        "--yes", action="store_true", help="Execute the reset"
+    )
 
     reset_parser = subparsers.add_parser(
         "reset-paper",
@@ -459,6 +504,10 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_run_predict())
     elif args.command == "ledger":
         asyncio.run(_run_ledger())
+    elif args.command == "shadow-ledger":
+        asyncio.run(_run_shadow_ledger())
+    elif args.command == "reset-shadow":
+        asyncio.run(_run_reset_shadow(args))
     elif args.command == "reset-paper":
         asyncio.run(_run_reset_paper(args))
     elif args.command == "backtest":

@@ -30,11 +30,13 @@ from app.db.models import (
     OddsSnapshot,
     Prediction,
     Result,
+    ShadowLedgerBet,
 )
 
 ALL_TABLES: tuple[str, ...] = (
     "clv_records",
     "ledger_bets",
+    "shadow_ledger_bets",
     "predictions",
     "match_features",
     "model_versions",
@@ -47,6 +49,7 @@ ALL_TABLES: tuple[str, ...] = (
 _TABLES: dict[str, type[Base]] = {
     "clv_records": ClvRecord,
     "ledger_bets": LedgerBet,
+    "shadow_ledger_bets": ShadowLedgerBet,
     "predictions": Prediction,
     "match_features": MatchFeature,
     "model_versions": ModelVersion,
@@ -71,7 +74,13 @@ class ResetPlan:
     counts: dict[str, int] = field(default_factory=dict)
 
     def scoped_tables(self) -> tuple[str, ...]:
-        names = ["clv_records", "ledger_bets", "predictions", "match_features"]
+        names = [
+            "clv_records",
+            "ledger_bets",
+            "shadow_ledger_bets",
+            "predictions",
+            "match_features",
+        ]
         if not self.keep_models:
             names.append("model_versions")
         if self.include_runs:
@@ -133,6 +142,12 @@ async def reset(
         result = await session.execute(delete(_TABLES[name]))
         deleted[name] = int(cast("CursorResult[tuple[object, ...]]", result).rowcount or 0)
     return deleted
+
+
+async def reset_shadow(session: AsyncSession) -> int:
+    """Delete only shadow ledger bets; the caller owns the transaction."""
+    result = await session.execute(delete(ShadowLedgerBet))
+    return int(cast("CursorResult[tuple[object, ...]]", result).rowcount or 0)
 
 
 def artifact_file_count(directory: str | Path) -> int:
