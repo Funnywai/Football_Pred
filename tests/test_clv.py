@@ -17,6 +17,7 @@ from app.db.models import (
     Prediction,
     Result,
     Season,
+    ShadowLedgerBet,
     Team,
 )
 from app.services.clv import summary, update_clv
@@ -210,6 +211,33 @@ async def _add_bet(
     async with db.session_factory() as session:
         session.add(
             LedgerBet(
+                match_id=match_id,
+                target="1x2",
+                outcome="H",
+                model_version_id=version_id,
+                odds=2.0,
+                stake=stake,
+                bankroll_at_place=1000.0,
+                kelly_multiplier=0.5,
+                status=status,
+                profit=profit,
+            )
+        )
+        await session.commit()
+
+
+async def _add_shadow_bet(
+    db,
+    match_id: int,
+    version_id: int,
+    *,
+    status: str = "won",
+    stake: float = 20.0,
+    profit: float | None = -20.0,
+) -> None:
+    async with db.session_factory() as session:
+        session.add(
+            ShadowLedgerBet(
                 match_id=match_id,
                 target="1x2",
                 outcome="H",
@@ -595,6 +623,39 @@ async def test_summary_roi_uses_settled_bets_only(tmp_path) -> None:
         await db.dispose()
 
 
+async def test_summary_roi_comes_from_the_requested_book(tmp_path) -> None:
+    db, version_id, match_ids, *_ = await _seed_world(tmp_path, n_matches=2)
+    try:
+        await _add_clv_match(
+            db,
+            match_id=match_ids[0],
+            version_id=version_id,
+            model_probs=MODEL,
+            closing_probs=CLOSING,
+            label="H",
+        )
+        await _add_bet(db, match_ids[0], version_id, status="won", stake=10.0, profit=5.0)
+        await _add_shadow_bet(
+            db, match_ids[1], version_id, status="lost", stake=20.0, profit=-20.0
+        )
+        async with db.session_factory() as session:
+            production = await summary(session, Settings(_env_file=None))
+            shadow = await summary(session, Settings(_env_file=None), book="shadow")
+        assert production["book"] == "production"
+        assert production["roi_real"] == pytest.approx(0.5)
+        assert production["n_settled_bets"] == 1
+        assert production["settled_stakes"] == pytest.approx(10.0)
+        assert shadow["book"] == "shadow"
+        assert shadow["roi_real"] == pytest.approx(-1.0)
+        assert shadow["n_settled_bets"] == 1
+        assert shadow["settled_stakes"] == pytest.approx(20.0)
+        # CLV metrics and calibration stay model-level, not book-scoped.
+        assert shadow["n"] == production["n"] == 3
+        assert shadow["calibration"] == production["calibration"]
+    finally:
+        await db.dispose()
+
+
 async def test_clv_summary_api(tmp_path) -> None:
     db, version_id, match_ids, *_ = await _seed_world(tmp_path)
     try:
@@ -614,10 +675,16 @@ async def test_clv_summary_api(tmp_path) -> None:
             assert response.status_code == 200
             body = response.json()
             assert body["source"] == "hkjc"
+            assert body["book"] == "production"
             assert body["n"] == 3
             assert body["by_outcome"]["H"]["n"] == 1
             assert body["gate"]["verdict"] == "collecting"
+            shadow = await client.get("/clv/summary", params={"book": "shadow"})
+            assert shadow.status_code == 200
+            assert shadow.json()["book"] == "shadow"
             invalid = await client.get("/clv/summary", params={"source": "nope"})
             assert invalid.status_code == 422
+            invalid_book = await client.get("/clv/summary", params={"book": "nope"})
+            assert invalid_book.status_code == 422
     finally:
         await db.dispose()

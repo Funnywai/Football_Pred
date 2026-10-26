@@ -19,7 +19,15 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
-from app.db.models import ClvRecord, LedgerBet, Match, ModelVersion, Prediction, Result
+from app.db.models import (
+    ClvRecord,
+    LedgerBet,
+    Match,
+    ModelVersion,
+    Prediction,
+    Result,
+    ShadowLedgerBet,
+)
 from app.ml.dataset import load_market_priors
 from app.ml.features import MatchRow
 from app.ml.labels import label_1x2
@@ -27,6 +35,10 @@ from app.services.runs import track_run
 
 CLV_JOB_ID = "clv_update"
 CLV_SOURCES = {"hkjc", "football_data", "all"}
+LEDGER_BOOKS: dict[str, type[LedgerBet | ShadowLedgerBet]] = {
+    "production": LedgerBet,
+    "shadow": ShadowLedgerBet,
+}
 OUTCOMES = ("H", "D", "A")
 LABEL_INDEX = {"H": 0, "D": 1, "A": 2}
 LOG_EPSILON = 1e-15
@@ -296,14 +308,17 @@ async def _calibration(
 
 
 async def _roi_real(
-    session: AsyncSession, model_version_id: int | None, target: str | None
+    session: AsyncSession,
+    model_version_id: int | None,
+    target: str | None,
+    bet_model: type[LedgerBet | ShadowLedgerBet] = LedgerBet,
 ) -> Roi:
-    filters = [LedgerBet.status != "pending"]
+    filters = [bet_model.status != "pending"]
     if model_version_id is not None:
-        filters.append(LedgerBet.model_version_id == model_version_id)
+        filters.append(bet_model.model_version_id == model_version_id)
     if target is not None:
-        filters.append(LedgerBet.target == target)
-    bets = (await session.execute(select(LedgerBet).where(*filters))).scalars().all()
+        filters.append(bet_model.target == target)
+    bets = (await session.execute(select(bet_model).where(*filters))).scalars().all()
     settled: list[tuple[float, float]] = []
     for bet in bets:
         if bet.stake > 0 and bet.profit is not None:
@@ -448,10 +463,13 @@ async def summary(
     model_version_id: int | None = None,
     target: str | None = None,
     value_only: bool = False,
+    book: str = "production",
 ) -> dict[str, object]:
     """Aggregate live CLV, calibration, realized ROI and the stop/go gate."""
     if source not in CLV_SOURCES:
         raise ValueError(f"unknown CLV source: {source}")
+    if book not in LEDGER_BOOKS:
+        raise ValueError(f"unknown ledger book: {book}")
     base_filters = []
     if model_version_id is not None:
         base_filters.append(ClvRecord.model_version_id == model_version_id)
@@ -510,11 +528,12 @@ async def summary(
     ]
     value = _metrics([record for record in records if record.is_value])
     calibration = await _calibration(session, source, model_version_id, target)
-    roi = await _roi_real(session, model_version_id, target)
+    roi = await _roi_real(session, model_version_id, target, LEDGER_BOOKS[book])
     days_elapsed = await _days_elapsed(session, settings)
     gate = _gate(settings, metrics, calibration, roi, days_elapsed)
     return {
         "source": source,
+        "book": book,
         "n": metrics["n"],
         "mean_edge": metrics["mean_edge"],
         "beat_fraction": metrics["beat_fraction"],

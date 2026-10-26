@@ -161,6 +161,7 @@ class ClvGateOut(BaseModel):
 
 class ClvSummaryOut(BaseModel):
     source: str
+    book: str
     n: int
     mean_edge: float | None
     beat_fraction: float | None
