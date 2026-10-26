@@ -17,6 +17,7 @@ from app.db.models import (
     Prediction,
     Result,
     Season,
+    ShadowLedgerBet,
     Team,
 )
 
@@ -31,6 +32,7 @@ _TABLE_MODELS: dict[str, type[Base]] = {
     "match_features": MatchFeature,
     "model_versions": ModelVersion,
     "ledger_bets": LedgerBet,
+    "shadow_ledger_bets": ShadowLedgerBet,
     "ingestion_runs": IngestionRun,
 }
 

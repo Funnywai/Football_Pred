@@ -29,6 +29,7 @@ async def test_ops_data_keys_and_model_params(tmp_path):
                 "match_features",
                 "model_versions",
                 "ledger_bets",
+                "shadow_ledger_bets",
                 "ingestion_runs",
             }
             assert body["table_counts"]["odds_snapshots"] == 1

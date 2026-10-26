@@ -33,6 +33,7 @@ JOB_RUN_KEYS: dict[str, list[str]] = {
     "settle_results": ["settle_results_hkjc", "settle_results_fallback"],
     "prune_odds": [],
     "ledger_update": ["ledger_update"],
+    "shadow_ledger_update": ["shadow_ledger_update"],
     "clv_update": ["clv_update"],
     "ml_predict": ["ml_predict"],
     "ml_retrain": ["ml_retrain"],
