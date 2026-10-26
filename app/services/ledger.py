@@ -24,6 +24,7 @@ from app.db.models import (
     Prediction,
     Result,
     Season,
+    ShadowLedgerBet,
 )
 from app.ml.dataset import load_hkjc_priors, load_market_priors
 from app.ml.features import MatchRow
@@ -36,6 +37,10 @@ from app.services.runs import track_run
 logger = logging.getLogger(__name__)
 
 LEDGER_JOB_ID = "ledger_update"
+SHADOW_LEDGER_JOB_ID = "shadow_ledger_update"
+
+BetModel = type[LedgerBet | ShadowLedgerBet]
+BetRow = LedgerBet | ShadowLedgerBet
 
 
 def _round_dividend(amount: float) -> float:
@@ -51,7 +56,7 @@ def _round_dividend(amount: float) -> float:
     return (cents + 5) // 10 / 10
 
 
-def _settle_handicap(bet: LedgerBet, home_score: int, away_score: int) -> tuple[str, float]:
+def _settle_handicap(bet: BetRow, home_score: int, away_score: int) -> tuple[str, float]:
     """``(status, payout)`` for a handicap bet: whole/half line, or a quarter line.
 
     A quarter line is two half-stakes on the two adjacent half-lines; when one half
@@ -95,7 +100,7 @@ def _settle_handicap(bet: LedgerBet, home_score: int, away_score: int) -> tuple[
     return status, _round_dividend(payout)
 
 
-async def settle_bets(session: AsyncSession) -> int:
+async def settle_bets(session: AsyncSession, bet_model: BetModel = LedgerBet) -> int:
     """Settle pending bets whose match has a confirmed result (A-layer authority).
 
     Only ``Result`` rows with ``confirmed = True`` settle a bet. Whole/half
@@ -106,10 +111,10 @@ async def settle_bets(session: AsyncSession) -> int:
     settled.
     """
     stmt = (
-        select(LedgerBet, Result)
-        .join(Match, Match.id == LedgerBet.match_id)
+        select(bet_model, Result)
+        .join(Match, Match.id == bet_model.match_id)
         .join(Result, Result.match_id == Match.id)
-        .where(LedgerBet.status == "pending")
+        .where(bet_model.status == "pending")
         .where(Result.confirmed.is_(True))
     )
     rows = (await session.execute(stmt)).all()
@@ -134,13 +139,15 @@ async def settle_bets(session: AsyncSession) -> int:
     return settled
 
 
-async def _bankroll_now(session: AsyncSession, settings: Settings) -> float:
+async def _bankroll_now(
+    session: AsyncSession, settings: Settings, bet_model: BetModel = LedgerBet
+) -> float:
     """Derived bankroll: initial + settled profit − open stakes. Never stored."""
-    settled = select(func.coalesce(func.sum(LedgerBet.profit), 0.0)).where(
-        LedgerBet.status != "pending"
+    settled = select(func.coalesce(func.sum(bet_model.profit), 0.0)).where(
+        bet_model.status != "pending"
     )
-    open_stakes = select(func.coalesce(func.sum(LedgerBet.stake), 0.0)).where(
-        LedgerBet.status == "pending"
+    open_stakes = select(func.coalesce(func.sum(bet_model.stake), 0.0)).where(
+        bet_model.status == "pending"
     )
     realized = (await session.execute(settled)).scalar_one()
     open_total = (await session.execute(open_stakes)).scalar_one()
@@ -319,6 +326,103 @@ async def place_bets(session: AsyncSession, settings: Settings) -> int:
     return placed
 
 
+async def place_shadow_bets(session: AsyncSession, settings: Settings) -> int:
+    """Place at most one shadow bet per match from positive signal-edge candidates.
+
+    Candidates are champion 1x2 predictions for future matches with
+    ``edge > 0`` and no existing shadow bet for the match. Within a match they are
+    tried in ``edge DESC, outcome ASC`` order; the first candidate whose execution
+    Kelly fraction, execution edge, and stake are all valid is placed. The stored
+    ``edge`` is recomputed against the executable HKJC HAD price.
+    """
+    bankroll_batch_start = await _bankroll_now(session, settings, ShadowLedgerBet)
+    candidates = (
+        (
+            await session.execute(
+                select(Prediction)
+                .join(ModelVersion, ModelVersion.id == Prediction.model_version_id)
+                .join(Match, Match.id == Prediction.match_id)
+                .outerjoin(ShadowLedgerBet, ShadowLedgerBet.match_id == Prediction.match_id)
+                .where(ModelVersion.status == STATUS_CHAMPION)
+                .where(Match.kickoff_time > datetime.now(UTC))
+                .where(Prediction.target == TARGET_1X2)
+                .where(Prediction.edge.is_not(None))
+                .where(Prediction.edge > 0)
+                .where(ShadowLedgerBet.id.is_(None))
+                .order_by(
+                    Prediction.match_id,
+                    Prediction.edge.desc(),
+                    Prediction.outcome.asc(),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if not candidates:
+        return 0
+    by_match: dict[int, list[Prediction]] = {}
+    for prediction in candidates:
+        by_match.setdefault(prediction.match_id, []).append(prediction)
+    fields = (
+        await session.execute(
+            select(Match, League.code, Season.label)
+            .join(League, League.id == Match.league_id)
+            .join(Season, Season.id == Match.season_id)
+            .where(Match.id.in_(list(by_match)))
+        )
+    ).all()
+    match_rows = [
+        MatchRow(
+            match_id=m.id,
+            kickoff_time=m.kickoff_time,
+            home_team_id=m.home_team_id,
+            away_team_id=m.away_team_id,
+            league_code=code,
+            season_label=label,
+        )
+        for m, code, label in fields
+    ]
+    priors = await load_hkjc_priors(session, match_rows, 0)
+    placed = 0
+    for match_id, predictions in by_match.items():
+        prior = priors.get(match_id)
+        if prior is None or prior.had_odds is None or prior.had_probs is None:
+            continue
+        for prediction in predictions:
+            odds = prior.had_odds.get(prediction.outcome)
+            implied = prior.had_probs.get(prediction.outcome)
+            if odds is None or implied is None:
+                continue
+            fraction = kelly_fraction(prediction.prob, odds)
+            if fraction <= 0:
+                continue
+            execution_edge = prediction.prob - implied
+            if execution_edge <= 0:
+                continue
+            stake = _size_stake(bankroll_batch_start, fraction, settings)
+            if stake is None or stake < settings.ledger_min_stake:
+                continue
+            session.add(
+                ShadowLedgerBet(
+                    match_id=prediction.match_id,
+                    target=prediction.target,
+                    outcome=prediction.outcome,
+                    model_version_id=prediction.model_version_id,
+                    line=None,
+                    odds=odds,
+                    stake=stake,
+                    bankroll_at_place=bankroll_batch_start,
+                    edge=execution_edge,
+                    kelly_multiplier=settings.ledger_kelly_multiplier,
+                )
+            )
+            placed += 1
+            break
+    await session.flush()
+    return placed
+
+
 async def ledger_update(
     session_factory: async_sessionmaker[AsyncSession], settings: Settings
 ) -> int:
@@ -330,6 +434,19 @@ async def ledger_update(
         return settled + placed
 
     return await track_run(session_factory, LEDGER_JOB_ID, work)
+
+
+async def shadow_ledger_update(
+    session_factory: async_sessionmaker[AsyncSession], settings: Settings
+) -> int:
+    """Scheduled entry point: settle the shadow book, then place shadow bets."""
+
+    async def work(session: AsyncSession) -> int:
+        settled = await settle_bets(session, ShadowLedgerBet)
+        placed = await place_shadow_bets(session, settings)
+        return settled + placed
+
+    return await track_run(session_factory, SHADOW_LEDGER_JOB_ID, work)
 
 
 class LedgerSummary(NamedTuple):
@@ -345,10 +462,12 @@ class LedgerSummary(NamedTuple):
     yield_pct: float
 
 
-async def summary(session: AsyncSession, settings: Settings) -> LedgerSummary:
+async def summary(
+    session: AsyncSession, settings: Settings, bet_model: BetModel = LedgerBet
+) -> LedgerSummary:
     """Aggregate every summary value from the bets table (single source of truth)."""
     rows = (
-        await session.execute(select(LedgerBet.status, LedgerBet.stake, LedgerBet.profit))
+        await session.execute(select(bet_model.status, bet_model.stake, bet_model.profit))
     ).all()
     settled = [
         (status, stake, profit) for status, stake, profit in rows if status != "pending"
@@ -376,7 +495,9 @@ class EquityPoint(NamedTuple):
     bankroll: float
 
 
-async def equity_curve(session: AsyncSession, settings: Settings) -> list[EquityPoint]:
+async def equity_curve(
+    session: AsyncSession, settings: Settings, bet_model: BetModel = LedgerBet
+) -> list[EquityPoint]:
     """Realized-wealth points: the initial bankroll, one point per settlement, final = now.
 
     At each settlement event the bankroll equals the initial bankroll plus
@@ -386,7 +507,9 @@ async def equity_curve(session: AsyncSession, settings: Settings) -> list[Equity
     """
     bets = (
         (
-            await session.execute(select(LedgerBet).order_by(LedgerBet.placed_at, LedgerBet.id))
+            await session.execute(
+                select(bet_model).order_by(bet_model.placed_at, bet_model.id)
+            )
         )
         .scalars()
         .all()
@@ -409,6 +532,9 @@ async def equity_curve(session: AsyncSession, settings: Settings) -> list[Equity
             EquityPoint(t=t_i, bankroll=settings.ledger_initial_bankroll + realized - open_at)
         )
     points.append(
-        EquityPoint(t=datetime.now(UTC), bankroll=await _bankroll_now(session, settings))
+        EquityPoint(
+            t=datetime.now(UTC),
+            bankroll=await _bankroll_now(session, settings, bet_model),
+        )
     )
     return points
