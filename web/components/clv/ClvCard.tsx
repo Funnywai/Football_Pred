@@ -15,7 +15,13 @@ import {
   formatSignedPercent,
 } from "@/lib/format";
 import type { GlossaryKey } from "@/lib/glossary";
-import type { ClvCriterion, ClvGate, ClvSummary, ModelVersion } from "@/lib/types";
+import type {
+  ClvCriterion,
+  ClvGate,
+  ClvSummary,
+  LedgerBook,
+  ModelVersion,
+} from "@/lib/types";
 
 // The KpiTile anatomy (DESIGN.md 5): overline label over an H1 tabular numeral.
 function Metric({
@@ -141,7 +147,13 @@ function GatePanel({ gate }: { gate: ClvGate }) {
   );
 }
 
-function LiveClvCard({ summary }: { summary: ClvSummary }) {
+function LiveClvCard({
+  summary,
+  book,
+}: {
+  summary: ClvSummary;
+  book: LedgerBook;
+}) {
   const beatCi = ciText(summary.beat_ci95, (value) => formatPercent(value));
   const edgeCi = ciText(summary.mean_edge_ci95, (value) => formatSignedPercent(value));
   const roiCi = ciText(summary.roi_real_ci95, (value) => formatSignedPercent(value));
@@ -239,6 +251,13 @@ function LiveClvCard({ summary }: { summary: ClvSummary }) {
         </p>
       </div>
 
+      {book === "shadow" ? (
+        <Note>
+          ROI and settled bets come from the selected ledger book; CLV and calibration are
+          model-level.
+        </Note>
+      ) : null}
+
       <GatePanel gate={summary.gate} />
 
       <Note>
@@ -253,11 +272,12 @@ function LiveClvCard({ summary }: { summary: ClvSummary }) {
 export interface ClvCardProps {
   models: ModelVersion[] | null;
   summary: ClvSummary | null;
+  book?: LedgerBook;
 }
 
-export function ClvCard({ models, summary }: ClvCardProps) {
+export function ClvCard({ models, summary, book = "production" }: ClvCardProps) {
   if (summary !== null) {
-    return <LiveClvCard summary={summary} />;
+    return <LiveClvCard summary={summary} book={book} />;
   }
 
   if (models === null) {

@@ -7,6 +7,7 @@ import type { ClvGate, ClvSummary, ModelVersion } from "@/lib/types";
 function summary(overrides: Partial<ClvSummary> = {}): ClvSummary {
   return {
     source: "hkjc",
+    book: "production",
     n: 240,
     mean_edge: 0.012,
     beat_fraction: 0.583,
@@ -163,6 +164,24 @@ describe("ClvCard live summary", () => {
 
     expect(screen.getByLabelText(`gate verdict ${verdict}`)).toBeInTheDocument();
     expect(screen.getByText(/ready/)).toBeInTheDocument();
+  });
+
+  it("explains the selected book-level ROI only on the shadow book", () => {
+    const { rerender } = render(<ClvCard models={null} summary={summary()} />);
+    expect(
+      screen.queryByText(/ROI and settled bets come from the selected ledger book/),
+    ).not.toBeInTheDocument();
+
+    rerender(
+      <ClvCard
+        models={null}
+        summary={summary({ book: "shadow" })}
+        book="shadow"
+      />,
+    );
+    expect(
+      screen.getByText(/ROI and settled bets come from the selected ledger book/),
+    ).toBeInTheDocument();
   });
 
   it("states that CLV is not execution-vs-close and not profit", () => {
