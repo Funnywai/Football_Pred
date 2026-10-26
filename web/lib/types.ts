@@ -102,6 +102,10 @@ export interface Bet {
   away_team: string;
 }
 
+// A ledger book is the paper book the production ledger writes to (`production`) or the
+// separate relaxed-rule validation book (`shadow`). The API defaults to production.
+export type LedgerBook = "production" | "shadow";
+
 export interface BetSummary {
   initial_bankroll: number;
   bankroll: number;
@@ -164,6 +168,7 @@ export interface ClvGate {
 
 export interface ClvSummary {
   source: string;
+  book: LedgerBook;
   n: number;
   mean_edge: number | null;
   beat_fraction: number | null;

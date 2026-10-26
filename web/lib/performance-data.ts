@@ -17,6 +17,7 @@ import type {
   BetSummary,
   ClvSummary,
   EquityPoint,
+  LedgerBook,
   ModelVersion,
   OpsData,
   OpsJob,
@@ -36,6 +37,7 @@ export const RUNS_PAGE_SIZE = 200;
 
 export interface PerformanceData {
   now: Date;
+  book: LedgerBook;
   summary: BetSummary | null;
   bets: BetsWindow | null;
   equity: EquityPoint[] | null;
@@ -53,25 +55,28 @@ export interface PerformanceData {
  * becomes `null` and the section renders an explicit unavailable state. Never throws, so
  * the production build succeeds with the API down.
  */
-export async function loadPerformanceData(): Promise<PerformanceData> {
+export async function loadPerformanceData(
+  book: LedgerBook = "production",
+): Promise<PerformanceData> {
   const now = new Date();
   const [summary, equity, predictions, results, jobs, runs, data, models, clv] =
     await Promise.all([
-      getBetSummary(),
-      getEquityCurve(),
+      getBetSummary(book),
+      getEquityCurve(book),
       getPredictions(PREDICTIONS_PAGE_SIZE, false),
       getResults(RESULTS_PAGE_SIZE),
       getOpsJobs(),
       getOpsRuns(RUNS_PAGE_SIZE),
       getOpsData(),
       getModels(),
-      getClvSummary(),
+      getClvSummary("hkjc", book),
     ]);
 
-  const bets = await loadBetsWindow(summary.ok ? summary.data.n_bets : null);
+  const bets = await loadBetsWindow(summary.ok ? summary.data.n_bets : null, book);
 
   return {
     now,
+    book,
     summary: summary.ok ? summary.data : null,
     bets,
     equity: equity.ok ? equity.data : null,
@@ -90,9 +95,12 @@ export async function loadPerformanceData(): Promise<PerformanceData> {
  * the ascending list; without it the newest page cannot be located, so the first (oldest)
  * page is fetched and the window is labelled as such. A failed /bets fetch is `null`.
  */
-async function loadBetsWindow(nBets: number | null): Promise<BetsWindow | null> {
+async function loadBetsWindow(
+  nBets: number | null,
+  book: LedgerBook,
+): Promise<BetsWindow | null> {
   const offset = nBets === null ? 0 : newestPageOffset(nBets, BETS_PAGE_SIZE);
-  const result = await getBets(BETS_PAGE_SIZE, offset);
+  const result = await getBets(BETS_PAGE_SIZE, offset, book);
   if (!result.ok) return null;
   return {
     rows: sortBetsNewestFirst(result.data),

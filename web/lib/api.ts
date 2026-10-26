@@ -5,6 +5,7 @@ import type {
   BetSummary,
   ClvSummary,
   EquityPoint,
+  LedgerBook,
   Match,
   ModelVersion,
   Prediction,
@@ -50,15 +51,29 @@ export async function apiGet<T>(path: string): Promise<ApiResult<T>> {
 
 // ---- Data-route fetchers (app/api/routes.py) ----
 
-export const getBetSummary = (): Promise<ApiResult<BetSummary>> => apiGet("/bets/summary");
+// Every ledger read takes the book (`production` or `shadow`); the API defaults to
+// production, but the dashboard always states it explicitly so a missing parameter can
+// never silently change the book.
+export const getBetSummary = (
+  book: LedgerBook = "production",
+): Promise<ApiResult<BetSummary>> =>
+  apiGet(`/bets/summary?book=${encodeURIComponent(book)}`);
 
-export const getEquityCurve = (): Promise<ApiResult<EquityPoint[]>> =>
-  apiGet("/bets/equity-curve");
+export const getEquityCurve = (
+  book: LedgerBook = "production",
+): Promise<ApiResult<EquityPoint[]>> =>
+  apiGet(`/bets/equity-curve?book=${encodeURIComponent(book)}`);
 
 // `/bets` orders by (placed_at, id) ascending; the caller passes the offset of the page
 // it wants (the performance tab fetches the newest page, i.e. the tail of the list).
-export const getBets = (limit = 50, offset = 0): Promise<ApiResult<Bet[]>> =>
-  apiGet(`/bets?limit=${limit}&offset=${offset}`);
+export const getBets = (
+  limit = 50,
+  offset = 0,
+  book: LedgerBook = "production",
+): Promise<ApiResult<Bet[]>> =>
+  apiGet(
+    `/bets?limit=${limit}&offset=${offset}&book=${encodeURIComponent(book)}`,
+  );
 
 // `champion_only` defaults to true on the API. The signal-vs-execution join needs the
 // prediction a bet was actually placed from, which may belong to a since-replaced model,
@@ -79,5 +94,10 @@ export const getResults = (limit = 100): Promise<ApiResult<Result[]>> =>
 
 // `source` defaults to hkjc on the API; the dashboard asks for it explicitly so the card
 // never silently changes source if the server default moves.
-export const getClvSummary = (source = "hkjc"): Promise<ApiResult<ClvSummary>> =>
-  apiGet(`/clv/summary?source=${encodeURIComponent(source)}`);
+export const getClvSummary = (
+  source = "hkjc",
+  book: LedgerBook = "production",
+): Promise<ApiResult<ClvSummary>> =>
+  apiGet(
+    `/clv/summary?source=${encodeURIComponent(source)}&book=${encodeURIComponent(book)}`,
+  );
