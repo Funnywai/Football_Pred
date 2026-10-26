@@ -92,6 +92,7 @@ docker compose up -d
 | `ML_EXEC_OVERROUND` | `1.13` | 閘門經濟指標用的抽水：`roi` 用公平價（`1.0`，理論值、買不到），`roi_real` 用此值（實測 HKJC HAD 中位 `1.1327`）＝實際可下注價。`n_bets_real` 一併記錄：**`0` 注 ＝ 這個配置在真實價下一注都不會下**，不是「打平」 |
 | `ML_GATE_MIN_REAL_BETS` | `50` | 閘門要求 `n_bets_real` 至少這麼多注，`roi_real` 才可信：真實價下 **0 注** 會讓 `roi_real = 0.0`，沒有這個下限時「一注都不下」會靠絕對條件通過。設 `0` 可關閉（測試用）|
 | `LEDGER_ENABLE` | `true` | 是否啟用帳本排程 |
+| `SHADOW_LEDGER_ENABLE` | `true` | 是否啟用 shadow 帳本排程（需同時開啟 `LEDGER_ENABLE`；寫入獨立 `shadow_ledger_bets`，不影響正式帳本） |
 | `LEDGER_INITIAL_BANKROLL` | `1000` | 模擬本金（HKD） |
 | `LEDGER_MIN_STAKE` | `10` | 最低一注（HKD＝HKJC bet unit；低於跳過，不上夾） |
 | `POSTGRES_USER/PASSWORD/DB` | football | compose 的資料庫帳密 |
@@ -105,6 +106,7 @@ docker compose up -d
 | 手動觸發重訓（不必等 7 天） | `docker compose run --rm app python -m app.cli retrain` |
 | 手動觸發預測 | `docker compose run --rm app python -m app.cli predict` |
 | 手動觸發帳本（結算＋下注） | `docker compose run --rm app python -m app.cli ledger` |
+| 手動觸發 shadow 帳本（結算＋下注） | `docker compose run --rm app python -m app.cli shadow-ledger` |
 | 看日誌 | `docker compose logs -f app cloudflared` |
 | 健康檢查 | `curl -s localhost:8000/health`（主機直連，繞過 Access） |
 | 備份資料庫 | `docker compose exec postgres pg_dump -U football football > backup.sql` |
@@ -112,7 +114,7 @@ docker compose up -d
 | 改 tunnel token／網域 | 改 `.env` 後 `docker compose up -d cloudflared` |
 | 更新程式碼 | `git pull && GIT_SHA=$(git rev-parse --short HEAD) docker compose build && docker compose up -d` |
 
-重訓與預測預設由排程自動觸發（`ML_RETRAIN_INTERVAL`／每小時）；也可隨時手動觸發：`retrain` / `predict` / `ledger`（見上表）。
+重訓與預測預設由排程自動觸發（`ML_RETRAIN_INTERVAL`／每小時）；也可隨時手動觸發：`retrain` / `predict` / `ledger` / `shadow-ledger`（見上表）。
 
 ### CLI 子命令
 
@@ -127,6 +129,9 @@ docker compose run --rm app python -m app.cli <子命令> [參數]
 | `retrain` | 立刻訓練 challenger，過閘即升 champion | `ML_RETRAIN_INTERVAL`（7 天） |
 | `predict` | 立刻跑一次冠軍預測（寫 `predictions` / `match_features`） | 每小時 |
 | `ledger` | 立刻結算＋下注 | 每小時 |
+| `shadow-ledger` | 立刻結算＋下注 shadow 帳本（paper only） | 每小時（需 `SHADOW_LEDGER_ENABLE=true`） |
+| `reset-shadow --yes` | 只刪除 `shadow_ledger_bets`；預設 dry-run 並印出筆數 | 無 |
+| `reset-paper --yes` | 重設 paper/shadow 帳本與預測／模型（預設 dry-run） | 無 |
 
 - 建表／遷移**不是** CLI：用 `docker compose run --rm app alembic upgrade head`
 - 手動觸發**用 `run` 不要用 `exec`**：`run` 開新容器一定會讀到最新 `.env`；`exec` 沿用舊容器的環境變數
@@ -153,9 +158,10 @@ docker compose exec app printenv LEDGER_INITIAL_BANKROLL             # 容器內
 | `GET /results` | 賽果 |
 | `GET /models` | 模型版本與 metrics（champion/challenger 狀態） |
 | `GET /predictions` | 預測（預設僅現任冠軍；`?champion_only=false` 看歷史） |
-| `GET /bets` | 帳本注單（`status`/`match_id`/`target` 篩選） |
-| `GET /bets/summary` | 本金、ROI、yield、已／未結算注碼等 |
-| `GET /bets/equity-curve` | 資金曲線（初始 → 各次結算事件 → 現值） |
+| `GET /bets` | 帳本注單（`status`/`match_id`/`target` 篩選；`book=production\|shadow`，預設 production） |
+| `GET /bets/summary` | 本金、ROI、yield、已／未結算注碼等（`book=production\|shadow`） |
+| `GET /bets/equity-curve` | 資金曲線（初始 → 各次結算事件 → 現值；`book=production\|shadow`） |
+| `GET /clv/summary` | CLV／校準／gate；ROI 與已結算注單依 `book=production\|shadow`，CLV 與校準維持模型層級 |
 | `GET /ops/status` | 運維狀態：版本、git SHA、DB 連線、排程開關 |
 | `GET /ops/jobs` | 排程任務清單與各任務最近一次執行紀錄 |
 | `GET /ops/runs` | 最近 `ingestion_runs`（`limit` 預設 50、上限 200） |
