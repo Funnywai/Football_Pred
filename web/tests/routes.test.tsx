@@ -11,6 +11,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/performance-data", () => ({
   loadPerformanceData: async () => ({
     now: new Date("2026-10-15T12:00:00Z"),
+    book: "production",
     summary: null,
     bets: null,
     equity: null,
@@ -78,7 +79,7 @@ function expectUnavailableStates(pairs: Array<[string, string]>): void {
 
 describe("route smoke — /performance", () => {
   it("renders every section heading and the explicit unavailable state of every section", async () => {
-    render(await PerformancePage());
+    render(await PerformancePage({ searchParams: Promise.resolve({}) }));
 
     for (const section of PERFORMANCE_SECTIONS) {
       expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
