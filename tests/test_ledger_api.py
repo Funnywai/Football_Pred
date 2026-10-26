@@ -8,7 +8,7 @@ from ml_helpers import make_db, seed_context, seed_finished_match, seed_team
 
 from app.api.main import create_app
 from app.config import Settings
-from app.db.models import LedgerBet, ModelVersion
+from app.db.models import LedgerBet, ModelVersion, ShadowLedgerBet
 from app.services.ledger import settle_bets
 
 
@@ -43,7 +43,21 @@ async def _seed_pending_bet(tmp_path):
             )
         )
         await session.commit()
-    return db, match.id
+    return db, match.id, version.id
+
+
+async def _add_shadow_bet(
+    db, match_id: int, version_id: int, *, outcome: str = "A", stake: float = 25.0
+) -> None:
+    async with db.session_factory() as session:
+        session.add(
+            ShadowLedgerBet(
+                match_id=match_id, target="1x2", outcome=outcome,
+                model_version_id=version_id, odds=3.8, stake=stake,
+                bankroll_at_place=1000.0, kelly_multiplier=0.5,
+            )
+        )
+        await session.commit()
 
 
 async def test_bets_endpoints_empty(tmp_path) -> None:
@@ -71,7 +85,7 @@ async def test_bets_endpoints_empty(tmp_path) -> None:
 
 
 async def test_bets_listing_and_summary_math(tmp_path) -> None:
-    db, _match_id = await _seed_pending_bet(tmp_path)
+    db, _match_id, _version_id = await _seed_pending_bet(tmp_path)
     try:
         async with db.session_factory() as session:
             assert await settle_bets(session) == 1  # 2:1 vs outcome H → won
@@ -109,5 +123,40 @@ async def test_bets_listing_and_summary_math(tmp_path) -> None:
                 await client.get("/bets", params={"status": "lost"})
             ).json()
             assert status_filtered == []
+    finally:
+        await db.dispose()
+
+
+async def test_bets_endpoints_switch_book_and_reject_invalid(tmp_path) -> None:
+    db, match_id, version_id = await _seed_pending_bet(tmp_path)
+    try:
+        await _add_shadow_bet(db, match_id, version_id, outcome="A", stake=25.0)
+        async with await _client(db) as client:
+            production = (await client.get("/bets")).json()
+            assert len(production) == 1
+            assert production[0]["stake"] == 15.0
+
+            shadow = (await client.get("/bets", params={"book": "shadow"})).json()
+            assert len(shadow) == 1
+            assert shadow[0]["stake"] == 25.0
+            assert shadow[0]["outcome"] == "A"
+
+            production_summary = (await client.get("/bets/summary")).json()
+            assert production_summary["open_stakes"] == pytest.approx(15.0)
+            shadow_summary = (
+                await client.get("/bets/summary", params={"book": "shadow"})
+            ).json()
+            assert shadow_summary["open_stakes"] == pytest.approx(25.0)
+
+            production_curve = (await client.get("/bets/equity-curve")).json()
+            shadow_curve = (
+                await client.get("/bets/equity-curve", params={"book": "shadow"})
+            ).json()
+            assert production_curve[-1]["bankroll"] == pytest.approx(985.0)
+            assert shadow_curve[-1]["bankroll"] == pytest.approx(975.0)
+
+            for endpoint in ("/bets", "/bets/summary", "/bets/equity-curve"):
+                invalid = await client.get(endpoint, params={"book": "nope"})
+                assert invalid.status_code == 422
     finally:
         await db.dispose()

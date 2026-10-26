@@ -26,6 +26,7 @@ from app.db.models import (
     OddsSnapshot,
     Prediction,
     Result,
+    ShadowLedgerBet,
     Team,
 )
 from app.services.clv import summary as clv_summary
@@ -41,6 +42,12 @@ async def get_session(request: Request):
 
 
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+
+BOOK_PATTERN = "^(production|shadow)$"
+
+
+def _bet_model(book: str) -> type[LedgerBet] | type[ShadowLedgerBet]:
+    return ShadowLedgerBet if book == "shadow" else LedgerBet
 
 
 @router.get("/health")
@@ -247,27 +254,29 @@ async def list_bets(
     status: str | None = None,
     match_id: int | None = None,
     target: str | None = None,
+    book: str = Query("production", pattern=BOOK_PATTERN),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
 ) -> list[BetOut]:
     home = aliased(Team)
     away = aliased(Team)
+    model = _bet_model(book)
     stmt = (
-        select(LedgerBet, Match.kickoff_time, League.code, home.name_en, away.name_en)
-        .join(Match, Match.id == LedgerBet.match_id)
+        select(model, Match.kickoff_time, League.code, home.name_en, away.name_en)
+        .join(Match, Match.id == model.match_id)
         .join(League, League.id == Match.league_id)
         .join(home, home.id == Match.home_team_id)
         .join(away, away.id == Match.away_team_id)
-        .order_by(LedgerBet.placed_at, LedgerBet.id)
+        .order_by(model.placed_at, model.id)
         .offset(offset)
         .limit(limit)
     )
     if status is not None:
-        stmt = stmt.where(LedgerBet.status == status)
+        stmt = stmt.where(model.status == status)
     if match_id is not None:
-        stmt = stmt.where(LedgerBet.match_id == match_id)
+        stmt = stmt.where(model.match_id == match_id)
     if target is not None:
-        stmt = stmt.where(LedgerBet.target == target)
+        stmt = stmt.where(model.target == target)
     rows = (await session.execute(stmt)).all()
     return [
         BetOut(
@@ -297,8 +306,14 @@ async def list_bets(
 
 
 @router.get("/bets/summary", response_model=BetSummary)
-async def bets_summary(session: SessionDep, request: Request) -> BetSummary:
-    values = await ledger_summary(session, request.app.state.settings)
+async def bets_summary(
+    session: SessionDep,
+    request: Request,
+    book: str = Query("production", pattern=BOOK_PATTERN),
+) -> BetSummary:
+    values = await ledger_summary(
+        session, request.app.state.settings, _bet_model(book)
+    )
     return BetSummary(
         initial_bankroll=values.initial_bankroll,
         bankroll=values.bankroll,
@@ -315,9 +330,13 @@ async def bets_summary(session: SessionDep, request: Request) -> BetSummary:
 
 @router.get("/bets/equity-curve", response_model=list[EquityPointOut])
 async def bets_equity_curve(
-    session: SessionDep, request: Request
+    session: SessionDep,
+    request: Request,
+    book: str = Query("production", pattern=BOOK_PATTERN),
 ) -> list[EquityPointOut]:
-    points = await ledger_equity_curve(session, request.app.state.settings)
+    points = await ledger_equity_curve(
+        session, request.app.state.settings, _bet_model(book)
+    )
     return [EquityPointOut(t=p.t, bankroll=p.bankroll) for p in points]
 
 
@@ -329,6 +348,7 @@ async def clv_summary_endpoint(
     model_version_id: int | None = None,
     target: str | None = None,
     value_only: bool = False,
+    book: str = Query("production", pattern=BOOK_PATTERN),
 ) -> dict[str, object]:
     return await clv_summary(
         session,
@@ -337,4 +357,5 @@ async def clv_summary_endpoint(
         model_version_id=model_version_id,
         target=target,
         value_only=value_only,
+        book=book,
     )
