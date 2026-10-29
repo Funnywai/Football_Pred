@@ -326,6 +326,7 @@ async def _run_agent_abc(args: argparse.Namespace) -> None:
             f"briefs={summary.briefs} decisions={decisions} "
             f"approved={summary.approved} rejected={summary.rejected} "
             f"prefilters={summary.prefilters} llm_calls={summary.llm_calls} "
+            f"a_only_placed={summary.a_only_placed} "
             f"bets_placed={summary.bets_placed} bets_settled={summary.bets_settled}"
         )
     finally:

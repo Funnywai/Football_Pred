@@ -768,6 +768,7 @@ async def test_agent_abc_update_settles_builds_and_places_then_tracks_job(tmp_pa
         assert first.candidates == 1
         assert first.briefs == 1
         assert first.approved == 1
+        assert first.a_only_placed == 1
         assert first.bets_placed == 1
         assert first.bets_settled == 0
         assert len(striker.calls) == 1
@@ -776,8 +777,9 @@ async def test_agent_abc_update_settles_builds_and_places_then_tracks_job(tmp_pa
         second = await agent_abc_update(
             db.session_factory, settings, striker_client=striker, llm_client=llm
         )
+        assert second.a_only_placed == 0
         assert second.bets_placed == 0
-        assert second.bets_settled == 1
+        assert second.bets_settled == 2
         assert second.run_id != first.run_id
 
         async with db.session_factory() as session:
@@ -801,9 +803,9 @@ async def test_agent_abc_update_settles_builds_and_places_then_tracks_job(tmp_pa
         assert len(runs) == 2
         assert {run.status for run in runs} == {"success"}
         assert briefs == 2
-        assert len(bets) == 1
-        assert bets[0].variant == "abc"
-        assert bets[0].status == "won"
+        assert len(bets) == 2
+        assert {bet.variant for bet in bets} == {"a_only", "abc"}
+        assert {bet.status for bet in bets} == {"won"}
     finally:
         await db.dispose()
 
@@ -872,6 +874,7 @@ def test_cli_agent_abc_smoke(
         out = capsys.readouterr().out
         assert "agent-abc complete: run_id=" in out
         assert "briefs=0 decisions=0" in out
+        assert "a_only_placed=0" in out
         assert "bets_placed=0 bets_settled=0" in out
 
         async def _runs() -> list[IngestionRun]:

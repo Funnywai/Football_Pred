@@ -42,6 +42,7 @@ class AbcRunSummary(NamedTuple):
     prefilters: int
     llm_calls: int
     bets_settled: int
+    a_only_placed: int
     bets_placed: int
 
 
@@ -259,6 +260,7 @@ async def agent_abc_update(
             striker_client=source,
             max_kickoff_minutes=max_kickoff_minutes,
         )
+        a_only_placed = await place_agent_bets(session, settings, risk.run_id, "a_only")
         placed = await place_agent_bets(session, settings, risk.run_id, "abc")
         holder["summary"] = AbcRunSummary(
             run_id=risk.run_id,
@@ -270,9 +272,10 @@ async def agent_abc_update(
             prefilters=decisions.prefilters,
             llm_calls=decisions.llm_calls,
             bets_settled=settled,
+            a_only_placed=a_only_placed,
             bets_placed=placed,
         )
-        return settled + placed
+        return settled + a_only_placed + placed
 
     try:
         await track_run(session_factory, AGENT_ABC_JOB_ID, work)
