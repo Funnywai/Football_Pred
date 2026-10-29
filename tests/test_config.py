@@ -89,6 +89,21 @@ def test_ledger_defaults() -> None:
     assert settings.ledger_min_stake == 10.0
 
 
+def test_agent_defaults() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.agent_max_odds == 5.0
+    assert settings.striker_base_url == "https://mcp.strikerapi.com"
+    assert settings.striker_timeout_seconds == 20.0
+    assert settings.agent_llm_model == "deepseek-v4.1-flash"
+    assert settings.agent_llm_temperature == 0.0
+    assert settings.agent_llm_timeout_seconds == 30.0
+
+
+def test_agent_env_override(monkeypatch) -> None:
+    monkeypatch.setenv("AGENT_MAX_ODDS", "3.5")
+    assert Settings(_env_file=None).agent_max_odds == 3.5
+
+
 def test_ledger_env_override(monkeypatch) -> None:
     monkeypatch.setenv("LEDGER_ENABLE", "false")
     monkeypatch.setenv("SHADOW_LEDGER_ENABLE", "false")

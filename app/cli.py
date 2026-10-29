@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.agents.ledger import agent_abc_update, agent_ledger_update, agent_summary
+from app.agents.risk import evaluate_risk
 from app.config import Settings, configure_logging, get_settings
 from app.data.leagues import seed_leagues
 from app.db.models import League, Match, MatchStat, OddsSnapshot, Result, Season, Team
@@ -291,6 +293,62 @@ async def _run_shadow_ledger() -> None:
         await db.dispose()
 
 
+async def _run_agent_ledger(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    db = Database(settings.database_url)
+    try:
+        processed = await agent_ledger_update(db.session_factory, settings, args.variant)
+        async with db.session_factory() as session:
+            values = await agent_summary(session, settings, args.variant)
+        print(
+            f"agent-ledger complete: run recorded as agent_ledger_update, "
+            f"{processed} bet(s) settled or placed"
+        )
+        print(
+            f"agent book ({args.variant}): bets={values.n_bets} settled={values.n_settled} "
+            f"open={values.n_open} bankroll={values.bankroll:.2f}"
+        )
+    finally:
+        await db.dispose()
+
+
+async def _run_agent_abc(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    db = Database(settings.database_url)
+    try:
+        summary = await agent_abc_update(
+            db.session_factory, settings, max_kickoff_minutes=args.window_minutes
+        )
+        decisions = summary.approved + summary.rejected
+        print(
+            f"agent-abc complete: run_id={summary.run_id} "
+            f"matches={summary.matches_considered} candidates={summary.candidates} "
+            f"briefs={summary.briefs} decisions={decisions} "
+            f"approved={summary.approved} rejected={summary.rejected} "
+            f"prefilters={summary.prefilters} llm_calls={summary.llm_calls} "
+            f"bets_placed={summary.bets_placed} bets_settled={summary.bets_settled}"
+        )
+    finally:
+        await db.dispose()
+
+
+async def _run_agent_evaluate() -> None:
+    settings = get_settings()
+    db = Database(settings.database_url)
+    try:
+        async with db.session_factory() as session:
+            result = await evaluate_risk(session, settings)
+            await session.commit()
+        print(
+            f"agent-evaluate complete: run_id={result.run_id} "
+            f"matches={result.matches_considered} candidates={result.candidates_evaluated} "
+            f"bets={result.bets_allowed} no_bets={result.no_bets} "
+            f"total_stake={result.total_stake:.0f}"
+        )
+    finally:
+        await db.dispose()
+
+
 def _print_reset_counts(title: str, counts: dict[str, int], names: tuple[str, ...]) -> None:
     print(title)
     for name in names:
@@ -452,6 +510,26 @@ def main(argv: list[str] | None = None) -> None:
     subparsers.add_parser(
         "shadow-ledger", help="Run the shadow-ledger settle+place pass now"
     )
+    subparsers.add_parser(
+        "agent-evaluate", help="Run one deterministic risk-agent pass (paper/audit only)"
+    )
+    agent_abc_parser = subparsers.add_parser(
+        "agent-abc",
+        help="Run one T-30 A+B+C pass and place abc paper bets (lineups-only B)",
+    )
+    agent_abc_parser.add_argument(
+        "--window-minutes",
+        type=int,
+        default=45,
+        help="Only evaluate matches kicking off within this many minutes (default 45)",
+    )
+    agent_ledger_parser = subparsers.add_parser(
+        "agent-ledger",
+        help="Settle and place the paper-only agent ledger for one variant",
+    )
+    agent_ledger_parser.add_argument(
+        "--variant", choices=("a_only", "abc"), default="a_only"
+    )
 
     reset_shadow_parser = subparsers.add_parser(
         "reset-shadow",
@@ -506,6 +584,12 @@ def main(argv: list[str] | None = None) -> None:
         asyncio.run(_run_ledger())
     elif args.command == "shadow-ledger":
         asyncio.run(_run_shadow_ledger())
+    elif args.command == "agent-evaluate":
+        asyncio.run(_run_agent_evaluate())
+    elif args.command == "agent-abc":
+        asyncio.run(_run_agent_abc(args))
+    elif args.command == "agent-ledger":
+        asyncio.run(_run_agent_ledger(args))
     elif args.command == "reset-shadow":
         asyncio.run(_run_reset_shadow(args))
     elif args.command == "reset-paper":

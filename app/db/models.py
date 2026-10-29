@@ -318,6 +318,115 @@ class LedgerBet(Base):
     profit: Mapped[float | None] = mapped_column(Float, nullable=True)
 
 
+class AgentDecision(Base):
+    """Paper-only audit trail for every deterministic agent candidate.
+
+    One row is written per candidate outcome (both ``bet`` and ``no_bet``), so a
+    later A/B/C/D comparison can reconstruct exactly what the agent saw and why
+    it acted. ``input_snapshot`` carries the timestamped inputs; nothing here is
+    a real bet and no ledger row is ever created by the risk agent.
+    """
+
+    __tablename__ = "agent_decisions"
+    __table_args__ = (
+        Index("ix_agent_decisions_match_evaluated", "match_id", "evaluated_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), nullable=False, index=True)
+    model_version_id: Mapped[int] = mapped_column(
+        ForeignKey("model_versions.id"), nullable=False
+    )
+    target: Mapped[str] = mapped_column(String(20), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(10), nullable=False)
+    action: Mapped[str] = mapped_column(String(10), nullable=False)
+    stake: Mapped[float | None] = mapped_column(Float, nullable=True)
+    odds: Mapped[float | None] = mapped_column(Float, nullable=True)
+    edge: Mapped[float | None] = mapped_column(Float, nullable=True)
+    signal_edge: Mapped[float | None] = mapped_column(Float, nullable=True)
+    confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    agent: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="risk", server_default="risk"
+    )
+    reason: Mapped[str] = mapped_column(String(255), nullable=False)
+    input_snapshot: Mapped[dict] = mapped_column(_json_type(), nullable=False, default=dict)
+    evaluated_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, nullable=False, server_default=func.now(), index=True
+    )
+
+
+class AgentBet(Base):
+    """Paper-only agent ledger, kept apart from production and shadow books.
+
+    One bet per ``(variant, match_id)`` so the A-only baseline and the later
+    A+B+C treatment can be compared on the same matches and prices. ``run_id``
+    points back at the ``agent_decisions`` run that produced the bet.
+    """
+
+    __tablename__ = "agent_bets"
+    __table_args__ = (
+        UniqueConstraint("variant", "match_id", name="uq_agent_bets_variant_match"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), nullable=False, index=True)
+    model_version_id: Mapped[int] = mapped_column(
+        ForeignKey("model_versions.id"), nullable=False
+    )
+    target: Mapped[str] = mapped_column(String(20), nullable=False)
+    outcome: Mapped[str] = mapped_column(String(10), nullable=False)
+    variant: Mapped[str] = mapped_column(String(10), nullable=False)
+    line: Mapped[float | None] = mapped_column(Float, nullable=True)
+    odds: Mapped[float] = mapped_column(Float, nullable=False)
+    stake: Mapped[float] = mapped_column(Float, nullable=False)
+    bankroll_at_place: Mapped[float] = mapped_column(Float, nullable=False)
+    edge: Mapped[float | None] = mapped_column(Float, nullable=True)
+    kelly_multiplier: Mapped[float] = mapped_column(Float, nullable=False)
+    result_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    placed_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, nullable=False, server_default=func.now()
+    )
+    settled_at: Mapped[datetime | None] = mapped_column(UtcDateTime, nullable=True)
+    payout: Mapped[float | None] = mapped_column(Float, nullable=True)
+    profit: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+
+class AnalystBrief(Base):
+    """Lineups-only B analyst snapshot for one run and match.
+
+    One row per ``(run_id, match_id, source)`` keeps the exact facts, gaps, and
+    raw provider payload the C decision agent used. This table is audit data
+    only; it never carries an execution price or a real bet.
+    """
+
+    __tablename__ = "analyst_briefs"
+    __table_args__ = (
+        UniqueConstraint("run_id", "match_id", "source", name="uq_analyst_briefs_run_match_source"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    run_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    match_id: Mapped[int] = mapped_column(ForeignKey("matches.id"), nullable=False, index=True)
+    source: Mapped[str] = mapped_column(String(30), nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(
+        UtcDateTime, nullable=False, server_default=func.now()
+    )
+    facts: Mapped[dict[str, object]] = mapped_column(
+        _json_type(), nullable=False, default=dict
+    )
+    uncertainties: Mapped[list[str]] = mapped_column(
+        _json_type(), nullable=False, default=list
+    )
+    missing: Mapped[list[str]] = mapped_column(_json_type(), nullable=False, default=list)
+    trust_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    raw_snapshot: Mapped[dict[str, object]] = mapped_column(
+        _json_type(), nullable=False, default=dict
+    )
+
+
 class ShadowLedgerBet(Base):
     """Paper-only shadow book: at most one bet per match, never mixed with production."""
 

@@ -21,6 +21,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.db.base import Base
 from app.db.models import (
+    AgentBet,
+    AgentDecision,
+    AnalystBrief,
     ClvRecord,
     IngestionRun,
     LedgerBet,
@@ -34,6 +37,9 @@ from app.db.models import (
 )
 
 ALL_TABLES: tuple[str, ...] = (
+    "analyst_briefs",
+    "agent_bets",
+    "agent_decisions",
     "clv_records",
     "ledger_bets",
     "shadow_ledger_bets",
@@ -47,6 +53,9 @@ ALL_TABLES: tuple[str, ...] = (
 )
 
 _TABLES: dict[str, type[Base]] = {
+    "analyst_briefs": AnalystBrief,
+    "agent_bets": AgentBet,
+    "agent_decisions": AgentDecision,
     "clv_records": ClvRecord,
     "ledger_bets": LedgerBet,
     "shadow_ledger_bets": ShadowLedgerBet,
@@ -75,6 +84,9 @@ class ResetPlan:
 
     def scoped_tables(self) -> tuple[str, ...]:
         names = [
+            "analyst_briefs",
+            "agent_bets",
+            "agent_decisions",
             "clv_records",
             "ledger_bets",
             "shadow_ledger_bets",

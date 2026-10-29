@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.db.models import (
+    AgentBet,
     League,
     LedgerBet,
     Match,
@@ -39,8 +40,8 @@ logger = logging.getLogger(__name__)
 LEDGER_JOB_ID = "ledger_update"
 SHADOW_LEDGER_JOB_ID = "shadow_ledger_update"
 
-BetModel = type[LedgerBet | ShadowLedgerBet]
-BetRow = LedgerBet | ShadowLedgerBet
+BetModel = type[LedgerBet] | type[ShadowLedgerBet] | type[AgentBet]
+BetRow = LedgerBet | ShadowLedgerBet | AgentBet
 
 
 def _round_dividend(amount: float) -> float:

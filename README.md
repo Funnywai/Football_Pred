@@ -93,6 +93,11 @@ docker compose up -d
 | `ML_GATE_MIN_REAL_BETS` | `50` | 閘門要求 `n_bets_real` 至少這麼多注，`roi_real` 才可信：真實價下 **0 注** 會讓 `roi_real = 0.0`，沒有這個下限時「一注都不下」會靠絕對條件通過。設 `0` 可關閉（測試用）|
 | `LEDGER_ENABLE` | `true` | 是否啟用帳本排程 |
 | `SHADOW_LEDGER_ENABLE` | `true` | 是否啟用 shadow 帳本排程（需同時開啟 `LEDGER_ENABLE`；寫入獨立 `shadow_ledger_bets`，不影響正式帳本） |
+| `AGENT_MAX_ODDS` | `5.0` | Agent risk 允許的最高 execution odds |
+| `STRIKER_API_KEY` | 空 | StrikerAPI key；B analyst 只用 lineups（不用 odds） |
+| `AGENT_LLM_BASE_URL` | 空 | OpenAI-compatible endpoint，例如 OpenCode Go 的 `/inference/go/openai/v1` |
+| `AGENT_LLM_MODEL` | `deepseek-v4.1-flash` | C decision agent model |
+| `AGENT_LLM_API_KEY` | 空 | OpenCode Go / OpenAI-compatible API key |
 | `LEDGER_INITIAL_BANKROLL` | `1000` | 模擬本金（HKD） |
 | `LEDGER_MIN_STAKE` | `10` | 最低一注（HKD＝HKJC bet unit；低於跳過，不上夾） |
 | `POSTGRES_USER/PASSWORD/DB` | football | compose 的資料庫帳密 |
@@ -130,6 +135,9 @@ docker compose run --rm app python -m app.cli <子命令> [參數]
 | `predict` | 立刻跑一次冠軍預測（寫 `predictions` / `match_features`） | 每小時 |
 | `ledger` | 立刻結算＋下注 | 每小時 |
 | `shadow-ledger` | 立刻結算＋下注 shadow 帳本（paper only） | 每小時（需 `SHADOW_LEDGER_ENABLE=true`） |
+| `agent-evaluate` | 只跑 A deterministic risk audit，不下注 | 無 |
+| `agent-ledger --variant a_only\|abc` | 結算並建立指定 variant 的 agent paper ledger | 無 |
+| `agent-abc --window-minutes 45` | T-30 A+B+C pass：lineups-only B + DeepSeek Flash C | 無 |
 | `reset-shadow --yes` | 只刪除 `shadow_ledger_bets`；預設 dry-run 並印出筆數 | 無 |
 | `reset-paper --yes` | 重設 paper/shadow 帳本與預測／模型（預設 dry-run） | 無 |
 
@@ -162,6 +170,10 @@ docker compose exec app printenv LEDGER_INITIAL_BANKROLL             # 容器內
 | `GET /bets/summary` | 本金、ROI、yield、已／未結算注碼等（`book=production\|shadow`） |
 | `GET /bets/equity-curve` | 資金曲線（初始 → 各次結算事件 → 現值；`book=production\|shadow`） |
 | `GET /clv/summary` | CLV／校準／gate；ROI 與已結算注單依 `book=production\|shadow`，CLV 與校準維持模型層級 |
+| `GET /agent/decisions` | Agent decision audit（`agent=risk\|decision`） |
+| `GET /agent/briefs` | Lineups-only B analyst brief |
+| `GET /agent/bets?variant=a_only\|abc` | Agent paper ledger 注單 |
+| `GET /agent/summary` / `GET /agent/equity-curve` | Agent paper 帳本摘要／資金曲線 |
 | `GET /ops/status` | 運維狀態：版本、git SHA、DB 連線、排程開關 |
 | `GET /ops/jobs` | 排程任務清單與各任務最近一次執行紀錄 |
 | `GET /ops/runs` | 最近 `ingestion_runs`（`limit` 預設 50、上限 200） |

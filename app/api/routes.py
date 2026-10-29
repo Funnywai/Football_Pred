@@ -6,6 +6,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import aliased
 
+from app.agents.ledger import (
+    DEFAULT_AGENT_VARIANT,
+    agent_equity_curve,
+    agent_summary,
+)
+from app.agents.schemas import AgentBriefOut, AgentDecisionOut
 from app.api.schemas import (
     BetOut,
     BetSummary,
@@ -19,6 +25,9 @@ from app.api.schemas import (
     TeamOut,
 )
 from app.db.models import (
+    AgentBet,
+    AgentDecision,
+    AnalystBrief,
     League,
     LedgerBet,
     Match,
@@ -44,6 +53,7 @@ async def get_session(request: Request):
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 
 BOOK_PATTERN = "^(production|shadow)$"
+AGENT_VARIANT_PATTERN = "^(a_only|abc)$"
 
 
 def _bet_model(book: str) -> type[LedgerBet] | type[ShadowLedgerBet]:
@@ -246,6 +256,165 @@ async def list_models(session: SessionDep) -> list[ModelOut]:
         )
         for version in (await session.execute(stmt)).scalars()
     ]
+
+
+@router.get("/agent/decisions", response_model=list[AgentDecisionOut])
+async def list_agent_decisions(
+    session: SessionDep,
+    limit: int = Query(100, ge=1, le=500),
+    match_id: int | None = None,
+    action: str | None = None,
+    agent: str | None = None,
+) -> list[AgentDecisionOut]:
+    home = aliased(Team)
+    away = aliased(Team)
+    stmt = (
+        select(AgentDecision, League.code, home.name_en, away.name_en)
+        .join(Match, Match.id == AgentDecision.match_id)
+        .join(League, League.id == Match.league_id)
+        .join(home, home.id == Match.home_team_id)
+        .join(away, away.id == Match.away_team_id)
+        .order_by(AgentDecision.evaluated_at.desc(), AgentDecision.id.desc())
+        .limit(limit)
+    )
+    if match_id is not None:
+        stmt = stmt.where(AgentDecision.match_id == match_id)
+    if action is not None:
+        stmt = stmt.where(AgentDecision.action == action)
+    if agent is not None:
+        stmt = stmt.where(AgentDecision.agent == agent)
+    rows = (await session.execute(stmt)).all()
+    return [
+        AgentDecisionOut(
+            id=decision.id,
+            run_id=decision.run_id,
+            match_id=decision.match_id,
+            model_version_id=decision.model_version_id,
+            target=decision.target,
+            outcome=decision.outcome,
+            action=decision.action,
+            stake=decision.stake,
+            odds=decision.odds,
+            edge=decision.edge,
+            signal_edge=decision.signal_edge,
+            confidence=decision.confidence,
+            agent=decision.agent,
+            reason=decision.reason,
+            input_snapshot=decision.input_snapshot,
+            evaluated_at=decision.evaluated_at,
+            league_code=league_code,
+            home_team=home_name,
+            away_team=away_name,
+        )
+        for decision, league_code, home_name, away_name in rows
+    ]
+
+
+@router.get("/agent/briefs", response_model=list[AgentBriefOut])
+async def list_agent_briefs(
+    session: SessionDep,
+    run_id: str | None = None,
+    match_id: int | None = None,
+    limit: int = Query(100, ge=1, le=500),
+) -> list[AgentBriefOut]:
+    stmt = select(AnalystBrief)
+    if run_id is not None:
+        stmt = stmt.where(AnalystBrief.run_id == run_id)
+    if match_id is not None:
+        stmt = stmt.where(AnalystBrief.match_id == match_id)
+    stmt = stmt.order_by(
+        AnalystBrief.captured_at.desc(), AnalystBrief.id.desc()
+    ).limit(limit)
+    rows = (await session.execute(stmt)).scalars().all()
+    return [AgentBriefOut.model_validate(row) for row in rows]
+
+
+@router.get("/agent/bets", response_model=list[BetOut])
+async def list_agent_bets(
+    session: SessionDep,
+    variant: str = Query(DEFAULT_AGENT_VARIANT, pattern=AGENT_VARIANT_PATTERN),
+    status: str | None = None,
+    match_id: int | None = None,
+    target: str | None = None,
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> list[BetOut]:
+    home = aliased(Team)
+    away = aliased(Team)
+    stmt = (
+        select(AgentBet, Match.kickoff_time, League.code, home.name_en, away.name_en)
+        .join(Match, Match.id == AgentBet.match_id)
+        .join(League, League.id == Match.league_id)
+        .join(home, home.id == Match.home_team_id)
+        .join(away, away.id == Match.away_team_id)
+        .where(AgentBet.variant == variant)
+        .order_by(AgentBet.placed_at, AgentBet.id)
+        .offset(offset)
+        .limit(limit)
+    )
+    if status is not None:
+        stmt = stmt.where(AgentBet.status == status)
+    if match_id is not None:
+        stmt = stmt.where(AgentBet.match_id == match_id)
+    if target is not None:
+        stmt = stmt.where(AgentBet.target == target)
+    rows = (await session.execute(stmt)).all()
+    return [
+        BetOut(
+            id=bet.id,
+            match_id=bet.match_id,
+            target=bet.target,
+            outcome=bet.outcome,
+            model_version_id=bet.model_version_id,
+            line=bet.line,
+            odds=bet.odds,
+            stake=bet.stake,
+            bankroll_at_place=bet.bankroll_at_place,
+            edge=bet.edge,
+            kelly_multiplier=bet.kelly_multiplier,
+            status=bet.status,
+            placed_at=bet.placed_at,
+            settled_at=bet.settled_at,
+            payout=bet.payout,
+            profit=bet.profit,
+            kickoff_time=kickoff_time,
+            league_code=league_code,
+            home_team=home_name,
+            away_team=away_name,
+        )
+        for bet, kickoff_time, league_code, home_name, away_name in rows
+    ]
+
+
+@router.get("/agent/summary", response_model=BetSummary)
+async def agent_bets_summary(
+    session: SessionDep,
+    request: Request,
+    variant: str = Query(DEFAULT_AGENT_VARIANT, pattern=AGENT_VARIANT_PATTERN),
+) -> BetSummary:
+    values = await agent_summary(session, request.app.state.settings, variant)
+    return BetSummary(
+        initial_bankroll=values.initial_bankroll,
+        bankroll=values.bankroll,
+        n_bets=values.n_bets,
+        n_settled=values.n_settled,
+        n_open=values.n_open,
+        stakes_total=values.stakes_total,
+        open_stakes=values.open_stakes,
+        realized_profit=values.realized_profit,
+        roi=values.roi,
+        yield_pct=values.yield_pct,
+    )
+
+
+@router.get("/agent/equity-curve", response_model=list[EquityPointOut])
+async def agent_equity_curve_endpoint(
+    session: SessionDep,
+    request: Request,
+    variant: str = Query(DEFAULT_AGENT_VARIANT, pattern=AGENT_VARIANT_PATTERN),
+) -> list[EquityPointOut]:
+    points = await agent_equity_curve(session, request.app.state.settings, variant)
+    return [EquityPointOut(t=p.t, bankroll=p.bankroll) for p in points]
 
 
 @router.get("/bets", response_model=list[BetOut])

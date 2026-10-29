@@ -7,6 +7,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.base import Base
 from app.db.models import (
+    AgentBet,
+    AgentDecision,
+    AnalystBrief,
     IngestionRun,
     League,
     LedgerBet,
@@ -33,6 +36,9 @@ _TABLE_MODELS: dict[str, type[Base]] = {
     "model_versions": ModelVersion,
     "ledger_bets": LedgerBet,
     "shadow_ledger_bets": ShadowLedgerBet,
+    "agent_bets": AgentBet,
+    "agent_decisions": AgentDecision,
+    "analyst_briefs": AnalystBrief,
     "ingestion_runs": IngestionRun,
 }
 

@@ -11,6 +11,8 @@ from app.cli import main
 from app.config import Settings
 from app.db.base import Base
 from app.db.models import (
+    AgentBet,
+    AnalystBrief,
     ClvRecord,
     IngestionRun,
     LedgerBet,
@@ -115,6 +117,36 @@ async def _seed(db: Database) -> None:
                 profit=-20.0,
             )
         )
+        session.add(
+            AgentBet(
+                run_id="run-1",
+                match_id=match.id,
+                model_version_id=version.id,
+                target="1x2",
+                outcome="H",
+                variant="a_only",
+                odds=2.1,
+                stake=10.0,
+                bankroll_at_place=1000.0,
+                kelly_multiplier=0.5,
+                status="won",
+                payout=21.0,
+                profit=11.0,
+            )
+        )
+        session.add(
+            AnalystBrief(
+                run_id="run-1",
+                match_id=match.id,
+                source="striker",
+                captured_at=KICKOFF,
+                facts={},
+                uncertainties=[],
+                missing=[],
+                trust_score=1.0,
+                raw_snapshot={},
+            )
+        )
         session.add(IngestionRun(job="test", started_at=KICKOFF, status="success"))
         await session.commit()
 
@@ -148,6 +180,7 @@ def test_cli_default_is_dry_run_and_deletes_nothing(
         out = capsys.readouterr().out
         assert "reset-paper plan (dry-run)" in out
         assert "would delete:" in out
+        assert "analyst_briefs: 1" in out
         assert "ledger_bets: 1" in out
         assert "shadow_ledger_bets: 1" in out
         assert "predictions: 1" in out
@@ -187,6 +220,9 @@ async def test_default_reset_deletes_ml_and_bet_state_but_keeps_history(
             db, include_history=False, include_runs=False, keep_models=False
         )
         assert deleted == {
+            "analyst_briefs": 1,
+            "agent_bets": 1,
+            "agent_decisions": 0,
             "clv_records": 1,
             "ledger_bets": 1,
             "shadow_ledger_bets": 1,
@@ -195,6 +231,8 @@ async def test_default_reset_deletes_ml_and_bet_state_but_keeps_history(
             "model_versions": 1,
         }
         for model in (
+            AgentBet,
+            AnalystBrief,
             ClvRecord,
             LedgerBet,
             ShadowLedgerBet,
@@ -218,7 +256,14 @@ async def test_keep_models_preserves_model_versions(tmp_path: Path) -> None:
         )
         assert "model_versions" not in deleted
         assert await _count(db, ModelVersion) == 1
-        for model in (Prediction, LedgerBet, ShadowLedgerBet, MatchFeature):
+        for model in (
+            AgentBet,
+            AnalystBrief,
+            Prediction,
+            LedgerBet,
+            ShadowLedgerBet,
+            MatchFeature,
+        ):
             assert await _count(db, model) == 0
     finally:
         await db.dispose()

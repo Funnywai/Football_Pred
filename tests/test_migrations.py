@@ -57,3 +57,28 @@ def test_offline_migration_creates_shadow_ledger_bets() -> None:
     assert "CREATE TABLE shadow_ledger_bets" in script
     assert "uq_shadow_ledger_bets_match" in script
     assert "ix_shadow_ledger_bets_match_id" in script
+
+
+def test_offline_migration_creates_agent_decisions() -> None:
+    script = generate_offline_sql()
+    assert "CREATE TABLE agent_decisions" in script
+    assert "ix_agent_decisions_run_id" in script
+    assert "ix_agent_decisions_match_id" in script
+    assert "ix_agent_decisions_evaluated_at" in script
+    assert "ix_agent_decisions_match_evaluated" in script
+
+
+def test_offline_migration_creates_agent_bets() -> None:
+    script = generate_offline_sql()
+    assert "CREATE TABLE agent_bets" in script
+    assert "uq_agent_bets_variant_match" in script
+    assert "ix_agent_bets_run_id" in script
+    assert "ix_agent_bets_match_id" in script
+
+
+def test_offline_migration_creates_analyst_briefs() -> None:
+    script = generate_offline_sql()
+    assert "CREATE TABLE analyst_briefs" in script
+    assert "uq_analyst_briefs_run_match_source" in script
+    assert "ix_analyst_briefs_run_id" in script
+    assert "ix_analyst_briefs_match_id" in script

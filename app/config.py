@@ -63,6 +63,21 @@ class Settings(BaseSettings):
     ledger_max_stake_fraction: float = 0.05
     ledger_min_stake: float = 10.0
 
+    # Deterministic risk agent (paper/audit only, sub-system A of the A/B/C/D split)
+    agent_max_odds: float = 5.0
+
+    # B analyst: StrikerAPI lineups only (never odds, never API-Football)
+    striker_api_key: str = ""
+    striker_base_url: str = "https://mcp.strikerapi.com"
+    striker_timeout_seconds: float = 20.0
+
+    # C decision agent: OpenAI-compatible endpoint (OpenCode Go)
+    agent_llm_base_url: str = ""
+    agent_llm_api_key: str = ""
+    agent_llm_model: str = "deepseek-v4.1-flash"
+    agent_llm_temperature: float = 0.0
+    agent_llm_timeout_seconds: float = 30.0
+
     # Live CLV tracking + paper-validation stop/go gate (sub-system C follow-up)
     clv_enable: bool = True
     clv_update_interval: int = 3600
