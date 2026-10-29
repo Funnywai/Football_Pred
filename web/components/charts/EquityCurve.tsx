@@ -12,15 +12,16 @@ const PAD = 24;
 
 export interface EquityCurveProps {
   points: EquityPoint[] | null;
+  source?: string;
 }
 
-export function EquityCurve({ points }: EquityCurveProps) {
+export function EquityCurve({ points, source = "/bets/equity-curve" }: EquityCurveProps) {
   if (points === null) {
     return (
       <EmptyState
         icon={LineChart}
         title="Equity curve unavailable"
-        detail="the API did not return /bets/equity-curve"
+        detail={`the API did not return ${source}`}
       />
     );
   }

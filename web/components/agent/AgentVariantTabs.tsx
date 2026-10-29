@@ -1,24 +1,22 @@
 import Link from "next/link";
 
-import type { LedgerBook } from "@/lib/types";
+import type { AgentVariant } from "@/lib/types";
 
-const BOOKS: ReadonlyArray<{ book: LedgerBook; label: string; href: string }> = [
-  { book: "production", label: "Production", href: "/performance" },
-  { book: "shadow", label: "Shadow · paper", href: "/performance?book=shadow" },
+const VARIANTS: ReadonlyArray<{ variant: AgentVariant; label: string; href: string }> = [
+  { variant: "a_only", label: "A-only", href: "/agent" },
+  { variant: "abc", label: "A+B+C", href: "/agent?variant=abc" },
 ];
 
-export interface LedgerBookToggleProps {
-  book: LedgerBook;
+export interface AgentVariantTabsProps {
+  variant: AgentVariant;
 }
 
-// Same segmented-control anatomy as TabBar (DESIGN.md 10): a bordered track with a
-// raised active indicator, real links, and the active book carried by aria-current.
-export function LedgerBookToggle({ book }: LedgerBookToggleProps) {
-  const activeIndex = book === "shadow" ? 1 : 0;
+export function AgentVariantTabs({ variant }: AgentVariantTabsProps) {
+  const activeIndex = variant === "abc" ? 1 : 0;
 
   return (
     <nav
-      aria-label="Ledger book"
+      aria-label="Agent variant"
       className="relative grid grid-cols-2 rounded-md border border-border-default bg-surface-base p-1"
     >
       <span
@@ -26,11 +24,11 @@ export function LedgerBookToggle({ book }: LedgerBookToggleProps) {
         className="absolute inset-y-1 left-1 w-[calc(50%-var(--space-1))] rounded-sm bg-surface-raised transition-transform duration-200 ease-in-out motion-reduce:transition-none"
         style={{ transform: `translateX(${activeIndex * 100}%)` }}
       />
-      {BOOKS.map((item) => {
-        const active = item.book === book;
+      {VARIANTS.map((item) => {
+        const active = item.variant === variant;
         return (
           <Link
-            key={item.book}
+            key={item.variant}
             href={item.href}
             aria-current={active ? "page" : undefined}
             className={`relative z-10 rounded-sm px-3 py-2 text-center text-data transition-colors duration-150 ease-out ${

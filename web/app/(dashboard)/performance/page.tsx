@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { EquityCurve } from "@/components/charts/EquityCurve";
 import { ClvCard } from "@/components/clv/ClvCard";
 import { KpiStrip } from "@/components/kpi/KpiStrip";
-import { LedgerBookToggle } from "@/components/ledger/LedgerBookToggle";
+import { PerformanceViewTabs } from "@/components/performance/PerformanceViewTabs";
 import { PipelineFlow } from "@/components/pipeline/PipelineFlow";
 import { BetsTable } from "@/components/tables/BetsTable";
 import { MatchesPredictionsTable } from "@/components/tables/MatchesPredictionsTable";
@@ -13,9 +13,19 @@ import { ResultsTable } from "@/components/tables/ResultsTable";
 import { SignalVsExecutionTable } from "@/components/tables/SignalVsExecutionTable";
 import { Panel } from "@/components/ui/Panel";
 import { RefreshOnInterval } from "@/components/ui/RefreshOnInterval";
-import { normalizeLedgerBook } from "@/lib/ledger";
-import { loadPerformanceData } from "@/lib/performance-data";
+import {
+  normalizePerformanceView,
+  performanceViewBook,
+  type PerformanceView,
+} from "@/lib/performance-view";
+import {
+  loadClvViewData,
+  loadPerformanceData,
+  type ClvViewData,
+  type PerformanceData,
+} from "@/lib/performance-data";
 import { pipelineStages } from "@/lib/pipeline";
+import type { LedgerBook } from "@/lib/types";
 
 export const metadata: Metadata = {
   title: "Performance · Football_Pred Mission Control",
@@ -29,23 +39,13 @@ function Source({ children }: { children: ReactNode }) {
   );
 }
 
-export default async function PerformancePage({
-  searchParams,
+function PerformanceShell({
+  view,
+  children,
 }: {
-  searchParams: Promise<{ book?: string }>;
+  view: PerformanceView;
+  children: ReactNode;
 }) {
-  const { book: requestedBook } = await searchParams;
-  const book = normalizeLedgerBook(requestedBook);
-  const data = await loadPerformanceData(book);
-  const bookQuery = book === "shadow" ? "?book=shadow" : "";
-  const stages = pipelineStages({
-    jobs: data.jobs,
-    runs: data.runs,
-    data: data.data,
-    now: data.now,
-  });
-  const pipelineActive = stages.some((stage) => stage.status === "active");
-
   return (
     <div role="tabpanel" aria-labelledby="tab-performance" className="flex flex-col gap-6">
       <RefreshOnInterval />
@@ -56,10 +56,72 @@ export default async function PerformancePage({
             Every match, prediction, bet and outcome, plus money over time.
           </p>
         </div>
-        <LedgerBookToggle book={book} />
+        <PerformanceViewTabs view={view} />
       </div>
+      {children}
+    </div>
+  );
+}
 
-      {book === "shadow" ? (
+export default async function PerformancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ book?: string; view?: string }>;
+}) {
+  const { book: requestedBook, view: requestedView } = await searchParams;
+  const view = normalizePerformanceView(requestedView, requestedBook);
+
+  if (view === "clv") {
+    const data = await loadClvViewData();
+    return (
+      <PerformanceShell view={view}>
+        <ClvView data={data} />
+      </PerformanceShell>
+    );
+  }
+
+  const book = performanceViewBook(view);
+  const data = await loadPerformanceData(book);
+  return (
+    <PerformanceShell view={view}>
+      <LedgerView view={view} book={book} data={data} />
+    </PerformanceShell>
+  );
+}
+
+function ClvView({ data }: { data: ClvViewData }) {
+  return (
+    <Panel
+      id="clv"
+      title="CLV & Calibration"
+      action={<Source>/clv/summary?book=production + /models</Source>}
+    >
+      <ClvCard models={data.models} summary={data.clv} book="production" />
+    </Panel>
+  );
+}
+
+function LedgerView({
+  view,
+  book,
+  data,
+}: {
+  view: "production" | "shadow";
+  book: LedgerBook;
+  data: PerformanceData;
+}) {
+  const bookQuery = `?book=${book}`;
+  const stages = pipelineStages({
+    jobs: data.jobs,
+    runs: data.runs,
+    data: data.data,
+    now: data.now,
+  });
+  const pipelineActive = stages.some((stage) => stage.status === "active");
+
+  return (
+    <>
+      {view === "shadow" ? (
         <p className="flex items-start gap-2 rounded-lg border border-status-warn bg-surface-base px-4 py-3 text-body text-text-secondary">
           <FlaskConical className="mt-0.5 size-4 shrink-0 text-status-warn" aria-hidden />
           <span>Shadow ledger — paper only. Production bankroll is unchanged.</span>
@@ -99,11 +161,7 @@ export default async function PerformancePage({
         <SignalVsExecutionTable bets={data.bets} predictions={data.predictions} />
       </Panel>
 
-      <Panel
-        id="bets"
-        title="All bets"
-        action={<Source>{`/bets${bookQuery}`}</Source>}
-      >
+      <Panel id="bets" title="All bets" action={<Source>{`/bets${bookQuery}`}</Source>}>
         <BetsTable bets={data.bets} book={book} />
       </Panel>
 
@@ -118,14 +176,6 @@ export default async function PerformancePage({
       <Panel id="results" title="Results" action={<Source>/results</Source>}>
         <ResultsTable results={data.results} />
       </Panel>
-
-      <Panel
-        id="clv"
-        title="CLV card"
-        action={<Source>{`/clv/summary${bookQuery} + /models`}</Source>}
-      >
-        <ClvCard models={data.models} summary={data.clv} book={book} />
-      </Panel>
-    </div>
+    </>
   );
 }

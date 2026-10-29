@@ -106,6 +106,38 @@ export interface Bet {
 // separate relaxed-rule validation book (`shadow`). The API defaults to production.
 export type LedgerBook = "production" | "shadow";
 
+// ---- /agent/* surface (app/api/routes.py, app/agents/schemas.py) ----
+
+// `a_only` is the deterministic risk baseline; `abc` is the analyst + decision treatment.
+// The agent books are paper-only and never touch the production or shadow bankroll.
+export type AgentVariant = "a_only" | "abc";
+
+export type AgentDecisionAgent = "risk" | "decision";
+
+export interface AgentDecision {
+  id: number;
+  run_id: string;
+  match_id: number;
+  model_version_id: number;
+  target: string;
+  outcome: string;
+  action: string;
+  stake: number | null;
+  odds: number | null;
+  edge: number | null;
+  signal_edge: number | null;
+  confidence: number | null;
+  agent: string;
+  reason: string;
+  input_snapshot: Record<string, unknown>;
+  evaluated_at: string;
+  // Phase 2a enriches the decision row with the match identity so the table does not
+  // have to join a second endpoint. Older rows may omit them.
+  league_code?: string | null;
+  home_team?: string | null;
+  away_team?: string | null;
+}
+
 export interface BetSummary {
   initial_bankroll: number;
   bankroll: number;

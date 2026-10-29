@@ -6,6 +6,7 @@ import { useRef, type KeyboardEvent } from "react";
 
 const TABS = [
   { href: "/performance", label: "Performance" },
+  { href: "/agent", label: "Agent" },
   { href: "/technical", label: "Technical" },
 ] as const;
 
@@ -29,11 +30,11 @@ export function TabBar() {
       role="tablist"
       aria-label="Dashboard sections"
       onKeyDown={onKeyDown}
-      className="relative grid grid-cols-2 rounded-md border border-border-default bg-surface-base p-1"
+      className="relative grid grid-cols-3 rounded-md border border-border-default bg-surface-base p-1"
     >
       <span
         aria-hidden
-        className="absolute inset-y-1 left-1 w-[calc(50%-var(--space-1))] rounded-sm bg-surface-raised transition-transform duration-200 ease-in-out motion-reduce:transition-none"
+        className="absolute inset-y-1 left-1 w-[calc((100%-2*var(--space-1))/3)] rounded-sm bg-surface-raised transition-transform duration-200 ease-in-out motion-reduce:transition-none"
         style={{ transform: `translateX(${activeIndex * 100}%)` }}
       />
       {TABS.map((tab, index) => {

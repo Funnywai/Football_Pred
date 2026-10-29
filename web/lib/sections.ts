@@ -52,11 +52,41 @@ export const PERFORMANCE_SECTIONS: SectionSpec[] = [
     purpose: "Score, confirmation and payout-confirmation state for each settled match.",
     source: "/results",
   },
+];
+
+export const CLV_SECTIONS: SectionSpec[] = [
   {
     id: "clv",
-    title: "CLV card",
-    purpose: "Champion 1x2 CLV and calibration metrics, with the CLV-is-a-proxy note.",
-    source: "/models",
+    title: "CLV & Calibration",
+    purpose: "Champion 1x2 CLV and calibration metrics, with the CLV-is-a-proxy note and stop/go gate.",
+    source: "/clv/summary + /models",
+  },
+];
+
+export const AGENT_SECTIONS: SectionSpec[] = [
+  {
+    id: "agent-kpi-strip",
+    title: "Agent KPI strip",
+    purpose: "The agent paper book's bankroll, profit, ROI, yield, open stakes, bets and win rate.",
+    source: "/agent/summary + /agent/bets",
+  },
+  {
+    id: "agent-equity-curve",
+    title: "Agent equity / money curve",
+    purpose: "Agent paper money over time, including the initial point where t is null.",
+    source: "/agent/equity-curve",
+  },
+  {
+    id: "agent-decisions",
+    title: "Agent decisions",
+    purpose: "Every risk-agent decision with match, outcome, action, stake, edge and reason.",
+    source: "/agent/decisions",
+  },
+  {
+    id: "agent-bets",
+    title: "Agent paper bets",
+    purpose: "The agent paper book's bets, separate from the production and shadow ledgers.",
+    source: "/agent/bets",
   },
 ];
 

@@ -2,7 +2,11 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import TechnicalPage from "@/app/(dashboard)/technical/page";
-import { PERFORMANCE_SECTIONS, TECHNICAL_SECTIONS } from "@/lib/sections";
+import {
+  CLV_SECTIONS,
+  PERFORMANCE_SECTIONS,
+  TECHNICAL_SECTIONS,
+} from "@/lib/sections";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => {} }),
@@ -23,6 +27,7 @@ vi.mock("@/lib/performance-data", () => ({
     models: null,
     clv: null,
   }),
+  loadClvViewData: async () => ({ models: null, clv: null }),
 }));
 
 vi.mock("@/lib/technical-data", () => ({
@@ -53,6 +58,9 @@ const PERFORMANCE_UNAVAILABLE: Array<[string, string]> = [
   ["Bets unavailable", "the API did not return /bets"],
   ["Matches x predictions unavailable", "the API did not return /predictions or /bets"],
   ["Results unavailable", "the API did not return /results"],
+];
+
+const CLV_UNAVAILABLE: Array<[string, string]> = [
   ["CLV unavailable", "the API did not return /models"],
 ];
 
@@ -78,7 +86,7 @@ function expectUnavailableStates(pairs: Array<[string, string]>): void {
 }
 
 describe("route smoke — /performance", () => {
-  it("renders every section heading and the explicit unavailable state of every section", async () => {
+  it("renders every production section heading and the explicit unavailable state of every section", async () => {
     render(await PerformancePage({ searchParams: Promise.resolve({}) }));
 
     for (const section of PERFORMANCE_SECTIONS) {
@@ -86,6 +94,19 @@ describe("route smoke — /performance", () => {
     }
     expectUnavailableStates(PERFORMANCE_UNAVAILABLE);
     expect(screen.queryByText("pending — next increment")).not.toBeInTheDocument();
+  });
+
+  it("renders only the CLV card on the CLV & Calibration view", async () => {
+    render(
+      await PerformancePage({ searchParams: Promise.resolve({ view: "clv" }) }),
+    );
+
+    for (const section of CLV_SECTIONS) {
+      expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
+    }
+    expectUnavailableStates(CLV_UNAVAILABLE);
+    expect(screen.queryByRole("heading", { name: "KPI strip" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "All bets" })).not.toBeInTheDocument();
   });
 });
 

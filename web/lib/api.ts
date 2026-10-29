@@ -1,6 +1,9 @@
 import "server-only";
 
 import type {
+  AgentDecision,
+  AgentDecisionAgent,
+  AgentVariant,
   Bet,
   BetSummary,
   ClvSummary,
@@ -101,3 +104,35 @@ export const getClvSummary = (
   apiGet(
     `/clv/summary?source=${encodeURIComponent(source)}&book=${encodeURIComponent(book)}`,
   );
+
+// ---- /agent/* surface (app/api/routes.py) ----
+
+// Decisions are ordered newest-first by (evaluated_at, id) on the API, so `limit` is the
+// newest slice; there is no offset parameter in Phase 1.
+export const getAgentDecisions = (
+  limit = 100,
+  agent?: AgentDecisionAgent,
+): Promise<ApiResult<AgentDecision[]>> =>
+  apiGet(
+    `/agent/decisions?limit=${limit}${agent === undefined ? "" : `&agent=${encodeURIComponent(agent)}`}`,
+  );
+
+// Agent books live in their own namespace (`variant=a_only|abc`), never under `book=`.
+export const getAgentBets = (
+  limit = 50,
+  offset = 0,
+  variant: AgentVariant = "a_only",
+): Promise<ApiResult<Bet[]>> =>
+  apiGet(
+    `/agent/bets?variant=${encodeURIComponent(variant)}&limit=${limit}&offset=${offset}`,
+  );
+
+export const getAgentSummary = (
+  variant: AgentVariant = "a_only",
+): Promise<ApiResult<BetSummary>> =>
+  apiGet(`/agent/summary?variant=${encodeURIComponent(variant)}`);
+
+export const getAgentEquityCurve = (
+  variant: AgentVariant = "a_only",
+): Promise<ApiResult<EquityPoint[]>> =>
+  apiGet(`/agent/equity-curve?variant=${encodeURIComponent(variant)}`);

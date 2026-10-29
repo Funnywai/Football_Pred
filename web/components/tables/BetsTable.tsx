@@ -77,18 +77,28 @@ function betMatches(bet: Bet, query: string): boolean {
 export interface BetsTableProps {
   bets: BetsWindow | null;
   book?: LedgerBook;
+  copy?: "ledger" | "agent";
 }
 
-export function BetsTable({ bets, book = "production" }: BetsTableProps) {
+export function BetsTable({ bets, book = "production", copy = "ledger" }: BetsTableProps) {
   const reveal = useRowReveal(bets?.rows ?? [], betMatches);
 
   if (bets === null) {
+    if (copy === "agent") {
+      return (
+        <EmptyState
+          icon={Inbox}
+          title="Agent bets unavailable"
+          detail="the API did not return /agent/bets"
+        />
+      );
+    }
     return (
       <EmptyState icon={Inbox} title="Bets unavailable" detail="the API did not return /bets" />
     );
   }
   if (bets.rows.length === 0) {
-    return <EmptyBets bets={bets} book={book} />;
+    return <EmptyBets bets={bets} book={book} copy={copy} />;
   }
 
   return (
@@ -109,7 +119,11 @@ export function BetsTable({ bets, book = "production" }: BetsTableProps) {
         rows={reveal.shown}
         rowKey={(bet) => bet.id}
         caption={
-          book === "shadow" ? "All shadow ledger bets (paper only)." : "All ledger bets"
+          copy === "agent"
+            ? "Agent paper book bets (paper only)."
+            : book === "shadow"
+              ? "All shadow ledger bets (paper only)."
+              : "All ledger bets"
         }
         empty={
           reveal.isFiltered ? (
@@ -147,8 +161,25 @@ function windowSentence(bets: BetsWindow): string {
   return `${bets.rows.length} bets`;
 }
 
-function EmptyBets({ bets, book }: { bets: BetsWindow; book: LedgerBook }) {
+function EmptyBets({
+  bets,
+  book,
+  copy,
+}: {
+  bets: BetsWindow;
+  book: LedgerBook;
+  copy: "ledger" | "agent";
+}) {
   if (bets.total === 0) {
+    if (copy === "agent") {
+      return (
+        <EmptyState
+          icon={Inbox}
+          title="No agent bets yet"
+          detail="the agent paper book has not placed a bet"
+        />
+      );
+    }
     if (book === "shadow") {
       return <EmptyState icon={Inbox} title="Shadow ledger has not placed a bet." />;
     }

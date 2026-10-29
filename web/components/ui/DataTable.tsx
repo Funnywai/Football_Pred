@@ -4,6 +4,7 @@ export interface Column<T> {
   key: string;
   header: ReactNode;
   numeric?: boolean;
+  wrap?: boolean;
   render: (row: T) => ReactNode;
 }
 
@@ -57,9 +58,9 @@ export function DataTable<T>({
               {columns.map((column) => (
                 <td
                   key={column.key}
-                  className={`whitespace-nowrap px-3 py-3 ${
-                    column.numeric === true ? "text-right tnum" : "text-left"
-                  }`}
+                  className={`px-3 py-3 ${
+                    column.wrap === true ? "whitespace-normal" : "whitespace-nowrap"
+                  } ${column.numeric === true ? "text-right tnum" : "text-left"}`}
                 >
                   {column.render(row)}
                 </td>

@@ -274,14 +274,14 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 
 ### TabBar
 
-- **Structure**: two tabs (`Performance`, `Technical`) with an active indicator.
+- **Structure**: three tabs (`Performance`, `Agent`, `Technical`) with an active indicator.
 - **Variants**: none.
 - **Spacing**: `--space-3` tab padding.
 - **States**: default, hover, active (indicator in `--accent-signal`), focus (focus ring).
 - **Accessibility**: `role="tablist"` / `role="tab"` / `role="tabpanel"`, arrow-key navigation.
-  The two tabs are real routes (`/performance`, `/technical`), so each tab is an anchor and
-  the page's `<main>` carries `role="tabpanel"` with `aria-labelledby` pointing at the active
-  tab; arrow keys move focus between tabs.
+  The three tabs are real routes (`/performance`, `/agent`, `/technical`), so each tab is an
+  anchor and the page's `<main>` carries `role="tabpanel"` with `aria-labelledby` pointing at
+  the active tab; arrow keys move focus between tabs.
 - **Motion**: the active indicator slides between tabs over 200ms ease-in-out.
 
 ### LogLine
@@ -572,3 +572,41 @@ value below traces to Sections 2-7.
   wins and losses accumulate (naming `clv_n`), that no CLV time series and no per-bet CLV
   exist in v1, and that the ledger's execution price never enters CLV. No trend line is
   drawn.
+
+---
+
+## 12. Agent + Performance IA additions (Phase 2a)
+
+The Phase 2a increment adds one top-level tab, a Performance sub-tab control, and two agent
+tables. **No new colour, type, spacing, radius or motion token was introduced**; every value
+below traces to Sections 2-7.
+
+### PerformanceViewTabs
+
+- **Structure**: a three-segment `<nav aria-label="Performance view">` reusing the TabBar
+  anatomy (`Production`, `Shadow`, `CLV & Calibration`). Each segment is a real link
+  backed by `?view=production|shadow|clv`; `?book=shadow` remains a legacy alias for shadow.
+- **Spacing**: `--space-3` segment padding; the indicator is one third of the track minus the
+  track padding, so it stays aligned at every breakpoint.
+- **States**: default (`--text-secondary`), hover (`--text-primary`), active
+  (`--accent-signal` text plus a raised indicator), focus (global focus ring).
+- **Accessibility**: the active segment carries `aria-current="page"`; colour is never the
+  only carrier of state.
+- **Motion**: the indicator slides over 200ms ease-in-out, removed under reduced motion.
+
+### AgentDecisionsTable
+
+- **Structure**: a `SearchInput` plus a `DataTable` of `/agent/decisions` rows: run, league,
+  match, outcome, action, stake, edge, reason, evaluated. `reason` is the only wrapping cell.
+- **States**: default, unavailable (`/agent/decisions` missing), empty (no decisions yet),
+  filtered-empty. The footer states the fetched window; a full 100-row page is named as the
+  newest slice, never as a total.
+- **Semantics**: `bet`/`no_bet` render as a glyph plus the words "bet"/"no bet"; stake and edge
+  render `—` when null.
+
+### AgentBetsTable
+
+- **Structure**: the `BetsTable` anatomy with agent copy: caption "Agent paper book bets
+  (paper only)", empty state "No agent bets yet", unavailable state naming `/agent/bets`.
+- **Semantics**: the word "production" and "shadow" never appear in this table's copy; the
+  agent page banner states the book is paper-only.

@@ -50,6 +50,28 @@ export interface PerformanceData {
   clv: ClvSummary | null;
 }
 
+export interface ClvViewData {
+  models: ModelVersion[] | null;
+  clv: ClvSummary | null;
+}
+
+/**
+ * The CLV & Calibration view is deliberately ledger-free: it renders only the CLV card and
+ * the stop/go gate, so it loads the model-level sources and nothing else. The summary is
+ * still requested with `book=production` because its ROI/settled fields are production
+ * metrics unless a shadow view is explicitly selected.
+ */
+export async function loadClvViewData(): Promise<ClvViewData> {
+  const [models, clv] = await Promise.all([
+    getModels(),
+    getClvSummary("hkjc", "production"),
+  ]);
+  return {
+    models: models.ok ? models.data : null,
+    clv: clv.ok ? clv.data : null,
+  };
+}
+
 /**
  * Fetch every source the performance tab needs, degrading gracefully: a failed fetch
  * becomes `null` and the section renders an explicit unavailable state. Never throws, so

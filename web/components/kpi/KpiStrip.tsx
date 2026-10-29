@@ -14,15 +14,16 @@ import { KpiTile } from "./KpiTile";
 export interface KpiStripProps {
   summary: BetSummary | null;
   bets: BetsWindow | null;
+  source?: string;
 }
 
-export function KpiStrip({ summary, bets }: KpiStripProps) {
+export function KpiStrip({ summary, bets, source = "/bets/summary" }: KpiStripProps) {
   if (summary === null) {
     return (
       <EmptyState
         icon={Inbox}
         title="KPI data unavailable"
-        detail="the API did not return /bets/summary"
+        detail={`the API did not return ${source}`}
       />
     );
   }
