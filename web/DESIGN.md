@@ -575,24 +575,33 @@ value below traces to Sections 2-7.
 
 ---
 
-## 12. Agent + Performance IA additions (Phase 2a)
+## 12. Ledger + Agent IA additions (Phase 2a)
 
-The Phase 2a increment adds one top-level tab, a Performance sub-tab control, and two agent
-tables. **No new colour, type, spacing, radius or motion token was introduced**; every value
-below traces to Sections 2-7.
+The Phase 2a increment adds the top-level `Ledger` tab, a four-view Ledger sub-tab control,
+a per-book variant control, and two agent tables. **No new colour, type, spacing, radius or
+motion token was introduced**; every value below traces to Sections 2-7.
 
-### PerformanceViewTabs
+### LedgerViewTabs
 
-- **Structure**: a three-segment `<nav aria-label="Performance view">` reusing the TabBar
-  anatomy (`Production`, `Shadow`, `CLV & Calibration`). Each segment is a real link
-  backed by `?view=production|shadow|clv`; `?book=shadow` remains a legacy alias for shadow.
-- **Spacing**: `--space-3` segment padding; the indicator is one third of the track minus the
-  track padding, so it stays aligned at every breakpoint.
+- **Structure**: a four-segment `<nav aria-label="Ledger view">` reusing the TabBar anatomy
+  (`Production`, `Shadow`, `Agent`, `CLV & Calibration`). Each segment is a real link backed
+  by `/ledger?view=production|shadow|agent|clv`; `?book=shadow` remains a legacy alias for
+  shadow, and `/performance?...` redirects here.
+- **Spacing**: `--space-3` segment padding; the active indicator is one quarter of the track
+  minus the track padding, so it stays aligned at every breakpoint.
 - **States**: default (`--text-secondary`), hover (`--text-primary`), active
   (`--accent-signal` text plus a raised indicator), focus (global focus ring).
 - **Accessibility**: the active segment carries `aria-current="page"`; colour is never the
   only carrier of state.
-- **Motion**: the indicator slides over 200ms ease-in-out, removed under reduced motion.
+
+### LedgerAgentVariantTabs
+
+- **Structure**: a two-segment `<nav aria-label="Agent paper book variant">` inside
+  Ledger > Agent, linking `/ledger?view=agent` (A-only) and
+  `/ledger?view=agent&variant=abc` (A+B+C). It reuses the existing `AgentVariantTabs` anatomy
+  and the same states, `aria-current` and reduced-motion rules.
+- **Semantics**: the variant is part of the shareable URL; the ledger renders the same KPI,
+  equity and bets panels for either variant and links to `/agent?variant=...` for decisions.
 
 ### AgentDecisionsTable
 
@@ -609,4 +618,4 @@ below traces to Sections 2-7.
 - **Structure**: the `BetsTable` anatomy with agent copy: caption "Agent paper book bets
   (paper only)", empty state "No agent bets yet", unavailable state naming `/agent/bets`.
 - **Semantics**: the word "production" and "shadow" never appear in this table's copy; the
-  agent page banner states the book is paper-only.
+  Ledger > Agent banner states the book is paper-only.

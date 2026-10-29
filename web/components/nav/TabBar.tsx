@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useRef, type KeyboardEvent } from "react";
 
 const TABS = [
-  { href: "/performance", label: "Performance" },
+  { href: "/ledger", label: "Ledger" },
   { href: "/agent", label: "Agent" },
   { href: "/technical", label: "Technical" },
 ] as const;

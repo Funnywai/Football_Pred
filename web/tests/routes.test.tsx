@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import LedgerPage from "@/app/(dashboard)/ledger/page";
+import PerformancePage from "@/app/(dashboard)/performance/page";
 import TechnicalPage from "@/app/(dashboard)/technical/page";
 import {
   CLV_SECTIONS,
@@ -10,12 +12,15 @@ import {
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => {} }),
+  redirect: (url: string) => {
+    throw new Error(`REDIRECT:${url}`);
+  },
 }));
 
 vi.mock("@/lib/performance-data", () => ({
-  loadPerformanceData: async () => ({
+  loadPerformanceData: async (book: string) => ({
     now: new Date("2026-10-15T12:00:00Z"),
-    book: "production",
+    book,
     summary: null,
     bets: null,
     equity: null,
@@ -28,6 +33,20 @@ vi.mock("@/lib/performance-data", () => ({
     clv: null,
   }),
   loadClvViewData: async () => ({ models: null, clv: null }),
+}));
+
+vi.mock("@/lib/agent-data", () => ({
+  AGENT_DECISIONS_LIMIT: 100,
+  loadAgentLedgerData: async (variant: "a_only" | "abc") => ({
+    variant,
+    summary: null,
+    equity: null,
+    bets: null,
+  }),
+  loadAgentDecisionsData: async (variant: "a_only" | "abc") => ({
+    variant,
+    decisions: null,
+  }),
 }));
 
 vi.mock("@/lib/technical-data", () => ({
@@ -45,12 +64,10 @@ vi.mock("@/lib/technical-data", () => ({
   }),
 }));
 
-import PerformancePage from "@/app/(dashboard)/performance/page";
-
 // The exact unavailable strings each section renders when every loader returns null,
 // read from the components that emit them. A section that regresses to a shell, a blank
 // panel, or a reworded state fails here.
-const PERFORMANCE_UNAVAILABLE: Array<[string, string]> = [
+const LEDGER_UNAVAILABLE: Array<[string, string]> = [
   ["KPI data unavailable", "the API did not return /bets/summary"],
   ["Equity curve unavailable", "the API did not return /bets/equity-curve"],
   ["Pipeline unavailable", "the API did not return /ops/jobs or /ops/data"],
@@ -85,21 +102,19 @@ function expectUnavailableStates(pairs: Array<[string, string]>): void {
   }
 }
 
-describe("route smoke — /performance", () => {
+describe("route smoke — /ledger", () => {
   it("renders every production section heading and the explicit unavailable state of every section", async () => {
-    render(await PerformancePage({ searchParams: Promise.resolve({}) }));
+    render(await LedgerPage({ searchParams: Promise.resolve({}) }));
 
     for (const section of PERFORMANCE_SECTIONS) {
       expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
     }
-    expectUnavailableStates(PERFORMANCE_UNAVAILABLE);
+    expectUnavailableStates(LEDGER_UNAVAILABLE);
     expect(screen.queryByText("pending — next increment")).not.toBeInTheDocument();
   });
 
   it("renders only the CLV card on the CLV & Calibration view", async () => {
-    render(
-      await PerformancePage({ searchParams: Promise.resolve({ view: "clv" }) }),
-    );
+    render(await LedgerPage({ searchParams: Promise.resolve({ view: "clv" }) }));
 
     for (const section of CLV_SECTIONS) {
       expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
@@ -107,6 +122,26 @@ describe("route smoke — /performance", () => {
     expectUnavailableStates(CLV_UNAVAILABLE);
     expect(screen.queryByRole("heading", { name: "KPI strip" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "All bets" })).not.toBeInTheDocument();
+  });
+});
+
+describe("legacy /performance redirect", () => {
+  it("redirects an absent query to the production ledger", async () => {
+    await expect(
+      PerformancePage({ searchParams: Promise.resolve({}) }),
+    ).rejects.toThrow("REDIRECT:/ledger?view=production");
+  });
+
+  it("redirects ?book=shadow to the shadow ledger view", async () => {
+    await expect(
+      PerformancePage({ searchParams: Promise.resolve({ book: "shadow" }) }),
+    ).rejects.toThrow("REDIRECT:/ledger?view=shadow");
+  });
+
+  it("preserves a canonical old view", async () => {
+    await expect(
+      PerformancePage({ searchParams: Promise.resolve({ view: "clv" }) }),
+    ).rejects.toThrow("REDIRECT:/ledger?view=clv");
   });
 });
 
