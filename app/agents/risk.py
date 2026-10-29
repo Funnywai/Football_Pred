@@ -8,7 +8,7 @@ and never places a real bet; the caller owns the commit.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import NamedTuple
 
 from sqlalchemy import select
@@ -70,7 +70,12 @@ def _verdict(facts: _CandidateFacts, settings: Settings) -> tuple[str, str]:
     return ACTION_BET, f"bet: execution edge {facts.execution_edge:.4f}, kelly {facts.kelly:.4f}"
 
 
-async def evaluate_risk(session: AsyncSession, settings: Settings) -> RiskRunSummary:
+async def evaluate_risk(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    max_kickoff_minutes: int | None = None,
+) -> RiskRunSummary:
     """Evaluate champion 1x2 predictions for future matches, one decision per candidate.
 
     Candidates are ordered per match by prediction-time ``edge`` DESC then
@@ -80,6 +85,11 @@ async def evaluate_risk(session: AsyncSession, settings: Settings) -> RiskRunSum
     snapshot, exactly like the shadow ledger.
     """
     evaluated_at = datetime.now(UTC)
+    cutoff = (
+        evaluated_at + timedelta(minutes=max_kickoff_minutes)
+        if max_kickoff_minutes is not None
+        else None
+    )
     run_id = str(uuid.uuid4())
     candidates = (
         (
@@ -90,6 +100,7 @@ async def evaluate_risk(session: AsyncSession, settings: Settings) -> RiskRunSum
                 .where(ModelVersion.status == STATUS_CHAMPION)
                 .where(Prediction.target == TARGET_1X2)
                 .where(Match.kickoff_time > evaluated_at)
+                .where(Match.kickoff_time <= cutoff if cutoff is not None else True)
                 .order_by(
                     Prediction.match_id,
                     Prediction.edge.is_(None),

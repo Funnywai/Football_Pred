@@ -248,7 +248,9 @@ async def agent_abc_update(
 
     async def work(session: AsyncSession) -> int:
         settled = await settle_bets(session, AgentBet)
-        risk = await evaluate_risk(session, settings)
+        risk = await evaluate_risk(
+            session, settings, max_kickoff_minutes=max_kickoff_minutes
+        )
         decisions = await decide_abc(
             session,
             settings,
