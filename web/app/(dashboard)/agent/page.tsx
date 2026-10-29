@@ -1,13 +1,19 @@
 import { Bot } from "lucide-react";
 import type { Metadata } from "next";
-import Link from "next/link";
 import type { ReactNode } from "react";
 
 import { AgentVariantTabs } from "@/components/agent/AgentVariantTabs";
+import { EquityCurve } from "@/components/charts/EquityCurve";
+import { KpiStrip } from "@/components/kpi/KpiStrip";
+import { AgentBetsTable } from "@/components/tables/AgentBetsTable";
 import { AgentDecisionsTable } from "@/components/tables/AgentDecisionsTable";
 import { Panel } from "@/components/ui/Panel";
 import { RefreshOnInterval } from "@/components/ui/RefreshOnInterval";
-import { AGENT_DECISIONS_LIMIT, loadAgentDecisionsData } from "@/lib/agent-data";
+import {
+  AGENT_DECISIONS_LIMIT,
+  loadAgentDecisionsData,
+  loadAgentLedgerData,
+} from "@/lib/agent-data";
 import { agentVariantAgent, normalizeAgentVariant } from "@/lib/agent-variant";
 
 export const metadata: Metadata = {
@@ -30,7 +36,11 @@ export default async function AgentPage({
   const params: { variant?: string } = searchParams ? await searchParams : {};
   const variant = normalizeAgentVariant(params.variant);
   const agentFilter = agentVariantAgent(variant);
-  const data = await loadAgentDecisionsData(variant);
+  const [ledger, audit] = await Promise.all([
+    loadAgentLedgerData(variant),
+    loadAgentDecisionsData(variant),
+  ]);
+  const variantQuery = `variant=${variant}`;
 
   return (
     <div role="tabpanel" aria-labelledby="tab-agent" className="flex flex-col gap-6">
@@ -40,8 +50,8 @@ export default async function AgentPage({
           <h1 className="text-h1 font-semibold text-text-primary">Agent</h1>
           <p className="mt-1 text-body text-text-secondary">
             {variant === "abc"
-              ? "A + B + C decision audit — the gates behind the paper book."
-              : "The deterministic risk agent's decision audit — the gates behind the paper book."}
+              ? "A + B + C paper book and decision audit — every gate, bet and outcome."
+              : "The deterministic risk agent's paper book and decision audit — every gate, bet and outcome."}
           </p>
         </div>
         <AgentVariantTabs variant={variant} />
@@ -55,17 +65,38 @@ export default async function AgentPage({
         </span>
       </p>
 
-      <p className="text-body text-text-secondary">
-        The {variant === "abc" ? "A+B+C" : "A-only"} paper book — KPIs, equity curve and
-        bets — lives in the Ledger.{" "}
-        <Link
-          href={`/ledger?view=agent&variant=${variant}`}
-          className="text-accent-signal underline decoration-accent-signal underline-offset-4"
-        >
-          Open the {variant === "abc" ? "A+B+C" : "A-only"} paper book
-        </Link>
-        .
-      </p>
+      <Panel
+        id="agent-kpi-strip"
+        title="Agent KPI strip"
+        action={
+          <Source>{`/agent/summary?${variantQuery} + /agent/bets?${variantQuery}`}</Source>
+        }
+      >
+        <KpiStrip
+          summary={ledger.summary}
+          bets={ledger.bets}
+          source={`/agent/summary?${variantQuery}`}
+        />
+      </Panel>
+
+      <Panel
+        id="agent-equity-curve"
+        title="Agent equity / money curve"
+        action={<Source>{`/agent/equity-curve?${variantQuery}`}</Source>}
+      >
+        <EquityCurve
+          points={ledger.equity}
+          source={`/agent/equity-curve?${variantQuery}`}
+        />
+      </Panel>
+
+      <Panel
+        id="agent-bets"
+        title="Agent paper bets"
+        action={<Source>{`/agent/bets?${variantQuery}`}</Source>}
+      >
+        <AgentBetsTable bets={ledger.bets} />
+      </Panel>
 
       <Panel
         id="agent-decisions"
@@ -76,10 +107,7 @@ export default async function AgentPage({
           </Source>
         }
       >
-        <AgentDecisionsTable
-          decisions={data.decisions}
-          limit={AGENT_DECISIONS_LIMIT}
-        />
+        <AgentDecisionsTable decisions={audit.decisions} limit={AGENT_DECISIONS_LIMIT} />
       </Panel>
     </div>
   );

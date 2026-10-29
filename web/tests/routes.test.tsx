@@ -4,49 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 import LedgerPage from "@/app/(dashboard)/ledger/page";
 import PerformancePage from "@/app/(dashboard)/performance/page";
 import TechnicalPage from "@/app/(dashboard)/technical/page";
-import {
-  CLV_SECTIONS,
-  PERFORMANCE_SECTIONS,
-  TECHNICAL_SECTIONS,
-} from "@/lib/sections";
+import Home from "@/app/page";
+import { TECHNICAL_SECTIONS } from "@/lib/sections";
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh: () => {} }),
   redirect: (url: string) => {
     throw new Error(`REDIRECT:${url}`);
   },
-}));
-
-vi.mock("@/lib/performance-data", () => ({
-  loadPerformanceData: async (book: string) => ({
-    now: new Date("2026-10-15T12:00:00Z"),
-    book,
-    summary: null,
-    bets: null,
-    equity: null,
-    predictions: null,
-    results: null,
-    jobs: null,
-    runs: null,
-    data: null,
-    models: null,
-    clv: null,
-  }),
-  loadClvViewData: async () => ({ models: null, clv: null }),
-}));
-
-vi.mock("@/lib/agent-data", () => ({
-  AGENT_DECISIONS_LIMIT: 100,
-  loadAgentLedgerData: async (variant: "a_only" | "abc") => ({
-    variant,
-    summary: null,
-    equity: null,
-    bets: null,
-  }),
-  loadAgentDecisionsData: async (variant: "a_only" | "abc") => ({
-    variant,
-    decisions: null,
-  }),
 }));
 
 vi.mock("@/lib/technical-data", () => ({
@@ -64,23 +29,9 @@ vi.mock("@/lib/technical-data", () => ({
   }),
 }));
 
-// The exact unavailable strings each section renders when every loader returns null,
-// read from the components that emit them. A section that regresses to a shell, a blank
-// panel, or a reworded state fails here.
-const LEDGER_UNAVAILABLE: Array<[string, string]> = [
-  ["KPI data unavailable", "the API did not return /bets/summary"],
-  ["Equity curve unavailable", "the API did not return /bets/equity-curve"],
-  ["Pipeline unavailable", "the API did not return /ops/jobs or /ops/data"],
-  ["Signal vs execution unavailable", "the API did not return /bets or /predictions"],
-  ["Bets unavailable", "the API did not return /bets"],
-  ["Matches x predictions unavailable", "the API did not return /predictions or /bets"],
-  ["Results unavailable", "the API did not return /results"],
-];
-
-const CLV_UNAVAILABLE: Array<[string, string]> = [
-  ["CLV unavailable", "the API did not return /models"],
-];
-
+// The exact unavailable strings each technical section renders when every loader returns
+// null, read from the components that emit them. A section that regresses to a shell, a
+// blank panel, or a reworded state fails here.
 const TECHNICAL_UNAVAILABLE: Array<[string, string]> = [
   ["Log stream unavailable", "the API did not return /ops/logs"],
   ["Scheduler unavailable", "the API did not return /ops/jobs"],
@@ -102,46 +53,57 @@ function expectUnavailableStates(pairs: Array<[string, string]>): void {
   }
 }
 
-describe("route smoke — /ledger", () => {
-  it("renders every production section heading and the explicit unavailable state of every section", async () => {
-    render(await LedgerPage({ searchParams: Promise.resolve({}) }));
+describe("root redirect", () => {
+  it("sends / to the agent page", () => {
+    expect(() => Home()).toThrow("REDIRECT:/agent");
+  });
+});
 
-    for (const section of PERFORMANCE_SECTIONS) {
-      expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
-    }
-    expectUnavailableStates(LEDGER_UNAVAILABLE);
-    expect(screen.queryByText("pending — next increment")).not.toBeInTheDocument();
+describe("legacy /ledger redirect", () => {
+  it("defaults to the A-only agent page", async () => {
+    await expect(
+      LedgerPage({ searchParams: Promise.resolve({}) }),
+    ).rejects.toThrow("REDIRECT:/agent");
   });
 
-  it("renders only the CLV card on the CLV & Calibration view", async () => {
-    render(await LedgerPage({ searchParams: Promise.resolve({ view: "clv" }) }));
+  it("carries an agent variant bookmark through", async () => {
+    await expect(
+      LedgerPage({ searchParams: Promise.resolve({ view: "agent", variant: "abc" }) }),
+    ).rejects.toThrow("REDIRECT:/agent?variant=abc");
+  });
 
-    for (const section of CLV_SECTIONS) {
-      expect(screen.getByRole("heading", { name: section.title })).toBeInTheDocument();
+  it("keeps the A-only variant on the default agent page", async () => {
+    await expect(
+      LedgerPage({ searchParams: Promise.resolve({ view: "agent", variant: "a_only" }) }),
+    ).rejects.toThrow("REDIRECT:/agent");
+  });
+
+  it("sends the retired production/shadow/CLV views to the agent page", async () => {
+    for (const view of ["production", "shadow", "clv"]) {
+      await expect(
+        LedgerPage({ searchParams: Promise.resolve({ view }) }),
+      ).rejects.toThrow("REDIRECT:/agent");
     }
-    expectUnavailableStates(CLV_UNAVAILABLE);
-    expect(screen.queryByRole("heading", { name: "KPI strip" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "All bets" })).not.toBeInTheDocument();
   });
 });
 
 describe("legacy /performance redirect", () => {
-  it("redirects an absent query to the production ledger", async () => {
+  it("defaults to the A-only agent page", async () => {
     await expect(
       PerformancePage({ searchParams: Promise.resolve({}) }),
-    ).rejects.toThrow("REDIRECT:/ledger?view=production");
+    ).rejects.toThrow("REDIRECT:/agent");
   });
 
-  it("redirects ?book=shadow to the shadow ledger view", async () => {
+  it("carries a variant bookmark through", async () => {
     await expect(
-      PerformancePage({ searchParams: Promise.resolve({ book: "shadow" }) }),
-    ).rejects.toThrow("REDIRECT:/ledger?view=shadow");
+      PerformancePage({ searchParams: Promise.resolve({ variant: "abc" }) }),
+    ).rejects.toThrow("REDIRECT:/agent?variant=abc");
   });
 
-  it("preserves a canonical old view", async () => {
+  it("keeps the A-only variant on the default agent page", async () => {
     await expect(
-      PerformancePage({ searchParams: Promise.resolve({ view: "clv" }) }),
-    ).rejects.toThrow("REDIRECT:/ledger?view=clv");
+      PerformancePage({ searchParams: Promise.resolve({ variant: "a_only" }) }),
+    ).rejects.toThrow("REDIRECT:/agent");
   });
 });
 

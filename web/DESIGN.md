@@ -274,14 +274,15 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 
 ### TabBar
 
-- **Structure**: three tabs (`Performance`, `Agent`, `Technical`) with an active indicator.
+- **Structure**: two tabs (`Agent`, `Technical`) with an active indicator that spans half the
+  track.
 - **Variants**: none.
 - **Spacing**: `--space-3` tab padding.
 - **States**: default, hover, active (indicator in `--accent-signal`), focus (focus ring).
 - **Accessibility**: `role="tablist"` / `role="tab"` / `role="tabpanel"`, arrow-key navigation.
-  The three tabs are real routes (`/performance`, `/agent`, `/technical`), so each tab is an
-  anchor and the page's `<main>` carries `role="tabpanel"` with `aria-labelledby` pointing at
-  the active tab; arrow keys move focus between tabs.
+  The two tabs are real routes (`/agent`, `/technical`), so each tab is an anchor and the
+  page's `<main>` carries `role="tabpanel"` with `aria-labelledby` pointing at the active tab;
+  arrow keys move focus between tabs.
 - **Motion**: the active indicator slides between tabs over 200ms ease-in-out.
 
 ### LogLine
@@ -296,7 +297,7 @@ anatomy and adapted to this product. Every primitive is exercised in a component
 ### Note
 
 - **Structure**: a `<p>` carrying the Info glyph and one caption sentence. This is the
-  shared caption primitive for both tabs (Performance and Technical): every window label,
+  shared caption primitive for both tabs (Agent and Technical): every window label,
   disclosure and caveat renders through it, so the two tabs read as one product.
 - **Variants**: none. The Info glyph is always present — one rule, no per-site variation.
 - **Spacing**: `--space-2` glyph-to-text gap. The note carries no padding of its own; it
@@ -575,33 +576,42 @@ value below traces to Sections 2-7.
 
 ---
 
-## 12. Ledger + Agent IA additions (Phase 2a)
+## 12. Agent IA (Phase 2a, merged 2026-10-29)
 
-The Phase 2a increment adds the top-level `Ledger` tab, a four-view Ledger sub-tab control,
-a per-book variant control, and two agent tables. **No new colour, type, spacing, radius or
-motion token was introduced**; every value below traces to Sections 2-7.
+The Phase 2a increment originally introduced a top-level `Ledger` tab with four book views.
+The current IA folds that tab into a single `Agent` page: a two-tab nav (`Agent`, `Technical`),
+one shared variant control, and the agent paper book plus decision audit on the same surface.
+**No new colour, type, spacing, radius or motion token was introduced**; every value below
+traces to Sections 2-7.
 
-### LedgerViewTabs
+### Agent page composition
 
-- **Structure**: a four-segment `<nav aria-label="Ledger view">` reusing the TabBar anatomy
-  (`Production`, `Shadow`, `Agent`, `CLV & Calibration`). Each segment is a real link backed
-  by `/ledger?view=production|shadow|agent|clv`; `?book=shadow` remains a legacy alias for
-  shadow, and `/performance?...` redirects here.
-- **Spacing**: `--space-3` segment padding; the active indicator is one quarter of the track
-  minus the track padding, so it stays aligned at every breakpoint.
-- **States**: default (`--text-secondary`), hover (`--text-primary`), active
-  (`--accent-signal` text plus a raised indicator), focus (global focus ring).
-- **Accessibility**: the active segment carries `aria-current="page"`; colour is never the
-  only carrier of state.
+- **Structure**: the `Agent` route renders, in order, the paper-only banner, the KPI strip
+  (`/agent/summary` + `/agent/bets`), the equity curve (`/agent/equity-curve`), the agent
+  paper bets table (`/agent/bets`) and the decision audit (`/agent/decisions`). The
+  `AgentVariantTabs` control sits in the page header.
+- **Data**: both loaders run in parallel in the Server Component; each source degrades to
+  `null` and renders its explicit unavailable state rather than failing the page.
+- **Source labels**: every panel's `source` caption names the variant query
+  (`?variant=a_only|abc`) and the decisions caption names the agent filter
+  (`?agent=risk|decision`) so the visible data always says which book it came from.
+- **Semantics**: the banner states the book is paper-only and that production bankroll and
+  the shadow ledger are unchanged. Production history is no longer a separate UI view.
 
-### LedgerAgentVariantTabs
+### AgentVariantTabs
 
-- **Structure**: a two-segment `<nav aria-label="Agent paper book variant">` inside
-  Ledger > Agent, linking `/ledger?view=agent` (A-only) and
-  `/ledger?view=agent&variant=abc` (A+B+C). It reuses the existing `AgentVariantTabs` anatomy
-  and the same states, `aria-current` and reduced-motion rules.
-- **Semantics**: the variant is part of the shareable URL; the ledger renders the same KPI,
-  equity and bets panels for either variant and links to `/agent?variant=...` for decisions.
+- **Structure**: a two-segment `<nav aria-label="Agent variant">` linking `/agent` (A-only)
+  and `/agent?variant=abc` (A+B+C). It reuses the TabBar anatomy, a half-track indicator,
+  `aria-current="page"` and reduced-motion rules.
+- **Semantics**: the variant is part of the shareable URL and filters every panel on the page.
+
+### Legacy routes
+
+- **Structure**: `/ledger`, `/performance` and `/` are redirect-only routes to `/agent`.
+  `?view=agent&variant=abc` and `?variant=abc` preserve the A+B+C variant; every other
+  production/shadow/CLV URL lands on the default A-only page. Old bookmarks never 404.
+- **Scope**: backend production/shadow/CLV APIs and data are unchanged; only their UI
+  surface was removed.
 
 ### AgentDecisionsTable
 
@@ -618,4 +628,4 @@ motion token was introduced**; every value below traces to Sections 2-7.
 - **Structure**: the `BetsTable` anatomy with agent copy: caption "Agent paper book bets
   (paper only)", empty state "No agent bets yet", unavailable state naming `/agent/bets`.
 - **Semantics**: the word "production" and "shadow" never appear in this table's copy; the
-  Ledger > Agent banner states the book is paper-only.
+  Agent page banner states the book is paper-only.
