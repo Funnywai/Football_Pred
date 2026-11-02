@@ -1,0 +1,423 @@
+{
+  "data": {
+    "matches": [
+      {
+        "id": "50079081",
+        "frontEndId": "FB8142",
+        "matchDate": "2026-11-01+08:00",
+        "kickOffTime": "2026-11-01T00:45:00.000+08:00",
+        "status": "FIRSTHALFCOMPLETED",
+        "updateAt": "2026-10-29T11:25:17.913+08:00",
+        "sequence": "1.1793465100.48.Russian Premier                                                                                                                 .0.99.Rodina Moscow                                                                                                                   .000",
+        "esIndicatorEnabled": true,
+        "homeTeam": {
+          "id": "50288123",
+          "name_en": "Rodina Moscow",
+          "name_ch": "莫斯科路迪拿"
+        },
+        "awayTeam": {
+          "id": "50001203",
+          "name_en": "FK Krasnodar",
+          "name_ch": "卡斯洛達"
+        },
+        "tournament": {
+          "id": "50071760",
+          "frontEndId": "",
+          "nameProfileId": "50000091",
+          "isInteractiveServiceAvailable": false,
+          "code": "RPL",
+          "name_en": "Russian Premier",
+          "name_ch": "俄羅斯超級聯賽"
+        },
+        "isInteractiveServiceAvailable": true,
+        "inplayDelay": false,
+        "venue": null,
+        "tvChannels": [],
+        "liveEvents": [
+          {
+            "id": "72334406",
+            "code": "BETRADAR"
+          }
+        ],
+        "featureStartTime": "",
+        "featureMatchSequence": "",
+        "poolInfo": {
+          "normalPools": [
+            "TTG",
+            "CHL",
+            "CRS",
+            "HHA",
+            "HAD",
+            "HLA",
+            "HIL",
+            "HLH",
+            "NTS1",
+            "HDC"
+          ],
+          "inplayPools": [
+            "TTG",
+            "CHL",
+            "CRS",
+            "HHA",
+            "HAD",
+            "HLA",
+            "HIL",
+            "HLH",
+            "NTS1",
+            "HDC"
+          ],
+          "sellingPools": [
+            "NTS1",
+            "HLA",
+            "HIL",
+            "HAD",
+            "HLH",
+            "HDC",
+            "HHA",
+            "CRS",
+            "TTG",
+            "CHL"
+          ],
+          "ntsInfo": [],
+          "entInfo": [],
+          "definedPools": [
+            "TTG",
+            "CHL",
+            "FLA",
+            "HFT",
+            "FHH",
+            "OOE",
+            "CRS",
+            "FHL",
+            "HHA",
+            "FCH",
+            "FHA",
+            "FLH",
+            "FCS",
+            "HAD",
+            "HLA",
+            "FTS",
+            "HIL",
+            "HDC",
+            "HLH",
+            "SGA12",
+            "SGA11",
+            "SGA20",
+            "SGA13",
+            "SGA8",
+            "SGA14",
+            "SGA3",
+            "SGA15",
+            "SGA4",
+            "SGA7",
+            "SGA17",
+            "SGA18",
+            "SGA1",
+            "SGA10",
+            "SGA19",
+            "SGA16",
+            "SGA5",
+            "SGA6",
+            "SGA2",
+            "SGA9",
+            "NTS1"
+          ],
+          "ngsInfo": [],
+          "agsInfo": []
+        },
+        "runningResult": {
+          "homeScore": 0,
+          "awayScore": 0,
+          "corner": 2,
+          "homeCorner": 1,
+          "awayCorner": 1
+        },
+        "runningResultExtra": null,
+        "adminOperation": {
+          "remark": null
+        },
+        "foPools": [
+          {
+            "id": "2058199003",
+            "status": "SELLINGSTARTED",
+            "oddsType": "HIL",
+            "instNo": 0,
+            "inplay": true,
+            "name_ch": "",
+            "name_en": "",
+            "updateAt": "2026-11-01T01:31:32.064+08:00",
+            "expectedSuspendDateTime": "",
+            "lines": [
+              {
+                "lineId": "6",
+                "status": "AVAILABLE",
+                "condition": "1.5",
+                "main": true,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "2.02",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "大",
+                        "name_en": "High"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "L",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.70",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "L",
+                        "name_ch": "細",
+                        "name_en": "Low"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "lineId": "7",
+                "status": "AVAILABLE",
+                "condition": "1.0/1.5",
+                "main": false,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.71",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "大",
+                        "name_en": "High"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "L",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "2.01",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "L",
+                        "name_ch": "細",
+                        "name_en": "Low"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "lineId": "5",
+                "status": "SUSPENDED",
+                "condition": "1.5/2.0",
+                "main": false,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "2.27",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "大",
+                        "name_en": "High"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "L",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.56",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "L",
+                        "name_ch": "細",
+                        "name_en": "Low"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "lineId": "4",
+                "status": "SUSPENDED",
+                "condition": "2.0/2.5",
+                "main": false,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "2.20",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "大",
+                        "name_en": "High"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "L",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.59",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "L",
+                        "name_ch": "細",
+                        "name_en": "Low"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "lineId": "1",
+                "status": "AVAILABLE",
+                "condition": "2.5",
+                "main": false,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "4.15",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "大",
+                        "name_en": "High"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "L",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.17",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "L",
+                        "name_ch": "細",
+                        "name_en": "Low"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "lineId": "2",
+                "status": "SUSPENDED",
+                "condition": "2.5/3.0",
+                "main": false,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "2.17",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "大",
+                        "name_en": "High"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "L",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.61",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "L",
+                        "name_ch": "細",
+                        "name_en": "Low"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "lineId": "3",
+                "status": "SUSPENDED",
+                "condition": "3.5",
+                "main": false,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "4.75",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "大",
+                        "name_en": "High"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "L",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.13",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "L",
+                        "name_ch": "細",
+                        "name_en": "Low"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

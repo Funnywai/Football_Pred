@@ -1,0 +1,1209 @@
+{
+  "data": {
+    "matches": [
+      {
+        "id": "50079081",
+        "frontEndId": "FB8142",
+        "matchDate": "2026-11-01+08:00",
+        "kickOffTime": "2026-11-01T00:45:00.000+08:00",
+        "status": "FIRSTHALFCOMPLETED",
+        "updateAt": "2026-10-29T11:25:17.913+08:00",
+        "sequence": "1.1793465100.48.Russian Premier                                                                                                                 .0.99.Rodina Moscow                                                                                                                   .000",
+        "esIndicatorEnabled": true,
+        "homeTeam": {
+          "id": "50288123",
+          "name_en": "Rodina Moscow",
+          "name_ch": "莫斯科路迪拿"
+        },
+        "awayTeam": {
+          "id": "50001203",
+          "name_en": "FK Krasnodar",
+          "name_ch": "卡斯洛達"
+        },
+        "tournament": {
+          "id": "50071760",
+          "frontEndId": "",
+          "nameProfileId": "50000091",
+          "isInteractiveServiceAvailable": false,
+          "code": "RPL",
+          "name_en": "Russian Premier",
+          "name_ch": "俄羅斯超級聯賽"
+        },
+        "isInteractiveServiceAvailable": true,
+        "inplayDelay": false,
+        "venue": null,
+        "tvChannels": [],
+        "liveEvents": [
+          {
+            "id": "72334406",
+            "code": "BETRADAR"
+          }
+        ],
+        "featureStartTime": "",
+        "featureMatchSequence": "",
+        "poolInfo": {
+          "normalPools": [
+            "TTG",
+            "CHL",
+            "CRS",
+            "HHA",
+            "HAD",
+            "HLA",
+            "HIL",
+            "HLH",
+            "NTS1",
+            "HDC"
+          ],
+          "inplayPools": [
+            "TTG",
+            "CHL",
+            "CRS",
+            "HHA",
+            "HAD",
+            "HLA",
+            "HIL",
+            "HLH",
+            "NTS1",
+            "HDC"
+          ],
+          "sellingPools": [
+            "NTS1",
+            "HLA",
+            "HIL",
+            "HAD",
+            "HLH",
+            "HDC",
+            "HHA",
+            "CRS",
+            "TTG",
+            "CHL"
+          ],
+          "ntsInfo": [],
+          "entInfo": [],
+          "definedPools": [
+            "TTG",
+            "CHL",
+            "HFT",
+            "FLA",
+            "FHH",
+            "OOE",
+            "CRS",
+            "FHL",
+            "HHA",
+            "FCH",
+            "FHA",
+            "FLH",
+            "FCS",
+            "HAD",
+            "HLA",
+            "FTS",
+            "HIL",
+            "HDC",
+            "HLH",
+            "SGA12",
+            "SGA11",
+            "SGA20",
+            "SGA13",
+            "SGA14",
+            "SGA8",
+            "SGA3",
+            "SGA15",
+            "SGA4",
+            "SGA17",
+            "SGA7",
+            "SGA18",
+            "SGA1",
+            "SGA10",
+            "SGA19",
+            "SGA16",
+            "SGA5",
+            "SGA6",
+            "SGA2",
+            "SGA9",
+            "NTS1"
+          ],
+          "ngsInfo": [],
+          "agsInfo": []
+        },
+        "runningResult": {
+          "homeScore": 0,
+          "awayScore": 0,
+          "corner": 2,
+          "homeCorner": 1,
+          "awayCorner": 1
+        },
+        "runningResultExtra": null,
+        "adminOperation": {
+          "remark": null
+        },
+        "foPools": [
+          {
+            "id": "2058197001",
+            "status": "SELLINGSTARTED",
+            "oddsType": "HAD",
+            "instNo": 0,
+            "inplay": true,
+            "name_ch": "",
+            "name_en": "",
+            "updateAt": "2026-11-01T01:31:32.064+08:00",
+            "expectedSuspendDateTime": "",
+            "lines": [
+              {
+                "lineId": "0",
+                "status": "AVAILABLE",
+                "condition": "0.0",
+                "main": true,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "4.00",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "主隊勝",
+                        "name_en": "Home"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "A",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "2.09",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "A",
+                        "name_ch": "客隊勝",
+                        "name_en": "Away"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "3",
+                    "str": "D",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "2.42",
+                    "selections": [
+                      {
+                        "selId": "3",
+                        "str": "D",
+                        "name_ch": "和",
+                        "name_en": "Draw"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "50078673",
+        "frontEndId": "FB7985",
+        "matchDate": "2026-11-01+08:00",
+        "kickOffTime": "2026-11-01T01:00:00.000+08:00",
+        "status": "FIRSTHALF",
+        "updateAt": "2026-10-29T10:00:14.738+08:00",
+        "sequence": "1.1793466000.19.Italian Division 1                                                                                                              .0.99.Udinese                                                                                                                         .000",
+        "esIndicatorEnabled": true,
+        "homeTeam": {
+          "id": "50003181",
+          "name_en": "Udinese",
+          "name_ch": "烏甸尼斯"
+        },
+        "awayTeam": {
+          "id": "50002647",
+          "name_en": "Roma",
+          "name_ch": "羅馬"
+        },
+        "tournament": {
+          "id": "50072541",
+          "frontEndId": "FB2256",
+          "nameProfileId": "50000069",
+          "isInteractiveServiceAvailable": true,
+          "code": "ISA",
+          "name_en": "Italian Division 1",
+          "name_ch": "意大利甲組聯賽"
+        },
+        "isInteractiveServiceAvailable": true,
+        "inplayDelay": true,
+        "venue": null,
+        "tvChannels": [
+          {
+            "code": "643",
+            "name_en": "Now 643",
+            "name_ch": "Now 643"
+          }
+        ],
+        "liveEvents": [
+          {
+            "id": "71945384",
+            "code": "BETRADAR"
+          }
+        ],
+        "featureStartTime": "",
+        "featureMatchSequence": "",
+        "poolInfo": {
+          "normalPools": [
+            "FCS",
+            "CHA",
+            "CRS",
+            "CHH",
+            "HLA",
+            "CHL",
+            "HLH",
+            "TTG",
+            "HIL",
+            "HHA",
+            "HDC",
+            "NTS5",
+            "CHD"
+          ],
+          "inplayPools": [
+            "FCS",
+            "CRS",
+            "HLA",
+            "CHL",
+            "HLH",
+            "TTG",
+            "HIL",
+            "CHH",
+            "CHA",
+            "HHA",
+            "HDC",
+            "NTS5",
+            "CHD"
+          ],
+          "sellingPools": [
+            "NTS5",
+            "HLA",
+            "TTG",
+            "HLH",
+            "HDC",
+            "HHA",
+            "CRS",
+            "HIL",
+            "CHD",
+            "CHA",
+            "CHL",
+            "CHH"
+          ],
+          "ntsInfo": [
+            "1:A",
+            "2:A",
+            "4:A"
+          ],
+          "entInfo": [],
+          "definedPools": [
+            "LGS",
+            "FCS",
+            "FHL",
+            "FHH",
+            "CHA",
+            "CRS",
+            "CFH",
+            "AGS",
+            "CHH",
+            "FLH",
+            "HLA",
+            "FHC",
+            "CHL",
+            "FLA",
+            "HDC",
+            "HAD",
+            "HLH",
+            "TTG",
+            "FCH",
+            "CHD",
+            "FGS",
+            "FHA",
+            "HHA",
+            "OOE",
+            "HIL",
+            "FTS",
+            "HFT",
+            "CFA",
+            "SGA20",
+            "SGA3",
+            "SGA9",
+            "SGA19",
+            "SGA5",
+            "SGA6",
+            "SGA13",
+            "SGA12",
+            "SGA11",
+            "SGA8",
+            "SGA18",
+            "SGA7",
+            "SGA2",
+            "SGA16",
+            "SGA15",
+            "SGA4",
+            "SGA10",
+            "SGA1",
+            "SGA14",
+            "SGA17",
+            "NTS1",
+            "NTS2",
+            "NTS4",
+            "NTS5"
+          ],
+          "ngsInfo": [],
+          "agsInfo": [
+            {
+              "str": "207",
+              "name_en": "Bryan CRISTANTE",
+              "name_ch": "白賴仁基斯坦迪"
+            },
+            {
+              "str": "201",
+              "name_en": "Donyell MALEN",
+              "name_ch": "唐耶爾馬倫"
+            },
+            {
+              "str": "213",
+              "name_en": "Evan N'DICKA",
+              "name_ch": "伊雲尼迪卡"
+            },
+            {
+              "str": "204",
+              "name_en": "Rodrigo MORA de Carvalho",
+              "name_ch": "洛迪高摩拉"
+            }
+          ]
+        },
+        "runningResult": {
+          "homeScore": 0,
+          "awayScore": 4,
+          "corner": 5,
+          "homeCorner": 3,
+          "awayCorner": 2
+        },
+        "runningResultExtra": null,
+        "adminOperation": {
+          "remark": null
+        },
+        "foPools": [
+          {
+            "id": "2043159001",
+            "status": "SUSPENDED",
+            "oddsType": "HAD",
+            "instNo": 0,
+            "inplay": true,
+            "name_ch": "",
+            "name_en": "",
+            "updateAt": "2026-11-01T01:34:17.232+08:00",
+            "expectedSuspendDateTime": "",
+            "lines": [
+              {
+                "lineId": "0",
+                "status": "AVAILABLE",
+                "condition": "0.0",
+                "main": true,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "50.00",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "主隊勝",
+                        "name_en": "Home"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "A",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.02",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "A",
+                        "name_ch": "客隊勝",
+                        "name_en": "Away"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "3",
+                    "str": "D",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "40.00",
+                    "selections": [
+                      {
+                        "selId": "3",
+                        "str": "D",
+                        "name_ch": "和",
+                        "name_en": "Draw"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "50078674",
+        "frontEndId": "FB7986",
+        "matchDate": "2026-11-01+08:00",
+        "kickOffTime": "2026-11-01T01:30:00.000+08:00",
+        "status": "FIRSTHALF",
+        "updateAt": "2026-10-28T17:23:25.163+08:00",
+        "sequence": "1.1793467800.08.English Premier League                                                                                                          .0.02.Tottenham                                                                                                                       .000",
+        "esIndicatorEnabled": true,
+        "homeTeam": {
+          "id": "50003099",
+          "name_en": "Tottenham",
+          "name_ch": "熱刺"
+        },
+        "awayTeam": {
+          "id": "50000905",
+          "name_en": "Crystal Palace",
+          "name_ch": "水晶宮"
+        },
+        "tournament": {
+          "id": "50071337",
+          "frontEndId": "FB1589",
+          "nameProfileId": "50000051",
+          "isInteractiveServiceAvailable": true,
+          "code": "EPL",
+          "name_en": "English Premier League",
+          "name_ch": "英格蘭超級聯賽"
+        },
+        "isInteractiveServiceAvailable": true,
+        "inplayDelay": true,
+        "venue": null,
+        "tvChannels": [
+          {
+            "code": "621",
+            "name_en": "Now 621",
+            "name_ch": "Now 621"
+          },
+          {
+            "code": "611",
+            "name_en": "Now 611",
+            "name_ch": "Now 611"
+          }
+        ],
+        "liveEvents": [
+          {
+            "id": "72221370",
+            "code": "BETRADAR"
+          }
+        ],
+        "featureStartTime": "",
+        "featureMatchSequence": "",
+        "poolInfo": {
+          "normalPools": [
+            "CHL",
+            "TTG",
+            "HLH",
+            "HAD",
+            "HLA",
+            "FLA",
+            "FCH",
+            "CFA",
+            "FLH",
+            "HHA",
+            "HIL",
+            "FCS",
+            "CFH",
+            "FHL",
+            "AGS",
+            "CHH",
+            "CRS",
+            "FHA",
+            "CHA",
+            "NTS1",
+            "NGS1",
+            "FHC",
+            "HDC",
+            "CHD",
+            "FHH"
+          ],
+          "inplayPools": [
+            "CHL",
+            "TTG",
+            "HLH",
+            "HAD",
+            "HLA",
+            "FLA",
+            "FCH",
+            "FLH",
+            "HHA",
+            "HIL",
+            "FCS",
+            "FHL",
+            "CRS",
+            "FHA",
+            "CFA",
+            "CHH",
+            "CHA",
+            "CFH",
+            "AGS",
+            "NTS1",
+            "NGS1",
+            "FHC",
+            "HDC",
+            "CHD",
+            "FHH"
+          ],
+          "sellingPools": [],
+          "ntsInfo": [],
+          "entInfo": [],
+          "definedPools": [
+            "CHL",
+            "TTG",
+            "MSP4",
+            "SGA7",
+            "CHD",
+            "HLH",
+            "SGA5",
+            "HAD",
+            "HLA",
+            "SGA8",
+            "FLA",
+            "SGA9",
+            "MSP3",
+            "OOE",
+            "SGA4",
+            "MSP1",
+            "FGS",
+            "SGA16",
+            "SGA12",
+            "SGA20",
+            "HDC",
+            "FCH",
+            "CFA",
+            "SGA3",
+            "SGA14",
+            "FLH",
+            "SGA2",
+            "SGA6",
+            "HHA",
+            "SGA1",
+            "SGA15",
+            "FHH",
+            "MSP2",
+            "HIL",
+            "FCS",
+            "SGA18",
+            "LGS",
+            "SGA13",
+            "HFT",
+            "CFH",
+            "FHC",
+            "FHL",
+            "AGS",
+            "SGA10",
+            "CHH",
+            "SGA11",
+            "FTS",
+            "MSP5",
+            "CRS",
+            "SGA17",
+            "FHA",
+            "SGA19",
+            "CHA",
+            "NTS1",
+            "NGS1"
+          ],
+          "ngsInfo": [],
+          "agsInfo": []
+        },
+        "runningResult": {
+          "homeScore": 0,
+          "awayScore": 0,
+          "corner": 1,
+          "homeCorner": 1,
+          "awayCorner": 0
+        },
+        "runningResultExtra": null,
+        "adminOperation": {
+          "remark": null
+        },
+        "foPools": [
+          {
+            "id": "2043187001",
+            "status": "SELLINGSTOPPED",
+            "oddsType": "HAD",
+            "instNo": 0,
+            "inplay": true,
+            "name_ch": "",
+            "name_en": "",
+            "updateAt": "2026-11-01T01:42:11.630+08:00",
+            "expectedSuspendDateTime": "",
+            "lines": [
+              {
+                "lineId": "0",
+                "status": "AVAILABLE",
+                "condition": "0.0",
+                "main": true,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "TempNotOffer",
+                    "currentOdds": "1.10",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "主隊勝",
+                        "name_en": "Home"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "A",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "TempNotOffer",
+                    "currentOdds": "16.00",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "A",
+                        "name_ch": "客隊勝",
+                        "name_en": "Away"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "3",
+                    "str": "D",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "TempNotOffer",
+                    "currentOdds": "6.20",
+                    "selections": [
+                      {
+                        "selId": "3",
+                        "str": "D",
+                        "name_ch": "和",
+                        "name_en": "Draw"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "50078850",
+        "frontEndId": "FB8024",
+        "matchDate": "2026-11-01+08:00",
+        "kickOffTime": "2026-11-01T01:30:00.000+08:00",
+        "status": "FIRSTHALF",
+        "updateAt": "2026-10-31T16:15:14.551+08:00",
+        "sequence": "1.1793467800.08.English Premier League                                                                                                          .0.02.Tottenham                                                                                                                       .001",
+        "esIndicatorEnabled": true,
+        "homeTeam": {
+          "id": "50000407",
+          "name_en": "Bayern Munich",
+          "name_ch": "拜仁慕尼黑"
+        },
+        "awayTeam": {
+          "id": "50001005",
+          "name_en": "Dortmund",
+          "name_ch": "多蒙特"
+        },
+        "tournament": {
+          "id": "50072572",
+          "frontEndId": "FB2258",
+          "nameProfileId": "50000063",
+          "isInteractiveServiceAvailable": true,
+          "code": "GSL",
+          "name_en": "German Division 1",
+          "name_ch": "德國甲組聯賽"
+        },
+        "isInteractiveServiceAvailable": true,
+        "inplayDelay": true,
+        "venue": null,
+        "tvChannels": [
+          {
+            "code": "639",
+            "name_en": "Now 639",
+            "name_ch": "Now 639"
+          }
+        ],
+        "liveEvents": [
+          {
+            "id": "72513274",
+            "code": "BETRADAR"
+          }
+        ],
+        "featureStartTime": "",
+        "featureMatchSequence": "",
+        "poolInfo": {
+          "normalPools": [
+            "FHA",
+            "HLA",
+            "FCH",
+            "CHH",
+            "FLA",
+            "HHA",
+            "FCS",
+            "HLH",
+            "CFA",
+            "HIL",
+            "CRS",
+            "FHL",
+            "TTG",
+            "CFH",
+            "FHH",
+            "HAD",
+            "CHA",
+            "CHL",
+            "FLH",
+            "FHC",
+            "AGS",
+            "NTS1",
+            "NGS1",
+            "HDC",
+            "CHD"
+          ],
+          "inplayPools": [
+            "FHA",
+            "HLA",
+            "FCH",
+            "FLA",
+            "HHA",
+            "FCS",
+            "HLH",
+            "HIL",
+            "CRS",
+            "FHL",
+            "TTG",
+            "HAD",
+            "CHL",
+            "FLH",
+            "FHH",
+            "FHC",
+            "CHH",
+            "CFH",
+            "CFA",
+            "CHA",
+            "AGS",
+            "NTS1",
+            "NGS1",
+            "HDC",
+            "CHD"
+          ],
+          "sellingPools": [
+            "CHA",
+            "HLA",
+            "HAD",
+            "FHC",
+            "CFA",
+            "HHA",
+            "FLH",
+            "CHL",
+            "FHL",
+            "FHA",
+            "HIL",
+            "HLH",
+            "NTS1",
+            "CFH",
+            "TTG",
+            "FCS",
+            "FCH",
+            "FHH",
+            "CHH",
+            "FLA",
+            "CRS",
+            "NGS1",
+            "AGS",
+            "HDC",
+            "CHD"
+          ],
+          "ntsInfo": [],
+          "entInfo": [],
+          "definedPools": [
+            "FGS",
+            "FHA",
+            "HLA",
+            "FCH",
+            "CHH",
+            "MSP5",
+            "FLA",
+            "HHA",
+            "FCS",
+            "HFT",
+            "MSP1",
+            "HLH",
+            "FTS",
+            "CFA",
+            "MSP2",
+            "HIL",
+            "CRS",
+            "FHL",
+            "LGS",
+            "TTG",
+            "CFH",
+            "MSP4",
+            "FHH",
+            "HAD",
+            "CHA",
+            "CHD",
+            "CHL",
+            "FLH",
+            "OOE",
+            "HDC",
+            "FHC",
+            "AGS",
+            "MSP3",
+            "SGA8",
+            "SGA20",
+            "SGA9",
+            "SGA3",
+            "SGA19",
+            "SGA16",
+            "SGA11",
+            "SGA12",
+            "SGA14",
+            "SGA5",
+            "SGA6",
+            "SGA13",
+            "SGA7",
+            "SGA15",
+            "SGA1",
+            "SGA18",
+            "SGA2",
+            "SGA4",
+            "SGA10",
+            "SGA17",
+            "NTS1",
+            "NGS1"
+          ],
+          "ngsInfo": [],
+          "agsInfo": []
+        },
+        "runningResult": null,
+        "runningResultExtra": null,
+        "adminOperation": {
+          "remark": null
+        },
+        "foPools": [
+          {
+            "id": "2049040001",
+            "status": "SELLINGSTARTED",
+            "oddsType": "HAD",
+            "instNo": 0,
+            "inplay": true,
+            "name_ch": "",
+            "name_en": "",
+            "updateAt": "2026-11-01T01:37:58.140+08:00",
+            "expectedSuspendDateTime": "",
+            "lines": [
+              {
+                "lineId": "0",
+                "status": "AVAILABLE",
+                "condition": "0.0",
+                "main": true,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.25",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "主隊勝",
+                        "name_en": "Home"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "A",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "7.40",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "A",
+                        "name_ch": "客隊勝",
+                        "name_en": "Away"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "3",
+                    "str": "D",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "5.00",
+                    "selections": [
+                      {
+                        "selId": "3",
+                        "str": "D",
+                        "name_ch": "和",
+                        "name_en": "Draw"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "50078697",
+        "frontEndId": "FB7993",
+        "matchDate": "2026-11-01+08:00",
+        "kickOffTime": "2026-11-01T01:30:00.000+08:00",
+        "status": "FIRSTHALF",
+        "updateAt": "2026-10-28T17:27:12.744+08:00",
+        "sequence": "1.1793467800.18.Spanish Division 1                                                                                                              .0.99.Betis                                                                                                                           .000",
+        "esIndicatorEnabled": true,
+        "homeTeam": {
+          "id": "50000462",
+          "name_en": "Betis",
+          "name_ch": "貝迪斯"
+        },
+        "awayTeam": {
+          "id": "50002002",
+          "name_en": "Malaga",
+          "name_ch": "馬拉加"
+        },
+        "tournament": {
+          "id": "50072540",
+          "frontEndId": "FB2255",
+          "nameProfileId": "50000100",
+          "isInteractiveServiceAvailable": true,
+          "code": "SFL",
+          "name_en": "Spanish Division 1",
+          "name_ch": "西班牙甲組聯賽"
+        },
+        "isInteractiveServiceAvailable": true,
+        "inplayDelay": true,
+        "venue": null,
+        "tvChannels": [
+          {
+            "code": "632",
+            "name_en": "Now 632",
+            "name_ch": "Now 632"
+          }
+        ],
+        "liveEvents": [
+          {
+            "id": "72478668",
+            "code": "BETRADAR"
+          }
+        ],
+        "featureStartTime": "",
+        "featureMatchSequence": "",
+        "poolInfo": {
+          "normalPools": [
+            "FCH",
+            "HLA",
+            "FLA",
+            "FHA",
+            "HHA",
+            "FCS",
+            "HAD",
+            "HIL",
+            "CRS",
+            "FHL",
+            "TTG",
+            "FHH",
+            "CHL",
+            "HLH",
+            "FLH",
+            "HDC",
+            "NTS1"
+          ],
+          "inplayPools": [
+            "FCH",
+            "HLA",
+            "FLA",
+            "FHA",
+            "HHA",
+            "FCS",
+            "HAD",
+            "HIL",
+            "CRS",
+            "FHL",
+            "TTG",
+            "CHL",
+            "HLH",
+            "FLH",
+            "HDC",
+            "FHH",
+            "NTS1"
+          ],
+          "sellingPools": [
+            "HLA",
+            "FLA",
+            "FHA",
+            "HHA",
+            "FCS",
+            "HAD",
+            "HIL",
+            "CRS",
+            "FHL",
+            "TTG",
+            "FHH",
+            "HLH",
+            "FLH",
+            "HDC",
+            "NTS1",
+            "CHL",
+            "FCH"
+          ],
+          "ntsInfo": [],
+          "entInfo": [],
+          "definedPools": [
+            "SGA3",
+            "SGA8",
+            "FCH",
+            "SGA7",
+            "SGA17",
+            "SGA5",
+            "SGA4",
+            "HLA",
+            "SGA6",
+            "FLA",
+            "FHA",
+            "HHA",
+            "SGA15",
+            "FCS",
+            "HFT",
+            "HAD",
+            "SGA10",
+            "SGA1",
+            "SGA9",
+            "SGA18",
+            "SGA19",
+            "OOE",
+            "SGA2",
+            "FTS",
+            "SGA13",
+            "HIL",
+            "CRS",
+            "FHL",
+            "SGA12",
+            "TTG",
+            "SGA16",
+            "SGA20",
+            "FHH",
+            "CHL",
+            "SGA14",
+            "SGA11",
+            "HLH",
+            "FLH",
+            "HDC",
+            "NTS1"
+          ],
+          "ngsInfo": [],
+          "agsInfo": []
+        },
+        "runningResult": {
+          "homeScore": 0,
+          "awayScore": 0,
+          "corner": 3,
+          "homeCorner": 3,
+          "awayCorner": 0
+        },
+        "runningResultExtra": null,
+        "adminOperation": {
+          "remark": null
+        },
+        "foPools": [
+          {
+            "id": "2043968001",
+            "status": "SELLINGSTARTED",
+            "oddsType": "HAD",
+            "instNo": 0,
+            "inplay": true,
+            "name_ch": "",
+            "name_en": "",
+            "updateAt": "2026-10-30T08:25:02.722+08:00",
+            "expectedSuspendDateTime": "",
+            "lines": [
+              {
+                "lineId": "0",
+                "status": "AVAILABLE",
+                "condition": "0.0",
+                "main": true,
+                "combinations": [
+                  {
+                    "combId": "1",
+                    "str": "H",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "1.17",
+                    "selections": [
+                      {
+                        "selId": "1",
+                        "str": "H",
+                        "name_ch": "主隊勝",
+                        "name_en": "Home"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "2",
+                    "str": "A",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "10.00",
+                    "selections": [
+                      {
+                        "selId": "2",
+                        "str": "A",
+                        "name_ch": "客隊勝",
+                        "name_en": "Away"
+                      }
+                    ]
+                  },
+                  {
+                    "combId": "3",
+                    "str": "D",
+                    "status": "AVAILABLE",
+                    "offerEarlySettlement": "Offer",
+                    "currentOdds": "5.50",
+                    "selections": [
+                      {
+                        "selId": "3",
+                        "str": "D",
+                        "name_ch": "和",
+                        "name_en": "Draw"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

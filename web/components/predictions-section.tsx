@@ -1,0 +1,187 @@
+import {
+  asNumber,
+  formatKickoff,
+  formatNumber,
+  formatOdds,
+  formatSignedPercent,
+  probabilitiesToPercents,
+} from "@/lib/format";
+import type { EndpointResult } from "@/lib/api";
+import type { Prediction } from "@/lib/types";
+
+import { DataWarning, EmptyState, MatchCell, Panel, SectionHeader, StatusTag } from "./ui";
+import { TableFrame } from "./table-frame";
+
+function ProbabilityCell({
+  probabilities,
+}: {
+  probabilities: Prediction["probabilities"];
+}) {
+  const percents = probabilitiesToPercents(probabilities);
+  const values = [percents.H, percents.D, percents.A];
+  if (values.every((value) => value === null)) {
+    return <span className="text-muted">—</span>;
+  }
+  const total = values.reduce<number>((sum, value) => sum + (value ?? 0), 0);
+  const width = (value: number | null) => (total > 0 ? ((value ?? 0) / total) * 100 : 0);
+
+  return (
+    <div className="prob">
+      <div className="prob__bar" aria-hidden="true">
+        <span className="prob__seg prob__seg--h" style={{ width: `${width(percents.H)}%` }} />
+        <span className="prob__seg prob__seg--d" style={{ width: `${width(percents.D)}%` }} />
+        <span className="prob__seg prob__seg--a" style={{ width: `${width(percents.A)}%` }} />
+      </div>
+      <div className="prob__values">
+        <span>
+          <b>H</b> {percents.H === null ? "—" : `${formatNumber(percents.H, 1)}%`}
+        </span>
+        <span>
+          <b>D</b> {percents.D === null ? "—" : `${formatNumber(percents.D, 1)}%`}
+        </span>
+        <span>
+          <b>A</b> {percents.A === null ? "—" : `${formatNumber(percents.A, 1)}%`}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function Triplet({
+  values,
+  format,
+  toneBySign = false,
+}: {
+  values: Array<string | number | null | undefined>;
+  format: (value: string | number | null | undefined) => string;
+  toneBySign?: boolean;
+}) {
+  const labels = ["H", "D", "A"];
+  return (
+    <div className="triplet">
+      {values.map((value, index) => {
+        const numeric = asNumber(value);
+        const tone =
+          toneBySign && numeric !== null
+            ? numeric > 0
+              ? "text-positive"
+              : numeric < 0
+                ? "text-negative"
+                : "text-muted"
+            : "";
+        return (
+          <span className="triplet__row" key={labels[index]}>
+            <span className="triplet__label">{labels[index]}</span>
+            <span className={`triplet__value ${tone}`}>{format(value)}</span>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+export function PredictionsSection({
+  result,
+}: {
+  result: EndpointResult<Prediction[]>;
+}) {
+  const predictions = Array.isArray(result.data) ? result.data : [];
+
+  return (
+    <section id="predictions" className="section" aria-labelledby="predictions-title">
+      <SectionHeader
+        index="02"
+        kicker="Model output"
+        title="Predictions"
+        meta={result.error ? "feed unavailable" : `${predictions.length} rows · H/D/A`}
+      />
+
+      {result.error ? (
+        <DataWarning
+          label="Predictions"
+          endpoint="/dashboard/predictions?limit=50"
+          error={result.error}
+        />
+      ) : null}
+
+      {predictions.length === 0 && !result.error ? (
+        <EmptyState>No predictions returned. Run the model pipeline to populate this feed.</EmptyState>
+      ) : null}
+
+      {predictions.length > 0 ? (
+        <Panel
+          title="Prediction feed"
+          kicker="Ordered by decision time"
+          meta="probabilities · odds · expected value"
+          bodyClassName="panel__body--flush"
+        >
+          <TableFrame label="Latest model predictions" wide>
+            <table className="table--predictions">
+              <caption className="sr-only">
+                Latest model predictions with probabilities, odds, expected value and
+                bet decision
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col">Match</th>
+                  <th scope="col">Kickoff (HKT)</th>
+                  <th scope="col">Model probability</th>
+                  <th scope="col">Odds</th>
+                  <th scope="col">EV</th>
+                  <th scope="col">Model</th>
+                  <th scope="col">Decision</th>
+                </tr>
+              </thead>
+              <tbody>
+                {predictions.map((prediction, index) => (
+                  <tr key={`${prediction.match_id ?? "match"}-${index}`}>
+                    <td>
+                      <MatchCell
+                        home={prediction.home_team}
+                        away={prediction.away_team}
+                        competition={prediction.competition}
+                        matchId={prediction.match_id}
+                      />
+                    </td>
+                    <td className="cell-time">
+                      <time dateTime={prediction.kickoff_at ?? undefined}>
+                        {formatKickoff(prediction.kickoff_at)}
+                      </time>
+                    </td>
+                    <td>
+                      <ProbabilityCell probabilities={prediction.probabilities} />
+                    </td>
+                    <td>
+                      <Triplet
+                        values={[prediction.odds?.H, prediction.odds?.D, prediction.odds?.A]}
+                        format={formatOdds}
+                      />
+                    </td>
+                    <td>
+                      <Triplet
+                        values={[prediction.ev?.H, prediction.ev?.D, prediction.ev?.A]}
+                        format={formatSignedPercent}
+                        toneBySign
+                      />
+                    </td>
+                    <td>
+                      <span className="mono cell-model">{prediction.model_version ?? "—"}</span>
+                    </td>
+                    <td>
+                      <div className="decision">
+                        <StatusTag status={prediction.decision_status} />
+                        <span className="decision__reason" title={prediction.decision_reason ?? undefined}>
+                          {prediction.decision_reason?.trim() || "No reason recorded"}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </TableFrame>
+        </Panel>
+      ) : null}
+    </section>
+  );
+}

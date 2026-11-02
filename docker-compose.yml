@@ -1,0 +1,102 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-football}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-football_pred}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-football} -d ${POSTGRES_DB:-football_pred}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build: .
+    command: uv run uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      FP_DATABASE_URL: ${FP_DATABASE_URL:?FP_DATABASE_URL is required}
+      FP_REDIS_URL: ${FP_REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=3).status == 200 else 1)"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  worker:
+    build: .
+    command: uv run python -m apps.worker.main
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      FP_DATABASE_URL: ${FP_DATABASE_URL:?FP_DATABASE_URL is required}
+      FP_REDIS_URL: ${FP_REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scheduler:
+    build: .
+    command: uv run python -m apps.scheduler.main
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      FP_DATABASE_URL: ${FP_DATABASE_URL:?FP_DATABASE_URL is required}
+      FP_REDIS_URL: ${FP_REDIS_URL:-redis://redis:6379/0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./web
+    environment:
+      API_BASE_URL: http://api:8000
+      NODE_ENV: production
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN:-}
+    depends_on:
+      web:
+        condition: service_started
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+    name: football_pred_pgdata_new
