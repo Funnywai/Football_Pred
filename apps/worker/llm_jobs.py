@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from packages.db.models import Competition, Match
 from packages.db.session import build_engine, build_session_factory, session_scope
 from packages.domain.enums import MatchStatus
-from packages.ingest.triggers import TRIGGER_SCAN_WINDOW, due_triggers
+from packages.ingest.triggers import TRIGGER_SCAN_WINDOW
 from packages.llm.orchestrator import run_llm_prediction
 from packages.llm.providers import build_provider
 from packages.shared.config import get_settings
@@ -19,6 +19,7 @@ from packages.shared.time import ensure_utc, utc_now
 
 _PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts" / "llm"
 _LLM_DEDUPE_TTL_SECONDS = 6 * 60 * 60
+_LLM_PREDICTION_OFFSET = timedelta(minutes=28)
 
 
 def run_llm_prediction_job(match_id: str, stage: str = "T-30m") -> dict[str, object]:
@@ -96,8 +97,10 @@ def _enqueue_due(
     ).all()
     enqueued = 0
     for match, _code in matches:
-        if "T-30m" not in due_triggers(
-            current, match.kickoff_at, window=TRIGGER_SCAN_WINDOW
+        if not (
+            0
+            <= (current - (ensure_utc(match.kickoff_at) - _LLM_PREDICTION_OFFSET)).total_seconds()
+            < TRIGGER_SCAN_WINDOW.total_seconds()
         ):
             continue
         dedupe_key = f"football:llm:{match.id}:T-30m"
