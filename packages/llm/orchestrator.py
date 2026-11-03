@@ -156,6 +156,12 @@ def _run_specialist(
         data.setdefault("match_id", str(match_id))
         data.setdefault("stage", stage)
         data.setdefault("as_of", packet["as_of"])
+        if data.get("abstain") is True:
+            data["probabilities"] = {
+                "H": "0.333333",
+                "D": "0.333333",
+                "A": "0.333334",
+            }
         prediction = AgentPrediction.model_validate(data)
         latency_ms = int((time.perf_counter() - started) * 1000)
         run = _persist_run(

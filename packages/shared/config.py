@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://opencode.ai/zen/go/v1"
     llm_api_key: str | None = None
     llm_temperature: float = 0.0
-    llm_max_tokens: int = 900
+    llm_max_tokens: int = 4000
     llm_timeout_seconds: float = 60.0
     llm_competitions: str = "UCL"
     llm_session_id: str = ""
