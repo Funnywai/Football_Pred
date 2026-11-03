@@ -12,6 +12,12 @@ from packages.db.models.ledger import (
     PaperBet,
     Settlement,
 )
+from packages.db.models.llm import (
+    LlmAgentOutput,
+    LlmAgentRun,
+    LlmEnsemblePrediction,
+    LlmEvidencePacket,
+)
 from packages.db.models.news import NewsSignal
 from packages.db.models.odds import MarketLine, OddsSnapshot
 from packages.db.models.predictions import ModelPrediction
@@ -26,6 +32,10 @@ __all__ = [
     "Competition",
     "DecisionLog",
     "Lineup",
+    "LlmAgentOutput",
+    "LlmAgentRun",
+    "LlmEnsemblePrediction",
+    "LlmEvidencePacket",
     "MarketLine",
     "Match",
     "ModelPrediction",

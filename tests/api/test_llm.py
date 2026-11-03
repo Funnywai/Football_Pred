@@ -14,10 +14,10 @@ def test_llm_status_contract(tmp_path):
         response = client.get("/llm/status")
         assert response.status_code == 200
         payload = response.json()
-        assert payload["phase"] == "foundation"
+        assert payload["phase"] == "phase-3"
         assert payload["runtime"]["decision_layer"] == "llm_not_connected"
-        assert payload["counts"]["agents"] == 8
-        assert payload["counts"]["prompts"] == 2
+        assert payload["counts"]["agents"] == 9
+        assert payload["counts"]["prompts"] == 9
         assert payload["counts"]["predictions"] == 0
         assert payload["counts"]["paper_bets"] == 0
         assert payload["safety"] == {
@@ -35,7 +35,15 @@ def test_llm_status_contract(tmp_path):
         assert {prompt["name"] for prompt in payload["prompts"]} == {
             "system",
             "market_agent",
+            "form_agent",
+            "tactical_agent",
+            "availability_agent",
+            "context_agent",
+            "base_rate_agent",
+            "red_team_agent",
+            "judge_agent",
         }
         assert all(prompt["sha256"] for prompt in payload["prompts"])
+        assert client.get("/llm/predictions").json() == []
     finally:
         application.state.engine.dispose()

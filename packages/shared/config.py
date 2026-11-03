@@ -20,6 +20,16 @@ class Settings(BaseSettings):
     hkjc_queries_dir: Path = Path("packages/adapters/hkjc_queries")
     hkjc_query_version: str = "captured-2026-11"
     hkjc_result_semantics: HkjcResultSemantics = HkjcResultSemantics.UNVERIFIED
+    llm_enabled: bool = False
+    llm_provider: str = "openai_compatible"
+    llm_model: str = "deepseek-v4.1-flash"
+    llm_base_url: str = "https://opencode.ai/zen/go/v1"
+    llm_api_key: str | None = None
+    llm_temperature: float = 0.0
+    llm_max_tokens: int = 900
+    llm_timeout_seconds: float = 60.0
+    llm_competitions: str = "UCL"
+    llm_session_id: str = ""
 
 
 @lru_cache

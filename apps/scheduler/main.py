@@ -21,6 +21,10 @@ def _enqueue_due_triggers(queue: Queue) -> None:
     queue.enqueue("apps.worker.jobs.enqueue_due_match_triggers")
 
 
+def _enqueue_due_llm_predictions(queue: Queue) -> None:
+    queue.enqueue("apps.worker.llm_jobs.enqueue_due_llm_predictions")
+
+
 def _enqueue_settlement_scan(queue: Queue) -> None:
     queue.enqueue("apps.worker.jobs.run_settlement_scan")
 
@@ -63,6 +67,18 @@ def build_scheduler(queue: Queue | None = None) -> BlockingScheduler:
             timezone=HONG_KONG_TIMEZONE,
         ),
         id="match-trigger-scan",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=grace_seconds,
+    )
+    scheduler.add_job(
+        lambda: _enqueue_due_llm_predictions(resolved),
+        IntervalTrigger(
+            seconds=int(TRIGGER_SCAN_INTERVAL.total_seconds()),
+            timezone=HONG_KONG_TIMEZONE,
+        ),
+        id="llm-prediction-scan",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
