@@ -30,7 +30,7 @@ export interface DashboardData {
   technical: EndpointResult<Technical>;
 }
 
-type PayloadKind = "array" | "object";
+export type PayloadKind = "array" | "object";
 
 function describeFailure(error: unknown): string {
   if (error instanceof Error) {
@@ -48,7 +48,7 @@ function describeFailure(error: unknown): string {
   return "Unknown API failure";
 }
 
-async function getJson<T>(
+export async function getJson<T>(
   path: string,
   kind: PayloadKind,
 ): Promise<EndpointResult<T>> {

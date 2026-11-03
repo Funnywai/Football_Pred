@@ -19,3 +19,4 @@ dry_run.db
 .omo/
 .codegraph
 *.tsbuildinfo
+.playwright-mcp/
