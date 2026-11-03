@@ -303,8 +303,8 @@ export default async function LlmLabPage() {
           <p className="llm-note">
             The deterministic plane owns ingestion, quality gates, model
             probabilities and the existing paper ledger. The LLM lane only reads
-            deterministic snapshots; its decision layer is not connected yet and
-            its paper ledger has not been opened.
+            deterministic snapshots; its prediction output is isolated from the
+            deterministic decision path and its paper ledger has not been opened.
           </p>
         </section>
 
@@ -634,7 +634,7 @@ export default async function LlmLabPage() {
             index="06"
             kicker="Nothing produced yet"
             title="Output ledger"
-            meta="phase 2 and 3 not connected"
+            meta="prediction-only lane"
           />
 
           <div className="llm-split">
@@ -651,9 +651,9 @@ export default async function LlmLabPage() {
                 </p>
               ) : (
                 <EmptyState>
-                  No predictions yet. Phase 2 will collect frozen evidence
-                  packets, run the agent ensemble and produce a deterministic
-                  aggregate; the decision layer is not connected.
+                  No LLM predictions have been persisted yet. Once the provider
+                  is enabled, the T-30m job will write frozen evidence, agent
+                  runs and a deterministic ensemble prediction.
                 </EmptyState>
               )}
             </Panel>
