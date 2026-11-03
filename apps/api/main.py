@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from apps.api.dashboard import router as dashboard_router
+from apps.api.llm_lab import router as llm_router
 from packages.db.session import build_engine
 from packages.shared.config import Settings, get_settings
 
@@ -26,6 +27,7 @@ def create_app(
     )
     app.state.redis = redis_client
     app.include_router(dashboard_router)
+    app.include_router(llm_router)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
