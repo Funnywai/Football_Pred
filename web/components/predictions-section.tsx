@@ -47,6 +47,33 @@ function ProbabilityCell({
   );
 }
 
+function ResultCell({ prediction }: { prediction: Prediction }) {
+  const status = (prediction.status ?? "").toLowerCase();
+  const finished = status === "finished";
+  const home90 = asNumber(prediction.home_goals_90);
+  const away90 = asNumber(prediction.away_goals_90);
+  const home = home90 ?? asNumber(prediction.home_goals_final);
+  const away = away90 ?? asNumber(prediction.away_goals_final);
+
+  if (!finished || home === null || away === null) {
+    return <span className="text-muted">—</span>;
+  }
+
+  return (
+    <span className="result">
+      <span className="result__score">
+        {home}–{away}
+      </span>
+      <abbr
+        className="result__label"
+        title={home90 === null ? "After extra time" : "Full time"}
+      >
+        {home90 === null ? "AET" : "FT"}
+      </abbr>
+    </span>
+  );
+}
+
 function Triplet({
   values,
   format,
@@ -111,20 +138,21 @@ export function PredictionsSection({
       {predictions.length > 0 ? (
         <Panel
           title="Prediction feed"
-          kicker="Ordered by decision time"
-          meta="probabilities · odds · expected value"
+          kicker="Ordered by kickoff"
+          meta="result · probabilities · odds · expected value"
           bodyClassName="panel__body--flush"
         >
           <TableFrame label="Latest model predictions" wide>
             <table className="table--predictions">
               <caption className="sr-only">
-                Latest model predictions with probabilities, odds, expected value and
-                bet decision
+                Latest model predictions with result, probabilities, odds, expected
+                value and bet decision
               </caption>
               <thead>
                 <tr>
                   <th scope="col">Match</th>
                   <th scope="col">Kickoff (HKT)</th>
+                  <th scope="col">Result</th>
                   <th scope="col">Model probability</th>
                   <th scope="col">Odds</th>
                   <th scope="col">EV</th>
@@ -147,6 +175,9 @@ export function PredictionsSection({
                       <time dateTime={prediction.kickoff_at ?? undefined}>
                         {formatKickoff(prediction.kickoff_at)}
                       </time>
+                    </td>
+                    <td>
+                      <ResultCell prediction={prediction} />
                     </td>
                     <td>
                       <ProbabilityCell probabilities={prediction.probabilities} />

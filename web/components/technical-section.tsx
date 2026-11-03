@@ -43,6 +43,8 @@ export function TechnicalSection({
   const data = result.data;
   const counts = data?.counts;
   const sources = Array.isArray(data?.sources) ? data.sources : [];
+  const visibleSources = sources.slice(0, 5);
+  const totalSources = Math.max(sources.length, data?.counts?.source_runs ?? 0);
   const decisions = Array.isArray(data?.decisions) ? data.decisions : [];
   const odds = data?.latest_odds;
 
@@ -128,10 +130,14 @@ export function TechnicalSection({
           <Panel
             title="Source runs"
             kicker="Ingestion"
-            meta={`${sources.length} rows`}
+            meta={
+              totalSources > visibleSources.length
+                ? `latest ${visibleSources.length} of ${totalSources}`
+                : `${visibleSources.length} rows`
+            }
             bodyClassName="panel__body--flush"
           >
-            {sources.length === 0 ? (
+            {visibleSources.length === 0 ? (
               <EmptyState>No ingestion source runs recorded.</EmptyState>
             ) : (
               <TableFrame label="Recent ingestion source runs" wide>
@@ -147,7 +153,7 @@ export function TechnicalSection({
                     </tr>
                   </thead>
                   <tbody>
-                    {sources.map((source, index) => {
+                    {visibleSources.map((source, index) => {
                       const extras = Object.fromEntries(
                         Object.entries(source).filter(
                           ([key]) =>

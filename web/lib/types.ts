@@ -107,6 +107,11 @@ export interface Prediction {
   competition?: string | null;
   home_team?: string | null;
   away_team?: string | null;
+  status?: string | null;
+  home_goals_90?: Numeric;
+  away_goals_90?: Numeric;
+  home_goals_final?: Numeric;
+  away_goals_final?: Numeric;
   probabilities?: OutcomeProbabilities | null;
   odds?: OutcomeOdds | null;
   ev?: OutcomeEv | null;

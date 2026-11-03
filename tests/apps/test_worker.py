@@ -364,7 +364,7 @@ def test_run_daily_ingest_covers_all_domestic_leagues(monkeypatch):
 
     result = run_daily_ingest(
         season=2025,
-        competitions=("EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1"),
+        competitions=("EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1", "UCL"),
     )
 
     assert result["leagues"] == {
@@ -373,6 +373,7 @@ def test_run_daily_ingest_covers_all_domestic_leagues(monkeypatch):
         "BUNDESLIGA": 1,
         "SERIEA": 1,
         "LIGUE1": 1,
+        "UCL": 1,
     }
     engine.dispose()
 

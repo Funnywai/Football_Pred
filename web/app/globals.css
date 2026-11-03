@@ -845,7 +845,7 @@ table {
 }
 
 .table--predictions {
-  min-width: 1080px;
+  min-width: 1120px;
 }
 
 .table--bets {
@@ -1049,6 +1049,30 @@ th.num {
   font-family: var(--font-mono);
   font-size: 10.5px;
   font-variant-numeric: tabular-nums;
+}
+
+/* Result */
+
+.result {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.result__score {
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.result__label {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-decoration: none;
 }
 
 /* Decision */

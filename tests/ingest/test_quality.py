@@ -18,6 +18,7 @@ def _input(
     has_xg: bool = True,
     news_item_count: int = 3,
     requires_lineup: bool = True,
+    requires_xg: bool = True,
     degraded_sources: tuple[str, ...] = (),
 ) -> QualityInput:
     return QualityInput(
@@ -30,6 +31,7 @@ def _input(
         has_xg=has_xg,
         news_item_count=news_item_count,
         requires_lineup=requires_lineup,
+        requires_xg=requires_xg,
         degraded_sources=degraded_sources,
     )
 
@@ -57,6 +59,31 @@ def test_ucl_code_is_matched_case_insensitively():
         _input(competition_code=" ucl ", has_xg=False)
     )
     assert CoverageFlag.UCL_XG_MISSING in report.flags
+    assert report.can_bet is False
+
+
+def test_ucl_prediction_only_allows_missing_xg():
+    report = evaluate_quality(
+        _input(
+            competition_code="UCL",
+            has_xg=False,
+            requires_xg=False,
+        )
+    )
+    assert CoverageFlag.UCL_XG_MISSING in report.flags
+    assert report.can_bet is True
+
+
+def test_ucl_prediction_only_still_vetoes_stale_odds():
+    report = evaluate_quality(
+        _input(
+            competition_code="UCL",
+            has_xg=False,
+            requires_xg=False,
+            odds_fetched_at=NOW - timedelta(minutes=11),
+        )
+    )
+    assert report.veto_reasons == ("odds_stale",)
     assert report.can_bet is False
 
 

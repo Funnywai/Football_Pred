@@ -350,6 +350,25 @@ def test_predictions_contract(app, client):
     assert row["decision_at"]
 
 
+def test_predictions_include_finished_match_result(app, client):
+    seeded = _seed(app)
+    session = app.state.session_factory()
+    try:
+        match = session.get(Match, seeded["match_id"])
+        match.status = MatchStatus.FINISHED
+        match.home_goals_90 = 2
+        match.away_goals_90 = 1
+        session.commit()
+    finally:
+        session.close()
+
+    row = client.get("/dashboard/predictions").json()[0]
+
+    assert row["status"] == "finished"
+    assert row["home_goals_90"] == 2
+    assert row["away_goals_90"] == 1
+
+
 def test_predictions_missing_decision_log_reports_pending(app, client):
     seeded = _seed(app)
     session = app.state.session_factory()

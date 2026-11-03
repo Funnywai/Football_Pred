@@ -192,8 +192,10 @@ def test_missing_snapshot_writes_a_skipped_log_without_predictions(
     assert ensure_utc(log.decision_at) == NOW
 
 
-def test_non_epl_match_writes_a_skipped_log(session: Session, fixed_prediction):
-    match, snapshot = _seed(session, code="UCL")
+def test_unsupported_competition_writes_a_skipped_log(
+    session: Session, fixed_prediction
+):
+    match, snapshot = _seed(session, code="RPL")
 
     result = decide_match(session, match, snapshot, now=NOW)
 

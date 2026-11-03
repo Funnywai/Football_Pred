@@ -66,7 +66,14 @@ from packages.shared.time import ensure_utc, utc_now
 HONG_KONG = ZoneInfo("Asia/Hong_Kong")
 _TRIGGER_DEDUPE_TTL_SECONDS = 6 * 60 * 60
 _LINEUP_ACTIONS = frozenset({"lineup_check", "lineup_recheck_decision"})
-DATA_COMPETITIONS: tuple[str, ...] = ("EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1")
+DATA_COMPETITIONS: tuple[str, ...] = (
+    "EPL",
+    "LALIGA",
+    "BUNDESLIGA",
+    "SERIEA",
+    "LIGUE1",
+    "UCL",
+)
 _TRIGGER_RETRY = Retry(max=3, interval=[60, 300, 900])
 
 def _run_source_fetch[T](

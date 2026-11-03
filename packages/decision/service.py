@@ -53,8 +53,9 @@ _POOL_SELLING_STARTED: Final[str] = "SELLINGSTARTED"
 _LINE_AVAILABLE: Final[str] = "AVAILABLE"
 _HAD_SIDES: Final[tuple[Side, Side, Side]] = (Side.H, Side.D, Side.A)
 _EPL_CODE: Final[str] = "EPL"
+_UCL_CODE: Final[str] = "UCL"
 _PREDICTION_COMPETITIONS: Final[frozenset[str]] = frozenset(
-    {"EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1"}
+    {"EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1", "UCL"}
 )
 _DECISION_TRIGGER: Final[str] = "T-30m"
 _DEGRADED_SOURCE_LOOKBACK: Final[timedelta] = timedelta(minutes=30)
@@ -167,6 +168,7 @@ def _decide_match(
             has_xg=False,
             news_item_count=0,
             requires_lineup=False,
+            requires_xg=competition.code != _UCL_CODE,
             degraded_sources=_degraded_sources(session, current),
         )
     )

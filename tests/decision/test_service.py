@@ -360,6 +360,25 @@ def test_non_epl_league_saves_predictions_but_never_places_a_bet(
     assert log.prediction_count == 3
 
 
+def test_ucl_is_prediction_only_without_xg_and_never_places_a_bet(
+    session: Session, fixed_prediction
+):
+    match, snapshot = _seed(session, competition_code="UCL")
+
+    result = decide_match(session, match, snapshot, now=NOW)
+
+    assert result.status == "prediction_only"
+    assert result.prediction is not None
+    assert result.paper_bet_id is None
+    assert result.stake is None
+    assert _prediction_count(session) == 3
+    assert _bet_count(session) == 0
+    log = session.execute(select(DecisionLog)).scalar_one()
+    assert log.status == "prediction_only"
+    assert log.paper_bet_id is None
+    assert log.prediction_count == 3
+
+
 def test_duplicate_decision_reuses_predictions_and_paper_bet(
     session: Session, fixed_prediction
 ):

@@ -171,6 +171,21 @@ def test_canonical_team_slug_is_case_and_whitespace_insensitive():
     assert canonical_team_slug("psg") == "paris-saint-germain"
 
 
+def test_canonical_team_slug_maps_ucl_provider_names_to_hkjc_names():
+    assert canonical_team_slug("Club Atlético de Madrid") == "atletico-madrid"
+    assert canonical_team_slug("Atletico Madrid") == "atletico-madrid"
+    assert canonical_team_slug("FC Internazionale Milano") == "inter-milan"
+    assert canonical_team_slug("Inter Milan") == "inter-milan"
+    assert canonical_team_slug("Manchester United FC") == "manchester-united"
+    assert canonical_team_slug("Manchester Utd") == "manchester-united"
+    assert canonical_team_slug("Paris Saint-Germain FC") == "paris-saint-germain"
+    assert canonical_team_slug("Paris Saint Germain") == "paris-saint-germain"
+    assert canonical_team_slug("Sporting Clube de Portugal") == "sporting-cp"
+    assert canonical_team_slug("Sporting") == "sporting-cp"
+    assert canonical_team_slug("Club Brugge KV") == "club-brugge"
+    assert canonical_team_slug("Bruges") == "club-brugge"
+
+
 def test_canonical_team_slug_rejects_blank_name():
     with pytest.raises(ValueError):
         canonical_team_slug("   ")

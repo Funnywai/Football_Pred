@@ -20,6 +20,7 @@ class QualityInput:
     has_xg: bool
     news_item_count: int
     requires_lineup: bool = True
+    requires_xg: bool = True
     degraded_sources: tuple[str, ...] = ()
 
 
@@ -46,7 +47,8 @@ def evaluate_quality(data: QualityInput) -> QualityReport:
 
     if competition_code == "UCL" and not data.has_xg:
         flags.append(CoverageFlag.UCL_XG_MISSING)
-        veto_reasons.append("ucl_xg_missing")
+        if data.requires_xg:
+            veto_reasons.append("ucl_xg_missing")
 
     if data.requires_lineup and not data.has_standard_lineup:
         flags.append(CoverageFlag.LINEUP_UNCONFIRMED)

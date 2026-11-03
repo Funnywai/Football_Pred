@@ -41,7 +41,7 @@ _HAD_LINE = "0.0"
 _SIDES: tuple[Side, Side, Side] = (Side.H, Side.D, Side.A)
 _MONEY = Decimal("0.01")
 _ZERO = Decimal("0.00")
-_DATA_COMPETITIONS = ("EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1")
+_DATA_COMPETITIONS = ("EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1", "UCL")
 _PAPER_ACCOUNT = "paper"
 
 
@@ -390,6 +390,11 @@ def predictions(session: SessionDep, limit: int = 50) -> list[dict[str, Any]]:
             Competition.code,
             home.name,
             away.name,
+            Match.status,
+            Match.home_goals_90,
+            Match.away_goals_90,
+            Match.home_goals_final,
+            Match.away_goals_final,
         )
         .join(
             chosen,
@@ -429,6 +434,11 @@ def predictions(session: SessionDep, limit: int = 50) -> list[dict[str, Any]]:
                 "competition": first[6],
                 "home_team": first[7],
                 "away_team": first[8],
+                "status": _enum(first[9]),
+                "home_goals_90": first[10],
+                "away_goals_90": first[11],
+                "home_goals_final": first[12],
+                "away_goals_final": first[13],
                 "probabilities": {
                     side.value: _plain(probabilities[side]) for side in _SIDES
                 },
