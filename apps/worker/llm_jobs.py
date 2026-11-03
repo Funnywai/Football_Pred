@@ -110,7 +110,7 @@ def _enqueue_due(
             "apps.worker.llm_jobs.run_llm_prediction_job",
             str(match.id),
             "T-30m",
-            job_id=dedupe_key,
+            job_id=f"llm-{uuid.uuid4()}",
         )
         enqueued += 1
     return enqueued
