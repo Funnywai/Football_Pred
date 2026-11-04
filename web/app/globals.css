@@ -1849,6 +1849,12 @@ th.num {
   color: var(--llm-accent-strong);
 }
 
+.llm-shell .tag--accent {
+  border-color: var(--llm-line);
+  background: var(--llm-accent-soft);
+  color: var(--llm-accent-strong);
+}
+
 .llm-main .section__index {
   border-color: var(--llm-line);
   color: var(--llm-accent);
