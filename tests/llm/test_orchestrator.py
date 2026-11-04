@@ -30,7 +30,7 @@ from packages.llm.orchestrator import run_llm_prediction
 from packages.llm.providers import MockProvider
 from packages.shared.config import Settings
 
-NOW = datetime(2026, 11, 3, 17, 0, tzinfo=UTC)
+NOW = datetime.now(UTC)
 KICKOFF = NOW + timedelta(minutes=30)
 SPECIALIST = json.dumps(
     {

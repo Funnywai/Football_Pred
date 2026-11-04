@@ -7,11 +7,11 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from packages.db.models import PaperBet
+from packages.db.models import Match, PaperBet
 from packages.domain.enums import MarketType, Side
 from packages.ledger.experiments import ensure_lane_experiment
 from packages.ledger.service import LedgerService, PlaceBetRequest
-from packages.shared.time import ensure_utc
+from packages.shared.time import ensure_utc, utc_now
 
 MIN_EDGE = Decimal("0.03")
 FRACTIONAL_KELLY = Decimal("0.25")
@@ -63,6 +63,16 @@ def place_llm_paper_bet(
     """
     if _should_abstain(red_team, judge):
         return None
+
+    match = session.get(Match, match_id)
+    if match is None or ensure_utc(match.kickoff_at) <= utc_now():
+        return None
+
+    quality = packet.get("quality")
+    if isinstance(quality, dict):
+        odds_age = quality.get("odds_age_seconds")
+        if not isinstance(odds_age, int) or odds_age > 600:
+            return None
 
     market = packet.get("market")
     if not isinstance(market, dict):
