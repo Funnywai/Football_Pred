@@ -46,6 +46,8 @@ export function TechnicalSection({
   const visibleSources = sources.slice(0, 5);
   const totalSources = Math.max(sources.length, data?.counts?.source_runs ?? 0);
   const decisions = Array.isArray(data?.decisions) ? data.decisions : [];
+  const visibleDecisions = decisions.slice(0, 5);
+  const totalDecisions = Math.max(decisions.length, data?.counts?.decisions ?? 0);
   const odds = data?.latest_odds;
 
   return (
@@ -198,10 +200,14 @@ export function TechnicalSection({
           <Panel
             title="Recent decisions"
             kicker="Decision audit"
-            meta={`${decisions.length} rows`}
+            meta={
+              totalDecisions > visibleDecisions.length
+                ? `latest ${visibleDecisions.length} of ${totalDecisions}`
+                : `${visibleDecisions.length} rows`
+            }
             bodyClassName="panel__body--flush"
           >
-            {decisions.length === 0 ? (
+            {visibleDecisions.length === 0 ? (
               <EmptyState>No decision rows returned.</EmptyState>
             ) : (
               <TableFrame label="Recent bet decisions" wide>
@@ -219,7 +225,7 @@ export function TechnicalSection({
                     </tr>
                   </thead>
                   <tbody>
-                    {decisions.map((decision, index) => {
+                    {visibleDecisions.map((decision, index) => {
                       const status = decision.decision_status ?? decision.status;
                       return (
                         <tr key={`${asText(decision.match_id, String(index))}-${index}`}>
