@@ -224,12 +224,9 @@ export function LlmAgentWorkflow({
                 </span>
               ))}
             </div>
-            <span className="llm-rail__packet" />
           </div>
 
           <div className="llm-floor">
-            <span className="llm-floor__packet" aria-hidden="true" />
-
             <div className="llm-stage llm-stage--signal">
               <header className="llm-stage__head">
                 <p className="llm-stage__step">Stage 01</p>

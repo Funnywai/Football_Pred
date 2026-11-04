@@ -95,7 +95,6 @@ function glyphMark(glyph: AgentGlyph): ReactNode {
       return (
         <>
           <path d="M36 48.5 L43 51.5 V56 C43 60 39 62 36 63.5 C33 62 29 60 29 56 V51.5 Z" />
-          <line className="agent-sprite__scanline" x1="30" y1="52" x2="42" y2="52" />
         </>
       );
     default:

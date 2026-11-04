@@ -9,9 +9,9 @@ motion reads as a live signal travelling through an instrument, never as
 decoration.
 
 The LLM lane is the same terminal after hours: an operations floor of small
-line-drawn agent sprites, status rails, scanlines and work packets. It is
-continuous but low-amplitude, and it must always distinguish **standby** from
-**live execution** in text.
+line-drawn agent sprites, status rails and stage arrows. Motion is continuous
+but low-amplitude, and it must always distinguish **standby** from **recorded
+execution** in text.
 
 ## 2. Tokens
 
@@ -45,8 +45,8 @@ Canonical tokens live in `web/app/globals.css` under `:root` and `.llm-shell`.
 | `--radius` | `2px` | maximum radius |
 
 New LLM workflow tokens are declared in `.llm-shell`: `--llm-stage`,
-`--llm-stage-soft`, `--llm-scan`, `--llm-scan-soft`, `--llm-scan-strong`,
-`--llm-live`, `--llm-standby`, `--llm-motion-fast`, `--llm-motion-ambient`.
+`--llm-stage-soft`, `--llm-live`, `--llm-standby`, `--llm-motion-fast`,
+`--llm-motion-ambient`.
 
 ## 3. Typography
 
@@ -81,29 +81,26 @@ New LLM primitives:
 - `LlmAgentWorkflow`: workflow frame, stage rail, stage labels, status copy.
 - `AgentSprite`: decorative inline SVG character; `aria-hidden`; unique glyph
   per agent; no emoji and no external image.
-- `SignalRail`: stage nodes, moving signal, direction arrows; decorative.
-- `WorkPacket`: a moving signal band with a bright core dot between stages; the
-  direction is meaningful, the motion is decorative and `aria-hidden`.
+- `SignalRail`: stage nodes and direction arrows; decorative.
 
-States: `standby` (no runs; ambient slow motion), `recorded` (runs exist; faster
-sprite pulse and packet travel, text says `runs recorded`, never per-agent live),
-`degraded` (status error; motion stops, warning shown), `empty` (no agents;
-explicit empty state, no invented roster). All interactive links have hover and
-focus-visible states.
+States: `standby` (no runs; ambient slow motion), `recorded` (runs exist;
+faster sprite pulse, text says `runs recorded`, never per-agent live), `degraded`
+(status error; motion stops, warning shown), `empty` (no agents; explicit empty
+state, no invented roster). All interactive links have hover and focus-visible
+states.
 
 ## 6. Motion
 
 - GPU properties only: `transform`, `opacity`, `filter`.
 - Ambient idle: 5–8s breathing/head-bob/antenna-flicker loops.
-- Runs recorded: faster sprite pulse (`--llm-motion-fast`) and 3.6s floor packet
-  travel; still no per-agent live claim.
-- Meaning: motion shows direction of data and which stage is queued. If there
-  are zero agent runs, the page must say `standby`; never imply a live run.
-- Signature moment: a teal signal band with a bright core dot crossing the whole
-  floor from the specialist desks through challenge/synthesis to the weighted
-  pool.
-- `prefers-reduced-motion: reduce` disables all animation and packet travel;
-  static rail and sprite remain legible.
+- Runs recorded: faster sprite pulse (`--llm-motion-fast`); still no per-agent
+  live claim.
+- Meaning: motion belongs to the agent characters and stage affordances. If
+  there are zero agent runs, the page must say `standby`; never imply a live run.
+- Signature moment: a low-amplitude, phase-offset pulse travelling across the
+  nine character sprites as they work their desks.
+- `prefers-reduced-motion: reduce` disables all animation; the static rail and
+  sprites remain legible.
 
 ## 7. Accessibility
 
