@@ -1,6 +1,6 @@
 # Football_Pred
 
-Paper-only football research system for **EPL + HAD** (Home / Draw / Away), using free data sources and HKJC odds.
+Paper-only football research system for **HAD** (Home / Draw / Away) across five domestic leagues and the Champions League, using free data sources and HKJC odds.
 
 > **No real money. No automatic HKJC login or bet placement.**
 > The current model has not passed profitability validation. Treat every output as research, not a betting recommendation.
@@ -10,7 +10,7 @@ Paper-only football research system for **EPL + HAD** (Home / Draw / Away), usin
 The system:
 
 1. Collects free football data and HKJC odds.
-2. Links EPL fixtures to HKJC matches.
+2. Links competition fixtures to HKJC matches.
 3. Builds a deterministic Poisson score distribution for every eligible match.
 4. Saves H/D/A model predictions.
 5. Computes EV and Kelly sizing against the current HKJC line.
@@ -19,7 +19,7 @@ The system:
 8. Tracks Brier, CLV, ROI, drawdown, and calibration.
 9. Records every decision — including no-bets and skipped matches — for audit.
 
-The first validated slice is **EPL + HAD**. HDC, HIL, UCL, and LLM agents are not production paths.
+HAD paper betting now covers **EPL, LALIGA, BUNDESLIGA, SERIEA, LIGUE1 and UCL**. EPL remains the validated baseline; the other competitions are research paths. HDC, HIL and LLM agents are not production paths. The paper-betting scope is controlled by `FP_PAPER_COMPETITIONS`.
 
 ## Architecture
 
@@ -74,10 +74,10 @@ RSS / Open-Meteo ──┘
 
 `run_daily_ingest`:
 
-- fetches EPL fixtures from football-data.org;
+- fetches fixtures for the configured competitions from football-data.org;
 - bootstraps teams;
 - upserts canonical matches;
-- links EPL matches to HKJC;
+- links competition fixtures to HKJC;
 - writes raw payload and source-fetch audit rows.
 
 ### 2. Match-day triggers
@@ -126,7 +126,7 @@ No-bet when:
 - odds are below 1.01;
 - the HAD line is missing, suspended, or not selling;
 - the odds snapshot is older than 10 minutes;
-- the match is not EPL / not scheduled;
+- the competition is not enabled in `FP_PAPER_COMPETITIONS` / the match is not scheduled;
 - `first_seen_at > decision_at`;
 - the quality gate vetoes the decision.
 
@@ -250,6 +250,7 @@ Cloudflare Tunnel is optional and enabled with `COMPOSE_PROFILES=tunnel` plus `T
 | `FP_REDIS_URL` | Redis DSN |
 | `FP_FOOTBALL_DATA_ORG_API_KEY` | Free football-data.org key |
 | `FP_INITIAL_BANKROLL` | Paper bankroll (default 10000.00) |
+| `FP_PAPER_COMPETITIONS` | Comma-separated paper-betting competitions (default all six) |
 | `FP_FEE_RATE` | Ledger fee rate (default 0) |
 | `FP_HTTP_TIMEOUT_SECONDS` | Adapter timeout |
 | `FP_HKJC_GRAPHQL_URL` | HKJC endpoint |
@@ -259,6 +260,26 @@ Cloudflare Tunnel is optional and enabled with `COMPOSE_PROFILES=tunnel` plus `T
 | `COMPOSE_PROFILES` | Set `tunnel` to start cloudflared |
 
 Never commit `.env` or real credentials.
+
+## ROI Experiments
+
+Paper betting is versioned by ledger experiment. A new model or strategy change
+should start a new experiment rather than deleting the previous ledger:
+
+```bash
+uv run python scripts/new_ledger_experiment.py \
+  --label poisson-v2-g2 \
+  --model-version poisson-v2 \
+  --strategy-version g2
+```
+
+The active experiment owns its own bankroll account and starts at
+`FP_INITIAL_BANKROLL`. Old paper bets, decisions, settlements and bankroll
+accounts are preserved. The LLM lane has its own `llm` experiment and account;
+it never shares the deterministic bankroll or ROI. The dashboard's Overview, bets and equity views follow
+the active experiment; the `experiment_id` is also carried by new paper bets
+and decision logs. The Alembic baseline migration creates a `baseline` experiment
+for existing rows.
 
 ## Testing
 

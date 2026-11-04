@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     football_data_org_api_key: str | None = None
     initial_bankroll: Decimal = Decimal("10000.00")
+    paper_competitions: str = "EPL,LALIGA,BUNDESLIGA,SERIEA,LIGUE1,UCL"
     fee_rate: Decimal = Decimal(0)
     http_timeout_seconds: float = 20.0
     hkjc_graphql_url: str = "https://info.cld.hkjc.com/graphql/base/"

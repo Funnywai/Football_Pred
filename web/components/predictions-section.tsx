@@ -163,8 +163,8 @@ export function PredictionsSection({
           {researchOnly ? (
             <p className="prediction-caveat">
               EV is a research diagnostic (model probability × T-30m odds − 1),
-              not a bet recommendation. UCL rows are prediction-only and do not
-              enter the paper ledger.
+              not a bet recommendation. Rows marked prediction only predate the
+              all-competition paper policy and do not enter the ledger.
             </p>
           ) : null}
           <TableFrame label="Latest model predictions" wide>

@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
-from types import MappingProxyType
+from types import MappingProxyType, SimpleNamespace
 
 import pytest
 from sqlalchemy import func, select
@@ -24,6 +24,7 @@ from packages.decision.service import decide_match
 from packages.domain.enums import FetchRunStatus, MarketType, MatchStatus, Side, SnapshotKind
 from packages.ingest.quality import QualityReport
 from packages.ingest.quality import evaluate_quality as real_evaluate_quality
+from packages.ledger.experiments import create_next_experiment
 from packages.models.poisson import HadPrediction
 from packages.shared.time import ensure_utc
 
@@ -341,29 +342,52 @@ def test_odds_below_minimum_are_skipped_without_a_bet(session: Session, fixed_pr
     assert _bet_count(session) == 0
 
 
-def test_non_epl_league_saves_predictions_but_never_places_a_bet(
+def test_non_epl_league_places_a_bet_when_default_policy_allows_it(
     session: Session, fixed_prediction
 ):
     match, snapshot = _seed(session, competition_code="LALIGA")
 
     result = decide_match(session, match, snapshot, now=NOW)
 
-    assert result.status == "prediction_only"
+    assert result.status == "bet"
     assert result.prediction is not None
-    assert result.paper_bet_id is None
-    assert result.stake is None
+    assert result.paper_bet_id is not None
+    assert result.stake == D("200.00")
     assert _prediction_count(session) == 3
-    assert _bet_count(session) == 0
+    assert _bet_count(session) == 1
     log = session.execute(select(DecisionLog)).scalar_one()
-    assert log.status == "prediction_only"
-    assert log.paper_bet_id is None
+    assert log.status == "bet"
+    assert log.paper_bet_id == result.paper_bet_id
     assert log.prediction_count == 3
 
 
-def test_ucl_is_prediction_only_without_xg_and_never_places_a_bet(
+def test_ucl_places_a_bet_without_xg_when_default_policy_allows_it(
     session: Session, fixed_prediction
 ):
     match, snapshot = _seed(session, competition_code="UCL")
+
+    result = decide_match(session, match, snapshot, now=NOW)
+
+    assert result.status == "bet"
+    assert result.prediction is not None
+    assert result.paper_bet_id is not None
+    assert result.stake == D("200.00")
+    assert _prediction_count(session) == 3
+    assert _bet_count(session) == 1
+    log = session.execute(select(DecisionLog)).scalar_one()
+    assert log.status == "bet"
+    assert log.paper_bet_id == result.paper_bet_id
+    assert log.prediction_count == 3
+
+
+def test_non_enabled_competition_stays_prediction_only(
+    session: Session, fixed_prediction, monkeypatch
+):
+    monkeypatch.setattr(
+        "packages.decision.service.get_settings",
+        lambda: SimpleNamespace(paper_competitions="EPL"),
+    )
+    match, snapshot = _seed(session, competition_code="LALIGA")
 
     result = decide_match(session, match, snapshot, now=NOW)
 
@@ -393,3 +417,24 @@ def test_duplicate_decision_reuses_predictions_and_paper_bet(
     assert second.stake == first.stake
     assert _bet_count(session) == 1
     assert _prediction_count(session) == 3
+
+
+def test_decision_binds_active_experiment_and_epoch_key(
+    session: Session, fixed_prediction
+):
+    experiment = create_next_experiment(
+        session,
+        label="epoch-test",
+        model_version="poisson-v1",
+        strategy_version="g2",
+    )
+    match, snapshot = _seed(session, competition_code="UCL")
+
+    result = decide_match(session, match, snapshot, now=NOW)
+
+    assert result.status == "bet"
+    bet = session.execute(select(PaperBet)).scalar_one()
+    log = session.execute(select(DecisionLog)).scalar_one()
+    assert bet.experiment_id == experiment.id
+    assert log.experiment_id == experiment.id
+    assert bet.decision_slot_key == f"g1:{experiment.id}:{match.id}:T-30m"

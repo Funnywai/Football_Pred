@@ -24,6 +24,7 @@ from packages.domain.enums import FetchRunStatus, MarketType, MatchStatus, Side
 from packages.ingest.quality import QualityInput, evaluate_quality
 from packages.ingest.triggers import bet_intent_key as build_bet_intent_key
 from packages.ingest.triggers import decision_slot_key as build_decision_slot_key
+from packages.ledger.experiments import active_experiment
 from packages.ledger.service import LedgerService, PlaceBetRequest
 from packages.models.poisson import (
     HadPrediction,
@@ -33,6 +34,7 @@ from packages.models.poisson import (
 )
 from packages.payoff.kelly import kelly_fraction
 from packages.payoff.returns import MIN_ODDS, expected_value, return_distribution
+from packages.shared.config import get_settings
 from packages.shared.time import ensure_utc, utc_now
 
 MIN_EDGE: Final[Decimal] = Decimal("0.03")
@@ -52,7 +54,6 @@ _MONEY_QUANTUM: Final[Decimal] = Decimal("0.01")
 _POOL_SELLING_STARTED: Final[str] = "SELLINGSTARTED"
 _LINE_AVAILABLE: Final[str] = "AVAILABLE"
 _HAD_SIDES: Final[tuple[Side, Side, Side]] = (Side.H, Side.D, Side.A)
-_EPL_CODE: Final[str] = "EPL"
 _UCL_CODE: Final[str] = "UCL"
 _PREDICTION_COMPETITIONS: Final[frozenset[str]] = frozenset(
     {"EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1", "UCL"}
@@ -94,6 +95,13 @@ def _skipped(reason: str) -> DecisionResult:
     )
 
 
+def _paper_competition_codes() -> frozenset[str]:
+    configured = get_settings().paper_competitions
+    return frozenset(
+        code.strip().upper() for code in configured.split(",") if code.strip()
+    )
+
+
 def _load_had_lines(
     session: Session,
     snapshot: OddsSnapshot,
@@ -131,6 +139,8 @@ def _decide_match(
     snapshot: OddsSnapshot | None,
     *,
     now: datetime | None = None,
+    experiment_id: uuid.UUID | None = None,
+    experiment_is_legacy: bool = False,
 ) -> DecisionResult:
     """Run the deterministic HAD decision for one T-30m odds snapshot."""
     competition = session.get(Competition, match.competition_id)
@@ -188,7 +198,7 @@ def _decide_match(
         analysis_run_key=analysis_run_key,
     )
 
-    if competition.code != _EPL_CODE:
+    if competition.code not in _paper_competition_codes():
         return DecisionResult(
             status=STATUS_PREDICTION_ONLY,
             prediction=prediction,
@@ -197,7 +207,7 @@ def _decide_match(
             kelly_fraction=None,
             stake=None,
             paper_bet_id=None,
-            reason="prediction-only league; production paper bets are EPL only",
+            reason="competition is not enabled for paper betting",
         )
 
     evaluations: list[tuple[Side, Decimal, Decimal, Decimal]] = []
@@ -246,7 +256,7 @@ def _decide_match(
             reason="kelly fraction is not positive",
         )
 
-    ledger = LedgerService(session)
+    ledger = LedgerService(session, experiment_id=experiment_id)
     available_bankroll = ledger.available_bankroll()
     stake = min(
         available_bankroll * best_kelly * FRACTIONAL_KELLY,
@@ -268,6 +278,7 @@ def _decide_match(
         match.id,
         strategy_version=STRATEGY_VERSION,
         trigger=_DECISION_TRIGGER,
+        experiment_id=None if experiment_is_legacy else experiment_id,
     )
     intent_key = build_bet_intent_key(
         decision_slot,
@@ -344,12 +355,15 @@ def _log_decision(
     result: DecisionResult,
     *,
     now: datetime | None,
+    experiment_id: uuid.UUID | None = None,
+    experiment_is_legacy: bool = False,
 ) -> None:
     """Upsert the audit log for one deterministic decision slot."""
     slot_key = build_decision_slot_key(
         match.id,
         strategy_version=STRATEGY_VERSION,
         trigger=_DECISION_TRIGGER,
+        experiment_id=None if experiment_is_legacy else experiment_id,
     )
     if snapshot is not None:
         decision_at = ensure_utc(snapshot.snapshot_at)
@@ -373,6 +387,7 @@ def _log_decision(
     is_new = log is None
     if log is None:
         candidate = DecisionLog(
+            experiment_id=experiment_id,
             match_id=match.id,
             decision_slot_key=slot_key,
             snapshot_id=snapshot.id if snapshot is not None else None,
@@ -403,6 +418,7 @@ def _log_decision(
             session.flush()
         return
 
+    log.experiment_id = experiment_id
     log.snapshot_id = snapshot.id if snapshot is not None else None
     log.decision_at = decision_at
     log.status = result.status
@@ -420,7 +436,25 @@ def decide_match(
     *,
     now: datetime | None = None,
 ) -> DecisionResult:
-    """Run the deterministic EPL HAD decision and record an audit log."""
-    result = _decide_match(session, match, snapshot, now=now)
-    _log_decision(session, match, snapshot, result, now=now)
+    """Run the deterministic paper HAD decision and record an audit log."""
+    experiment = active_experiment(session)
+    experiment_id = experiment.id if experiment is not None else None
+    experiment_is_legacy = bool(experiment.is_legacy) if experiment is not None else False
+    result = _decide_match(
+        session,
+        match,
+        snapshot,
+        now=now,
+        experiment_id=experiment_id,
+        experiment_is_legacy=experiment_is_legacy,
+    )
+    _log_decision(
+        session,
+        match,
+        snapshot,
+        result,
+        now=now,
+        experiment_id=experiment_id,
+        experiment_is_legacy=experiment_is_legacy,
+    )
     return result
