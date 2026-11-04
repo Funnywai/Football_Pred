@@ -39,6 +39,12 @@ function cell(value: unknown): string {
   return String(value).replaceAll("\t", " ").replace(/\r?\n/g, " ");
 }
 
+/** Free-text cells must not become spreadsheet formulas when pasted. */
+function textCell(value: unknown): string {
+  const text = cell(value);
+  return /^[=+\-@]/.test(text) ? `'${text}` : text;
+}
+
 function percentCell(value: string | number | null | undefined): string {
   const points = toPercentPoints(value);
   return points === null ? "" : formatNumber(points, 2);
@@ -76,16 +82,17 @@ export function buildPredictionsTsv(predictions: Prediction[]): string {
     const odds = prediction.odds ?? {};
     const ev = prediction.ev ?? {};
     const result = resultFields(prediction);
+    const kickoff = formatKickoff(prediction.kickoff_at);
 
     return [
-      prediction.match_id,
-      formatKickoff(prediction.kickoff_at) === "—" ? "" : formatKickoff(prediction.kickoff_at),
-      prediction.competition,
-      prediction.home_team,
-      prediction.away_team,
-      prediction.status,
-      result.result,
-      result.resultType,
+      textCell(prediction.match_id),
+      textCell(kickoff === "—" ? "" : kickoff),
+      textCell(prediction.competition),
+      textCell(prediction.home_team),
+      textCell(prediction.away_team),
+      textCell(prediction.status),
+      textCell(result.result),
+      textCell(result.resultType),
       prediction.home_goals_90,
       prediction.away_goals_90,
       prediction.home_goals_final,
@@ -99,10 +106,10 @@ export function buildPredictionsTsv(predictions: Prediction[]): string {
       percentCell(ev.H),
       percentCell(ev.D),
       percentCell(ev.A),
-      prediction.model_version,
-      prediction.decision_status,
-      prediction.decision_reason,
-    ].map(cell);
+      textCell(prediction.model_version),
+      textCell(prediction.decision_status),
+      textCell(prediction.decision_reason),
+    ];
   });
 
   return [HEADERS.map(cell), ...rows].map((row) => row.join("\t")).join("\n");

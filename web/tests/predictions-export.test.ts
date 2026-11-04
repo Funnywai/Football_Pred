@@ -72,6 +72,20 @@ describe("prediction TSV export", () => {
     expect(row).toContain("0-3\tLIVE");
   });
 
+  it("neutralises formula-like free text cells", () => {
+    const tsv = buildPredictionsTsv([
+      {
+        ...sample,
+        home_team: "=HYPERLINK(\"https://example.com\")",
+        decision_reason: "@SUM(A1:A2)",
+      },
+    ]);
+    const row = tsv.split("\n")[1] ?? "";
+
+    expect(row).toContain("'=HYPERLINK");
+    expect(row).toContain("'@SUM");
+  });
+
   it("leaves missing numeric fields empty instead of using display dashes", () => {
     const tsv = buildPredictionsTsv([{ match_id: "match-2" }]);
     const row = tsv.split("\n")[1]?.split("\t") ?? [];
