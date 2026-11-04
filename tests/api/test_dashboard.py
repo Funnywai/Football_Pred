@@ -39,7 +39,7 @@ from packages.domain.enums import (
 from packages.shared.config import Settings
 
 D = Decimal
-NOW = datetime(2026, 11, 3, 12, 0, tzinfo=UTC)
+NOW = datetime.now(UTC)
 
 
 @pytest.fixture()
