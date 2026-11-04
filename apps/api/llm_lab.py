@@ -9,6 +9,7 @@ from typing import Any
 from fastapi import APIRouter, Query, Request
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import aliased
 
 from apps.api.dashboard import SessionDep
 from packages.db.models import (
@@ -19,8 +20,10 @@ from packages.db.models import (
     Match,
     Team,
 )
+from packages.domain.enums import MatchStatus
 from packages.llm.prompts.registry import PromptRegistry
 from packages.llm.roster import AGENTS
+from packages.shared.time import utc_now
 
 router = APIRouter(prefix="/llm", tags=["llm"])
 
@@ -54,6 +57,53 @@ def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.isoformat()
 
 
+def _competition_codes(value: object) -> list[str]:
+    raw = value if isinstance(value, str) else "UCL"
+    return sorted({code.strip().upper() for code in raw.split(",") if code.strip()})
+
+
+def _next_fixtures(session: SessionDep, competition_codes: list[str]) -> list[dict[str, Any]]:
+    if not competition_codes:
+        return []
+    home = aliased(Team)
+    away = aliased(Team)
+    try:
+        rows = session.execute(
+            select(
+                Match.id,
+                Match.kickoff_at,
+                Match.status,
+                Competition.code,
+                home.name,
+                away.name,
+            )
+            .join(Competition, Competition.id == Match.competition_id)
+            .join(home, home.id == Match.home_team_id)
+            .join(away, away.id == Match.away_team_id)
+            .where(
+                Competition.code.in_(competition_codes),
+                Match.status == MatchStatus.SCHEDULED,
+                Match.kickoff_at >= utc_now(),
+            )
+            .order_by(Match.kickoff_at.asc(), Match.id.asc())
+            .limit(8)
+        ).all()
+    except SQLAlchemyError:
+        session.rollback()
+        return []
+    return [
+        {
+            "match_id": str(row[0]),
+            "kickoff_at": _iso(row[1]),
+            "competition": row[3],
+            "home_team": row[4],
+            "away_team": row[5],
+            "status": row[2].value if hasattr(row[2], "value") else str(row[2]),
+        }
+        for row in rows
+    ]
+
+
 @router.get("/status")
 def llm_status(request: Request, session: SessionDep) -> dict[str, Any]:
     prompts = _prompt_payloads()
@@ -61,9 +111,11 @@ def llm_status(request: Request, session: SessionDep) -> dict[str, Any]:
     enabled = bool(getattr(settings, "llm_enabled", False))
     provider = getattr(settings, "llm_provider", "openai_compatible")
     model = getattr(settings, "llm_model", "deepseek-v4.1-flash")
+    competition_codes = _competition_codes(getattr(settings, "llm_competitions", "UCL"))
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "phase": _PHASE,
+        "competitions": competition_codes,
         "runtime": {
             "decision_layer": "configured" if enabled else "llm_not_connected",
             "data_plane": "deterministic",
@@ -85,6 +137,7 @@ def llm_status(request: Request, session: SessionDep) -> dict[str, Any]:
             "predictions": _count(session, LlmEnsemblePrediction),
             "paper_bets": 0,
         },
+        "next_fixtures": _next_fixtures(session, competition_codes),
         "agents": [asdict(agent) for agent in AGENTS],
         "weights": [
             {

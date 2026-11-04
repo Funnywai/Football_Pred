@@ -12,6 +12,8 @@ export interface LlmRuntime {
   decision_layer?: string | null;
   data_plane?: string | null;
   paper_ledger?: string | null;
+  provider?: string | null;
+  model?: string | null;
 }
 
 export interface LlmSafety {
@@ -57,12 +59,23 @@ export interface LlmSeparation {
   detail?: string | null;
 }
 
+export interface LlmFixture {
+  match_id?: string | null;
+  kickoff_at?: string | null;
+  competition?: string | null;
+  home_team?: string | null;
+  away_team?: string | null;
+  status?: string | null;
+}
+
 export interface LlmStatus {
   generated_at?: string | null;
   phase?: string | null;
+  competitions?: string[] | null;
   runtime?: LlmRuntime | null;
   safety?: LlmSafety | null;
   counts?: LlmCounts | null;
+  next_fixtures?: LlmFixture[] | null;
   agents?: LlmAgent[] | null;
   weights?: LlmWeight[] | null;
   prompts?: LlmPrompt[] | null;
