@@ -167,10 +167,19 @@ def build_evidence_packet(
         "stage": stage,
         "market": {
             "market": MarketType.HAD.value,
+            "snapshot_id": str(snapshot.id) if snapshot is not None else None,
             "snapshot_at": _iso(snapshot.snapshot_at) if snapshot is not None else None,
             "odds": odds,
             "implied": implied,
             "line_count": len(line_rows),
+            "line_status": {
+                (line.side.value if isinstance(line.side, Side) else str(line.side)): line.line_status
+                for line in line_rows
+            },
+            "pool_status": {
+                (line.side.value if isinstance(line.side, Side) else str(line.side)): line.pool_status
+                for line in line_rows
+            },
         },
         "recent_matches": {
             "home": recent_home,

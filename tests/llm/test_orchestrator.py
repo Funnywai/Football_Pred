@@ -248,7 +248,8 @@ def test_llm_predictions_endpoint_returns_persisted_ensemble(tmp_path) -> None:
         client = TestClient(application)
         payload = client.get("/llm/predictions").json()
         assert len(payload) == 1
-        assert payload[0]["decision_status"] == "prediction_only"
+        assert payload[0]["decision_status"] == "bet"
+        assert payload[0]["paper_bet_id"] is not None
         assert set(payload[0]["probabilities"]) == {"H", "D", "A"}
     finally:
         application.state.engine.dispose()

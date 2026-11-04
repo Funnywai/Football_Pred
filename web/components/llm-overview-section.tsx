@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { EndpointResult } from "@/lib/api";
-import { formatKickoff, formatNumber } from "@/lib/format";
+import { formatKickoff, formatNumber, formatSignedPercent } from "@/lib/format";
 import type { LlmStatus } from "@/lib/llm-types";
 
 import { TableFrame } from "./table-frame";
@@ -70,6 +70,7 @@ export function LlmOverviewSection({
   const data = result.data;
   const counts = data?.counts;
   const runtime = data?.runtime ?? {};
+  const ledger = data?.ledger ?? null;
   const allFixtures = Array.isArray(data?.next_fixtures) ? data.next_fixtures : [];
   const fixtures = allFixtures.slice(0, 5);
   const competitions = Array.isArray(data?.competitions)
@@ -91,7 +92,7 @@ export function LlmOverviewSection({
           result.error
             ? "snapshot unavailable"
             : data
-              ? `prediction-only · ${textOr(data.phase, "phase unknown")}`
+              ? `paper lane · ${textOr(data.phase, "phase unknown")}`
               : "no snapshot"
         }
       />
@@ -138,12 +139,6 @@ export function LlmOverviewSection({
               label="Paper bets"
               value={countOrDash(counts?.paper_bets)}
               hint="separate LLM paper ledger"
-            />
-            <LlmKpi
-              label="Phase"
-              value={textOr(data.phase, "—")}
-              tone="accent"
-              hint={textOr(runtime.provider, "provider n/a")}
             />
           </div>
 
@@ -235,6 +230,18 @@ export function LlmOverviewSection({
                 <LaneFact label="Paper ledger">
                   <StatusTag status={runtime.paper_ledger} tone="muted" />
                 </LaneFact>
+                <LaneFact label="LLM ROI">
+                  <span className="llm-state__value">
+                    {ledger
+                      ? `${formatSignedPercent(ledger.roi, 2)} · ${formatNumber(ledger.settled_bets)} settled`
+                      : "not opened"}
+                  </span>
+                </LaneFact>
+                <LaneFact label="LLM bankroll">
+                  <span className="llm-state__value">
+                    {ledger?.bankroll ?? "—"}
+                  </span>
+                </LaneFact>
                 <LaneFact label="Prompt / agent counts">
                   <span className="llm-state__value">
                     {countOrDash(counts?.prompts)} prompts · {countOrDash(counts?.agents)} agents
@@ -245,10 +252,11 @@ export function LlmOverviewSection({
           </div>
 
           <p className="llm-note llm-overview-note">
-            The LLM lane is prediction-only: agents cannot write directly to the
-            database or settle bets; the deterministic orchestrator persists frozen
-            evidence, runs and ensemble output. The next run is the T-28m
-            pre-kickoff window; until a run is recorded, the lane stays on standby.
+            The LLM lane has a separate paper ledger and bankroll: agents cannot
+            write directly to the database or settle bets; the deterministic
+            orchestrator persists frozen evidence, runs, ensemble output and the
+            EV/Kelly paper-bet decision. The next run is the T-28m pre-kickoff
+            window; until a run is recorded, the lane stays on standby.
           </p>
         </>
       )}

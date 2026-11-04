@@ -25,7 +25,7 @@ export const revalidate = 0;
 export const metadata: Metadata = {
   title: "LLM Ensemble Lab — Touchline/Lab",
   description:
-    "Separate research lane for the LLM football forecasting ensemble: lane overview, next fixtures, animated agent workflow, initial weights and prediction output.",
+    "Separate research lane for the LLM football forecasting ensemble: lane overview, next fixtures, animated agent workflow, initial weights, prediction output and paper ledger.",
 };
 
 const NAV_ITEMS = [
@@ -213,9 +213,9 @@ export default async function LlmLabPage() {
         >
           <SectionHeader
             index="04"
-            kicker="Prediction-only lane"
+            kicker="Separate paper lane"
             title="Output ledger"
-            meta="prediction-only lane"
+            meta="separate paper lane"
           />
 
           <div className="llm-split">
@@ -234,7 +234,8 @@ export default async function LlmLabPage() {
                 <EmptyState>
                   No LLM predictions have been persisted yet. Once the provider
                   is enabled, the T-28m pre-kickoff job will write frozen evidence,
-                  agent runs and a deterministic ensemble prediction.
+                  agent runs, a deterministic ensemble prediction and the EV/Kelly
+                  paper-bet decision.
                 </EmptyState>
               )}
             </Panel>
@@ -252,9 +253,9 @@ export default async function LlmLabPage() {
                 </p>
               ) : (
                 <EmptyState>
-                  No paper bets yet. Phase 3 will apply deterministic risk gates
-                  and open a separate LLM paper ledger; it is not connected and
-                  cannot settle.
+                  No LLM paper bets have been placed yet. This experiment has an
+                  independent bankroll and applies the deterministic EV/Kelly,
+                  odds-freshness and risk gates after each ensemble prediction.
                 </EmptyState>
               )}
             </Panel>

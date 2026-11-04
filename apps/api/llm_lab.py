@@ -18,9 +18,12 @@ from packages.db.models import (
     LlmEnsemblePrediction,
     LlmEvidencePacket,
     Match,
+    PaperBet,
     Team,
 )
 from packages.domain.enums import MatchStatus
+from packages.ledger.experiments import active_experiment
+from packages.ledger.service import LedgerService
 from packages.llm.prompts.registry import PromptRegistry
 from packages.llm.roster import AGENTS
 from packages.shared.time import utc_now
@@ -57,9 +60,46 @@ def _iso(value: datetime | None) -> str | None:
     return None if value is None else value.isoformat()
 
 
+def _money(value: Decimal | None) -> str | None:
+    return None if value is None else str(value.quantize(Decimal("0.01")))
+
+
 def _competition_codes(value: object) -> list[str]:
     raw = value if isinstance(value, str) else "UCL"
     return sorted({code.strip().upper() for code in raw.split(",") if code.strip()})
+
+
+def _llm_ledger(session: SessionDep) -> tuple[dict[str, Any] | None, int]:
+    try:
+        experiment = active_experiment(session, "llm")
+        if experiment is None:
+            return None, 0
+        summary = LedgerService(session, experiment_id=experiment.id).summary()
+        paper_bets = int(
+            session.scalar(
+                select(func.count())
+                .select_from(PaperBet)
+                .where(PaperBet.experiment_id == experiment.id)
+            )
+            or 0
+        )
+    except SQLAlchemyError:
+        session.rollback()
+        return None, 0
+    return (
+        {
+            "experiment_id": str(experiment.id),
+            "label": experiment.label,
+            "model_version": experiment.model_version,
+            "strategy_version": experiment.strategy_version,
+            "initial_bankroll": str(experiment.initial_bankroll),
+            "bankroll": str(summary.bankroll),
+            "roi": str(summary.roi),
+            "settled_bets": summary.settled_count,
+            "pending_bets": summary.pending_count,
+        },
+        paper_bets,
+    )
 
 
 def _next_fixtures(session: SessionDep, competition_codes: list[str]) -> list[dict[str, Any]]:
@@ -112,6 +152,7 @@ def llm_status(request: Request, session: SessionDep) -> dict[str, Any]:
     provider = getattr(settings, "llm_provider", "openai_compatible")
     model = getattr(settings, "llm_model", "deepseek-v4.1-flash")
     competition_codes = _competition_codes(getattr(settings, "llm_competitions", "UCL"))
+    ledger, paper_bets = _llm_ledger(session)
     return {
         "generated_at": datetime.now(UTC).isoformat(),
         "phase": _PHASE,
@@ -119,7 +160,7 @@ def llm_status(request: Request, session: SessionDep) -> dict[str, Any]:
         "runtime": {
             "decision_layer": "configured" if enabled else "llm_not_connected",
             "data_plane": "deterministic",
-            "paper_ledger": "separate_not_opened",
+            "paper_ledger": "opened" if ledger is not None else "separate_not_opened",
             "provider": provider,
             "model": model,
         },
@@ -135,8 +176,9 @@ def llm_status(request: Request, session: SessionDep) -> dict[str, Any]:
             "evidence_packets": _count(session, LlmEvidencePacket),
             "agent_runs": _count(session, LlmAgentRun),
             "predictions": _count(session, LlmEnsemblePrediction),
-            "paper_bets": 0,
+            "paper_bets": paper_bets,
         },
+        "ledger": ledger,
         "next_fixtures": _next_fixtures(session, competition_codes),
         "agents": [asdict(agent) for agent in AGENTS],
         "weights": [
@@ -191,6 +233,20 @@ def llm_predictions(
         competition = session.get(Competition, match.competition_id)
         home = session.get(Team, match.home_team_id)
         away = session.get(Team, match.away_team_id)
+        experiment = active_experiment(session, "llm")
+        bet = (
+            session.scalar(
+                select(PaperBet)
+                .where(
+                    PaperBet.match_id == row.match_id,
+                    PaperBet.experiment_id == experiment.id,
+                )
+                .order_by(PaperBet.placed_at.desc(), PaperBet.id.desc())
+                .limit(1)
+            )
+            if experiment is not None
+            else None
+        )
         output.append(
             {
                 "match_id": match_id,
@@ -205,7 +261,13 @@ def llm_predictions(
                 "judge": row.judge,
                 "model_version": row.model_version,
                 "generated_at": _iso(row.created_at),
-                "decision_status": "prediction_only",
+                "decision_status": (
+            "prediction_only" if experiment is None else "bet" if bet is not None else "no_bet"
+        ),
+        "paper_bet_id": str(bet.id) if bet is not None else None,
+        "paper_bet_status": bet.status.value if bet is not None else None,
+        "paper_bet_odds": _money(bet.odds_decimal) if bet is not None else None,
+        "paper_bet_stake": _money(bet.stake) if bet is not None else None,
             }
         )
         if len(output) >= limit:

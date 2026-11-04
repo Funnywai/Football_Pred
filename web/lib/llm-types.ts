@@ -68,6 +68,18 @@ export interface LlmFixture {
   status?: string | null;
 }
 
+export interface LlmLedger {
+  experiment_id?: string | null;
+  label?: string | null;
+  model_version?: string | null;
+  strategy_version?: string | null;
+  initial_bankroll?: string | null;
+  bankroll?: string | null;
+  roi?: string | null;
+  settled_bets?: number | null;
+  pending_bets?: number | null;
+}
+
 export interface LlmStatus {
   generated_at?: string | null;
   phase?: string | null;
@@ -75,6 +87,7 @@ export interface LlmStatus {
   runtime?: LlmRuntime | null;
   safety?: LlmSafety | null;
   counts?: LlmCounts | null;
+  ledger?: LlmLedger | null;
   next_fixtures?: LlmFixture[] | null;
   agents?: LlmAgent[] | null;
   weights?: LlmWeight[] | null;

@@ -20,6 +20,7 @@ from packages.db.models import (
 from packages.llm.aggregation.log_opinion import aggregate_predictions
 from packages.llm.domain import AgentPrediction
 from packages.llm.evidence import build_evidence_packet
+from packages.llm.ledger import place_llm_paper_bet
 from packages.llm.prompts.registry import PromptRegistry
 from packages.llm.providers import LlmProvider, LlmProviderError, normalize_json_content
 from packages.llm.roster import AGENTS
@@ -372,6 +373,16 @@ def run_llm_prediction(
     )
     session.add(ensemble)
     session.flush()
+    paper_bet = place_llm_paper_bet(
+        session,
+        match_id=match_id,
+        stage=stage,
+        model_version=MODEL_VERSION,
+        probabilities=ensemble.probabilities,
+        packet=packet,
+        red_team=red_team,
+        judge=judge,
+    )
     return {
         "match_id": str(match_id),
         "stage": stage,
@@ -380,4 +391,6 @@ def run_llm_prediction(
         "probabilities": {key: str(value) for key, value in probabilities.items()},
         "active_agents": ensemble.active_agents,
         "model_version": MODEL_VERSION,
+        "paper_bet_id": str(paper_bet.id) if paper_bet is not None else None,
+        "paper_bet_status": paper_bet.status.value if paper_bet is not None else "no_bet",
     }
