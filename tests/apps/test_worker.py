@@ -25,6 +25,7 @@ from apps.worker.jobs import (
     run_decision_reconciliation,
     run_lineup_check,
     run_match_trigger,
+    run_recent_result_refresh,
     run_settlement_scan,
 )
 from packages.adapters.base import AdapterHTTPError, FetchResult, hash_text
@@ -51,6 +52,7 @@ from packages.domain.enums import (
     SourceStatus,
 )
 from packages.ingest.dry_run import DRY_RUN_FD_PAYLOAD
+from packages.ingest.normalize import seed_competitions
 from packages.ingest.pipeline import AdapterBundle
 from packages.ingest.triggers import (
     TRIGGER_SCAN_INTERVAL,
@@ -120,6 +122,36 @@ class _FakeFootballData:
             http_status=200,
             schema_version=self.schema_version,
             payload=DRY_RUN_FD_PAYLOAD,
+            payload_hash=hash_text(raw_text),
+            raw_text=raw_text,
+        )
+
+
+class _FinishedFootballData:
+    schema_version = "v4"
+
+    def fetch_matches(
+        self,
+        competition_code: str,
+        season_start_year: int,
+        date_from: str | None = None,
+        date_to: str | None = None,
+    ) -> FetchResult:
+        payload = copy.deepcopy(DRY_RUN_FD_PAYLOAD)
+        match = payload["matches"][0]
+        match["status"] = "FINISHED"
+        match["score"] = {
+            "duration": "REGULAR",
+            "fullTime": {"home": 2, "away": 1},
+        }
+        raw_text = json.dumps(payload, sort_keys=True)
+        return FetchResult(
+            source_name="football-data.org",
+            source_url="https://fixture.local/football-data",
+            fetched_at=FETCHED_AT,
+            http_status=200,
+            schema_version=self.schema_version,
+            payload=payload,
             payload_hash=hash_text(raw_text),
             raw_text=raw_text,
         )
@@ -339,6 +371,79 @@ def test_run_daily_ingest_bootstraps_a_fresh_database(monkeypatch):
         assert run.error_count == 0
         raw = session.query(RawPayload).one()
         assert raw.run_id == run.run_id
+    engine.dispose()
+
+
+def test_recent_result_refresh_finalises_a_live_match(monkeypatch):
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    settings = Settings(
+        database_url="sqlite+pysqlite:///:memory:",
+        _env_file=None,
+    )
+    now = datetime(2026, 8, 15, 16, 0, tzinfo=UTC)
+    with factory() as setup:
+        seed_competitions(setup)
+        competition = setup.query(Competition).filter_by(code="UCL").one()
+        home = Team(
+            slug="arsenal",
+            name="Arsenal",
+            short_name="Arsenal",
+            country="England",
+            football_data_id=10,
+        )
+        away = Team(
+            slug="chelsea",
+            name="Chelsea",
+            short_name="Chelsea",
+            country="England",
+            football_data_id=20,
+        )
+        setup.add_all([home, away])
+        setup.flush()
+        match = Match(
+            competition_id=competition.id,
+            season="2025/26",
+            kickoff_at=datetime(2026, 8, 15, 14, 0, tzinfo=UTC),
+            first_seen_at=datetime(2026, 8, 15, 12, 0, tzinfo=UTC),
+            home_team_id=home.id,
+            away_team_id=away.id,
+            status=MatchStatus.LIVE,
+            home_goals_90=1,
+            away_goals_90=0,
+            home_goals_final=1,
+            away_goals_final=0,
+            source_match_ids={"football-data.org": "1001"},
+            coverage_flags=[],
+        )
+        setup.add(match)
+        setup.commit()
+        match_id = match.id
+    monkeypatch.setattr("apps.worker.jobs.get_settings", lambda: settings)
+    monkeypatch.setattr("apps.worker.jobs.build_engine", lambda _url: engine)
+    monkeypatch.setattr("apps.worker.jobs.build_session_factory", lambda _engine: factory)
+    monkeypatch.setattr(
+        "apps.worker.jobs.build_adapters",
+        lambda _settings: AdapterBundle(football_data=_FinishedFootballData()),
+    )
+
+    result = run_recent_result_refresh(now=now)
+    assert result == {"fixtures": 1, "leagues": {"UCL": 1}}
+
+    with factory() as verify:
+        refreshed = verify.get(Match, match_id)
+        assert refreshed is not None
+        assert refreshed.status is MatchStatus.FINISHED
+        assert refreshed.home_goals_90 == 2
+        assert refreshed.away_goals_90 == 1
+        run = verify.query(SourceFetchRun).one()
+        assert run.field_scope == "recent UCL fixtures"
+        assert run.status is FetchRunStatus.SUCCEEDED
     engine.dispose()
 
 
@@ -885,6 +990,13 @@ def test_run_decision_reconciliation_logs_a_scheduled_epl_match(monkeypatch):
         assert log.prediction_count == 0
         assert log.reason.strip()
     engine.dispose()
+
+
+def test_scheduler_includes_a_recent_result_refresh_job():
+    scheduler = build_scheduler(queue=_NoopQueue())
+    job = scheduler.get_job("recent-result-refresh")
+    assert job is not None
+    assert job.trigger.interval == timedelta(minutes=15)
 
 
 def test_scheduler_includes_a_settlement_scan_job():

@@ -75,6 +75,7 @@ DATA_COMPETITIONS: tuple[str, ...] = (
     "UCL",
 )
 _TRIGGER_RETRY = Retry(max=3, interval=[60, 300, 900])
+_RECENT_RESULT_WINDOW = timedelta(hours=18)
 
 def _run_source_fetch[T](
     session: Session,
@@ -200,6 +201,69 @@ def run_daily_ingest(
             "leagues": fixtures_by_league,
             "hkjc_by_league": linked_by_league,
         }
+
+
+def run_recent_result_refresh(now: datetime | None = None) -> dict[str, object]:
+    """Refresh fixtures that kicked off recently but are still not final.
+
+    The daily 06:00 HKT ingest can catch a match while it is still live; without
+    a follow-up read the database keeps that stale status (and hides the result)
+    until the next day. This job re-reads only competitions with an unresolved
+    match in the recent window, so it is cheap and cannot touch unrelated
+    upcoming fixtures.
+    """
+    current = ensure_utc(now or utc_now())
+    settings = get_settings()
+    engine = build_engine(settings.database_url)
+    factory = build_session_factory(engine)
+    with session_scope(factory) as session:
+        seed_competitions(session)
+        recent_start = current - _RECENT_RESULT_WINDOW
+        codes = list(
+            session.scalars(
+                select(Competition.code)
+                .join(Match, Match.competition_id == Competition.id)
+                .where(
+                    Match.kickoff_at < current,
+                    Match.kickoff_at >= recent_start,
+                    Match.status.in_(
+                        (MatchStatus.SCHEDULED, MatchStatus.LIVE)
+                    ),
+                )
+                .distinct()
+                .order_by(Competition.code)
+            ).all()
+        )
+        if not codes:
+            return {"fixtures": 0, "leagues": {}}
+
+        adapters = build_adapters(settings)
+        pipeline = IngestPipeline(session, adapters)
+        year = season_start_year(current)
+        date_from = recent_start.date().isoformat()
+        date_to = current.date().isoformat()
+        fixtures_by_league: dict[str, int] = {}
+        for competition_code in codes:
+            fixtures_by_league[competition_code] = _run_source_fetch(
+                session,
+                source_name="football-data.org",
+                params={
+                    "competition_code": competition_code,
+                    "season_start_year": year,
+                    "date_from": date_from,
+                    "date_to": date_to,
+                },
+                operation=lambda run_id, code=competition_code: pipeline.ingest_fixtures(
+                    code,
+                    year,
+                    date_from=date_from,
+                    date_to=date_to,
+                    run_id=run_id,
+                ),
+                field_scope=f"recent {competition_code} fixtures",
+                test_evidence_ref="tests/apps/test_worker.py",
+            )
+    return {"fixtures": sum(fixtures_by_league.values()), "leagues": fixtures_by_league}
 
 
 def ingest_trigger_odds(
@@ -684,6 +748,7 @@ __all__ = [
     "run_decision_reconciliation",
     "run_lineup_check",
     "run_match_trigger",
+    "run_recent_result_refresh",
     "run_settlement_scan",
     "season_start_year",
     "settle_match",

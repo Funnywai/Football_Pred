@@ -140,6 +140,8 @@ class IngestPipeline:
         *,
         bootstrap_teams: bool = False,
         run_id: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
     ) -> int:
         if self._adapters.football_data is None:
             raise PipelineError("football-data.org adapter is not configured")
@@ -147,6 +149,8 @@ class IngestPipeline:
         result = self._adapters.football_data.fetch_matches(
             competition_code,
             season_start_year,
+            date_from=date_from,
+            date_to=date_to,
         )
         _ = persist_raw_payload(
             self._session,
