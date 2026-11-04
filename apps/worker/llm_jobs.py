@@ -20,6 +20,9 @@ from packages.shared.time import ensure_utc, utc_now
 _PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts" / "llm"
 _LLM_DEDUPE_TTL_SECONDS = 6 * 60 * 60
 _LLM_PREDICTION_OFFSET = timedelta(minutes=28)
+# Six specialists, red team and judge can take several minutes in total.
+# RQ's default 180s timeout is too short for the 9-call pipeline.
+_LLM_JOB_TIMEOUT_SECONDS = 1200
 
 
 def run_llm_prediction_job(match_id: str, stage: str = "T-30m") -> dict[str, object]:
@@ -111,6 +114,7 @@ def _enqueue_due(
             str(match.id),
             "T-30m",
             job_id=f"llm-{uuid.uuid4()}",
+            job_timeout=_LLM_JOB_TIMEOUT_SECONDS,
         )
         enqueued += 1
     return enqueued
