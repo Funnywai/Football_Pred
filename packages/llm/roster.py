@@ -9,7 +9,7 @@ class AgentDefinition:
     name: str
     scope: str
     kind: str
-    phase: str = "phase-2"
+    phase: str = "phase-3"
 
 
 AGENTS: tuple[AgentDefinition, ...] = (
