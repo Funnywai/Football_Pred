@@ -6,9 +6,11 @@ import {
   formatSignedPercent,
   probabilitiesToPercents,
 } from "@/lib/format";
+import { buildPredictionsTsv } from "@/lib/predictions-export";
 import type { EndpointResult } from "@/lib/api";
 import type { Prediction } from "@/lib/types";
 
+import { CopyTableButton } from "./copy-table-button";
 import { DataWarning, EmptyState, MatchCell, Panel, SectionHeader, StatusTag } from "./ui";
 import { TableFrame } from "./table-frame";
 
@@ -50,12 +52,13 @@ function ProbabilityCell({
 function ResultCell({ prediction }: { prediction: Prediction }) {
   const status = (prediction.status ?? "").toLowerCase();
   const finished = status === "finished";
+  const live = status === "live";
   const home90 = asNumber(prediction.home_goals_90);
   const away90 = asNumber(prediction.away_goals_90);
   const home = home90 ?? asNumber(prediction.home_goals_final);
   const away = away90 ?? asNumber(prediction.away_goals_final);
 
-  if (!finished || home === null || away === null) {
+  if ((!finished && !live) || home === null || away === null) {
     return <span className="text-muted">—</span>;
   }
 
@@ -66,9 +69,15 @@ function ResultCell({ prediction }: { prediction: Prediction }) {
       </span>
       <abbr
         className="result__label"
-        title={home90 === null ? "After extra time" : "Full time"}
+        title={
+          live
+            ? "Live score"
+            : home90 === null
+              ? "After extra time"
+              : "Full time"
+        }
       >
-        {home90 === null ? "AET" : "FT"}
+        {live ? "LIVE" : home90 === null ? "AET" : "FT"}
       </abbr>
     </span>
   );
@@ -113,6 +122,10 @@ export function PredictionsSection({
   result: EndpointResult<Prediction[]>;
 }) {
   const predictions = Array.isArray(result.data) ? result.data : [];
+  const copyText = predictions.length > 0 ? buildPredictionsTsv(predictions) : "";
+  const researchOnly = predictions.some(
+    (prediction) => prediction.decision_status === "prediction_only",
+  );
 
   return (
     <section id="predictions" className="section" aria-labelledby="predictions-title">
@@ -139,9 +152,21 @@ export function PredictionsSection({
         <Panel
           title="Prediction feed"
           kicker="Ordered by kickoff"
-          meta="result · probabilities · odds · expected value"
+          meta={
+            <div className="panel__meta-group">
+              <span>result · probabilities · odds · expected value</span>
+              {copyText ? <CopyTableButton text={copyText} label="Copy" /> : null}
+            </div>
+          }
           bodyClassName="panel__body--flush"
         >
+          {researchOnly ? (
+            <p className="prediction-caveat">
+              EV is a research diagnostic (model probability × T-30m odds − 1),
+              not a bet recommendation. UCL rows are prediction-only and do not
+              enter the paper ledger.
+            </p>
+          ) : null}
           <TableFrame label="Latest model predictions" wide>
             <table className="table--predictions">
               <caption className="sr-only">
