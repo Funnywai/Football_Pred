@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from packages.db.models import (
     BankrollAccount,
     BankrollReservation,
+    LedgerExperiment,
     PaperBet,
     Settlement,
 )
@@ -116,18 +117,26 @@ class LedgerService:
         fee_rate: Decimal = _ZERO,
         account_id: str = DEFAULT_ACCOUNT_ID,
         currency: str = DEFAULT_CURRENCY,
+        experiment_id: uuid.UUID | None = None,
     ) -> None:
-        if not initial_bankroll.is_finite() or initial_bankroll < _ZERO:
-            raise ValueError("initial_bankroll must be a non-negative finite Decimal")
         if not fee_rate.is_finite() or fee_rate < _ZERO or fee_rate >= Decimal(1):
             raise ValueError("fee_rate must be in [0, 1)")
         if not account_id.strip():
             raise ValueError("account_id must not be blank")
         self._session: Session = session
+        self._experiment_id = experiment_id
         self._initial: Decimal = initial_bankroll
         self._fee_rate: Decimal = fee_rate
         self._account_id: str = account_id
         self._currency: str = currency
+        if experiment_id is not None:
+            experiment = session.get(LedgerExperiment, experiment_id)
+            if experiment is None:
+                raise ValueError(f"unknown ledger experiment {experiment_id}")
+            self._initial = Decimal(str(experiment.initial_bankroll))
+            self._account_id = experiment.account_id
+        if not self._initial.is_finite() or self._initial < _ZERO:
+            raise ValueError("initial_bankroll must be a non-negative finite Decimal")
 
     def available_bankroll(self) -> Decimal:
         account = self._get_account()
@@ -244,6 +253,9 @@ class LedgerService:
             return settlement
 
     def summary(self) -> LedgerSummary:
+        conditions = [Settlement.provisional.is_(False)]
+        if self._experiment_id is not None:
+            conditions.append(PaperBet.experiment_id == self._experiment_id)
         rows = self._session.execute(
             select(
                 PaperBet.stake,
@@ -253,7 +265,7 @@ class LedgerService:
                 Settlement.id,
             )
             .join(Settlement, Settlement.paper_bet_id == PaperBet.id)
-            .where(Settlement.provisional.is_(False))
+            .where(*conditions)
             .order_by(Settlement.settled_at, Settlement.id)
         ).all()
         settled = [
@@ -271,10 +283,13 @@ class LedgerService:
             self._initial,
             list(zip((stake for stake, _, _ in settled), net_payouts, strict=True)),
         )
+        pending_conditions = [PaperBet.status == BetStatus.PENDING]
+        if self._experiment_id is not None:
+            pending_conditions.append(PaperBet.experiment_id == self._experiment_id)
         pending_count = self._session.execute(
             select(func.count())
             .select_from(PaperBet)
-            .where(PaperBet.status == BetStatus.PENDING)
+            .where(*pending_conditions)
         ).scalar_one()
         account = self._get_account()
         bankroll = account.bankroll_balance if account is not None else curve[-1]
@@ -331,6 +346,7 @@ class LedgerService:
                 status=ReservationStatus.HELD,
             )
             bet = PaperBet(
+                experiment_id=self._experiment_id,
                 match_id=request.match_id,
                 market=request.market,
                 line_key=request.line_key,

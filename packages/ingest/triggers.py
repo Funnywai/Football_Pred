@@ -87,6 +87,7 @@ def decision_slot_key(
     *,
     strategy_version: str = DEFAULT_STRATEGY_VERSION,
     trigger: str = DECISION_TRIGGER,
+    experiment_id: uuid.UUID | str | None = None,
 ) -> str:
     if trigger != DECISION_TRIGGER:
         raise ValueError(
@@ -94,7 +95,12 @@ def decision_slot_key(
         )
     if not strategy_version.strip():
         raise ValueError("strategy_version must not be blank")
-    return f"{strategy_version}:{match_id}:{trigger}"
+    prefix = (
+        strategy_version
+        if experiment_id is None
+        else f"{strategy_version}:{experiment_id}"
+    )
+    return f"{prefix}:{match_id}:{trigger}"
 
 
 def bet_intent_key(

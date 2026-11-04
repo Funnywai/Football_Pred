@@ -16,6 +16,7 @@ from packages.db.models import (
     CalibrationMetric,
     Competition,
     DecisionLog,
+    LedgerExperiment,
     MarketLine,
     Match,
     ModelPrediction,
@@ -30,6 +31,7 @@ from packages.db.models import (
     WeightSnapshot,
 )
 from packages.domain.enums import MarketType, MatchStatus, Side, SnapshotKind
+from packages.ledger.experiments import active_experiment
 from packages.ledger.service import LedgerService
 from packages.shared.config import Settings, get_settings
 from packages.shared.time import ensure_utc, utc_now
@@ -42,7 +44,6 @@ _SIDES: tuple[Side, Side, Side] = (Side.H, Side.D, Side.A)
 _MONEY = Decimal("0.01")
 _ZERO = Decimal("0.00")
 _DATA_COMPETITIONS = ("EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1", "UCL")
-_PAPER_ACCOUNT = "paper"
 
 
 def get_session(request: Request) -> Iterator[Session]:
@@ -119,16 +120,33 @@ def _redis_status(request: Request) -> str:
     return "up"
 
 
-def _account(session: Session) -> BankrollAccount | None:
+def _account(session: Session, account_id: str) -> BankrollAccount | None:
     return _safe_scalar(
         session,
-        select(BankrollAccount).where(BankrollAccount.account_id == _PAPER_ACCOUNT),
+        select(BankrollAccount).where(BankrollAccount.account_id == account_id),
     )
 
 
-def _bankroll(session: Session, settings: Settings) -> dict[str, str]:
-    initial = settings.initial_bankroll
-    account = _account(session)
+def _scoped_count(session: Session, model: Any, experiment: LedgerExperiment | None) -> int:
+    statement = select(func.count()).select_from(model)
+    if experiment is not None:
+        statement = statement.where(model.experiment_id == experiment.id)
+    value = _safe_scalar(session, statement)
+    return int(value or 0)
+
+
+def _bankroll(
+    session: Session,
+    settings: Settings,
+    experiment: LedgerExperiment | None,
+) -> dict[str, str]:
+    initial = (
+        Decimal(str(experiment.initial_bankroll))
+        if experiment is not None
+        else settings.initial_bankroll
+    )
+    account_id = experiment.account_id if experiment is not None else "paper"
+    account = _account(session, account_id)
     if account is None:
         return {
             "initial": _money(initial) or "0.00",
@@ -152,9 +170,14 @@ def _bankroll(session: Session, settings: Settings) -> dict[str, str]:
 def overview(request: Request, session: SessionDep) -> dict[str, Any]:
     settings = _settings(request)
     now = utc_now()
+    experiment = active_experiment(session)
     summary = None
     try:
-        summary = LedgerService(session, initial_bankroll=settings.initial_bankroll).summary()
+        summary = LedgerService(
+            session,
+            initial_bankroll=settings.initial_bankroll,
+            experiment_id=experiment.id if experiment is not None else None,
+        ).summary()
     except SQLAlchemyError:
         session.rollback()
 
@@ -239,14 +262,25 @@ def overview(request: Request, session: SessionDep) -> dict[str, Any]:
             "database": _database_status(session),
             "redis": _redis_status(request),
         },
-        "bankroll": _bankroll(session, settings),
+        "bankroll": _bankroll(session, settings, experiment),
+        "experiment": {
+            "id": str(experiment.id) if experiment is not None else None,
+            "label": experiment.label if experiment is not None else "legacy",
+            "model_version": experiment.model_version if experiment is not None else None,
+            "strategy_version": experiment.strategy_version if experiment is not None else None,
+            "initial_bankroll": _money(
+                Decimal(str(experiment.initial_bankroll))
+                if experiment is not None
+                else settings.initial_bankroll
+            ),
+        },
         "ledger": ledger,
         "counts": {
             "matches": _count(session, Match),
             "predictions": _count(session, ModelPrediction),
-            "bets": _count(session, PaperBet),
+            "bets": _scoped_count(session, PaperBet, experiment),
             "settlements": _count(session, Settlement),
-            "decisions": _count(session, DecisionLog),
+            "decisions": _scoped_count(session, DecisionLog, experiment),
         },
         "next_fixtures": [
             {
@@ -490,12 +524,12 @@ def _bet_model_version(session: Session, bet: PaperBet) -> str | None:
 
 
 @router.get("/bets")
-def bets(session: SessionDep, limit: int = 100) -> list[dict[str, Any]]:
+def bets(request: Request, session: SessionDep, limit: int = 100) -> list[dict[str, Any]]:
     clamped = max(1, min(limit, 500))
+    experiment = active_experiment(session)
     home = aliased(Team)
     away = aliased(Team)
-    rows = _safe_all(
-        session,
+    statement = (
         select(
             PaperBet,
             Match.kickoff_at,
@@ -510,8 +544,11 @@ def bets(session: SessionDep, limit: int = 100) -> list[dict[str, Any]]:
         .join(away, away.id == Match.away_team_id)
         .outerjoin(Settlement, Settlement.paper_bet_id == PaperBet.id)
         .order_by(PaperBet.placed_at.desc(), PaperBet.id.desc())
-        .limit(clamped),
+        .limit(clamped)
     )
+    if experiment is not None:
+        statement = statement.where(PaperBet.experiment_id == experiment.id)
+    rows = _safe_all(session, statement)
 
     output: list[dict[str, Any]] = []
     for row in rows:
@@ -552,14 +589,21 @@ def bets(session: SessionDep, limit: int = 100) -> list[dict[str, Any]]:
 @router.get("/equity")
 def equity(request: Request, session: SessionDep) -> dict[str, Any]:
     settings = _settings(request)
-    initial = settings.initial_bankroll
-    rows = _safe_all(
-        session,
+    experiment = active_experiment(session)
+    initial = (
+        Decimal(str(experiment.initial_bankroll))
+        if experiment is not None
+        else settings.initial_bankroll
+    )
+    statement = (
         select(Settlement.settled_at, Settlement.payout, PaperBet.stake)
         .join(PaperBet, PaperBet.id == Settlement.paper_bet_id)
         .where(Settlement.provisional.is_(False))
-        .order_by(Settlement.settled_at.asc(), Settlement.id.asc()),
+        .order_by(Settlement.settled_at.asc(), Settlement.id.asc())
     )
+    if experiment is not None:
+        statement = statement.where(PaperBet.experiment_id == experiment.id)
+    rows = _safe_all(session, statement)
     balance = initial
     points: list[dict[str, str | None]] = [{"t": None, "bankroll": _money(initial)}]
     for settled_at, payout, stake in rows:

@@ -9,6 +9,7 @@ from packages.db.models.decisions import DecisionLog
 from packages.db.models.ledger import (
     BankrollAccount,
     BankrollReservation,
+    LedgerExperiment,
     PaperBet,
     Settlement,
 )
@@ -31,6 +32,7 @@ __all__ = [
     "CalibrationMetric",
     "Competition",
     "DecisionLog",
+    "LedgerExperiment",
     "Lineup",
     "LlmAgentOutput",
     "LlmAgentRun",

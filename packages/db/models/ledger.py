@@ -22,6 +22,20 @@ from packages.domain.enums import (
 )
 
 
+class LedgerExperiment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "ledger_experiments"
+
+    label: Mapped[str] = mapped_column(String(128), nullable=False)
+    lane: Mapped[str] = mapped_column(String(16), default="deterministic", nullable=False)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    strategy_version: Mapped[str] = mapped_column(String(32), nullable=False)
+    initial_bankroll: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    account_id: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_legacy: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class PaperBet(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "paper_bets"
     __table_args__ = (
@@ -31,6 +45,9 @@ class PaperBet(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         ),
     )
 
+    experiment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ledger_experiments.id", ondelete="SET NULL"), index=True
+    )
     match_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("matches.id", ondelete="RESTRICT"), nullable=False
     )

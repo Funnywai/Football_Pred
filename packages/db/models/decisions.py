@@ -12,6 +12,9 @@ from packages.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 class DecisionLog(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__: str = "decision_logs"
 
+    experiment_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("ledger_experiments.id", ondelete="SET NULL"), index=True
+    )
     match_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("matches.id", ondelete="CASCADE"), nullable=False, index=True
     )

@@ -655,11 +655,6 @@ def settle_match(match_id: str) -> dict[str, int]:
         if goals is None:
             return {"settled": 0}
         refunded = HkjcAdapter.refunded_markets(result)
-        ledger = LedgerService(
-            session,
-            initial_bankroll=settings.initial_bankroll,
-            fee_rate=settings.fee_rate,
-        )
         bets = list(
             session.execute(
                 select(PaperBet).where(
@@ -669,6 +664,12 @@ def settle_match(match_id: str) -> dict[str, int]:
             ).scalars()
         )
         for bet in bets:
+            ledger = LedgerService(
+                session,
+                initial_bankroll=settings.initial_bankroll,
+                fee_rate=settings.fee_rate,
+                experiment_id=bet.experiment_id,
+            )
             closing_odds, closing_snapshot_id = _closing_odds(session, bet)
             _ = ledger.settle_paper_bet(
                 bet.id,
