@@ -1,5 +1,3 @@
-import type { ReactNode } from "react";
-
 import type { EndpointResult } from "@/lib/api";
 import {
   asNumber,
@@ -54,20 +52,6 @@ function LlmKpi({
   );
 }
 
-function LaneFact({
-  label,
-  children,
-}: {
-  label: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="llm-state__row">
-      <dt>{label}</dt>
-      <dd>{children}</dd>
-    </div>
-  );
-}
 
 export function LlmOverviewSection({
   result,
@@ -76,7 +60,6 @@ export function LlmOverviewSection({
 }) {
   const data = result.data;
   const counts = data?.counts;
-  const runtime = data?.runtime ?? {};
   const ledger = data?.ledger ?? null;
   const allFixtures = Array.isArray(data?.next_fixtures) ? data.next_fixtures : [];
   const fixtures = allFixtures.slice(0, 5);
@@ -89,9 +72,6 @@ export function LlmOverviewSection({
         ? formatPercent(drawdown)
         : formatMoney(drawdown, ledger?.currency ?? "HKD");
   const currency = ledger?.currency?.trim() || "HKD";
-  const competitions = Array.isArray(data?.competitions)
-    ? data.competitions.filter((item) => typeof item === "string" && item.trim())
-    : [];
 
   const fixtureMeta =
     allFixtures.length > fixtures.length
@@ -222,77 +202,13 @@ export function LlmOverviewSection({
                 </TableFrame>
               )}
             </Panel>
-
-            <Panel
-              title="Lane state"
-              kicker="Read-only runtime"
-              meta={textOr(data.phase, "phase unknown")}
-              className="llm-state-panel"
-            >
-              <dl className="llm-state">
-                <LaneFact label="Provider">
-                  <span className="llm-state__value">
-                    {textOr(runtime.provider, "not reported")}
-                  </span>
-                </LaneFact>
-                <LaneFact label="Model">
-                  <span className="llm-state__value">
-                    {textOr(runtime.model, "not reported")}
-                  </span>
-                </LaneFact>
-                <LaneFact label="Decision layer">
-                  <span className="llm-state__value">
-                    {textOr(runtime.decision_layer, "not reported")}
-                  </span>
-                </LaneFact>
-                <LaneFact label="Phase">
-                  <StatusTag status={data.phase} tone="neutral" />
-                </LaneFact>
-                <LaneFact label="Competitions">
-                  <span className="llm-state__value">
-                    {competitions.length > 0 ? competitions.join(" · ") : "not reported"}
-                  </span>
-                </LaneFact>
-                <LaneFact label="Paper ledger">
-                  <StatusTag status={runtime.paper_ledger} tone="muted" />
-                </LaneFact>
-                <LaneFact label="LLM ROI">
-                  <span className="llm-state__value">
-                    {ledger
-                      ? `${formatSignedPercent(ledger.roi, 2)} · ${formatNumber(ledger.settled_bets)} settled`
-                      : "not opened"}
-                  </span>
-                </LaneFact>
-                <LaneFact label="LLM bankroll">
-                  <span className="llm-state__value">
-                    {ledger?.bankroll ?? "—"}
-                  </span>
-                </LaneFact>
-                <LaneFact label="Evidence packets">
-                  <span className="llm-state__value">
-                    {countOrDash(counts?.evidence_packets)}
-                  </span>
-                </LaneFact>
-                <LaneFact label="Agent runs">
-                  <span className="llm-state__value">
-                    {countOrDash(counts?.agent_runs)}
-                  </span>
-                </LaneFact>
-                <LaneFact label="Prompt / agent counts">
-                  <span className="llm-state__value">
-                    {countOrDash(counts?.prompts)} prompts · {countOrDash(counts?.agents)} agents
-                  </span>
-                </LaneFact>
-              </dl>
-            </Panel>
           </div>
 
           <p className="llm-note llm-overview-note">
-            The LLM lane has a separate paper ledger and bankroll: agents cannot
-            write directly to the database or settle bets; the deterministic
-            orchestrator persists frozen evidence, runs, ensemble output and the
-            EV/Kelly paper-bet decision. The next run is the T-28m pre-kickoff
-            window; until a run is recorded, the lane stays on standby.
+            The LLM lane has a separate paper ledger and bankroll. Seven research
+            analysts produce evidence-backed findings, the main agent writes the
+            betting report and recommendation, and the deterministic safety layer
+            alone can place or reject the paper bet.
           </p>
         </>
       )}

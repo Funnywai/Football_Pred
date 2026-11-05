@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getJson, type EndpointResult } from "./api";
-import type { LlmPrediction, LlmStatus } from "./llm-types";
+import type { LlmPrediction, LlmResearchRun, LlmStatus } from "./llm-types";
 import type { Bet, Equity } from "./types";
 
 /**
@@ -25,12 +25,21 @@ export async function getLlmEquity(): Promise<EndpointResult<Equity>> {
   return getJson<Equity>("/llm/equity", "object");
 }
 
+export async function getLlmResearchRuns(): Promise<EndpointResult<LlmResearchRun[]>> {
+  return getJson<LlmResearchRun[]>("/llm/research-runs?limit=20", "array");
+}
+
+export async function getLlmResearchRun(runId: string): Promise<EndpointResult<LlmResearchRun>> {
+  return getJson<LlmResearchRun>(`/llm/research-runs/${runId}`, "object");
+}
+
 export async function getLlmPageData() {
-  const [status, predictions, bets, equity] = await Promise.all([
+  const [status, predictions, bets, equity, researchRuns] = await Promise.all([
     getLlmStatus(),
     getLlmPredictions(),
     getLlmBets(),
     getLlmEquity(),
+    getLlmResearchRuns(),
   ]);
-  return { status, predictions, bets, equity };
+  return { status, predictions, bets, equity, researchRuns };
 }

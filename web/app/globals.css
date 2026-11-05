@@ -3489,3 +3489,87 @@ th.num {
     flex: 1;
   }
 }
+
+/* LLM research assistant report */
+.llm-report__summary {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.llm-report__summary p {
+  margin: 5px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.llm-report__label {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.llm-report__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  padding-top: 14px;
+}
+
+.llm-report__grid p {
+  margin: 5px 0 0;
+  color: var(--text-dim);
+}
+
+.llm-findings {
+  margin: 5px 0 0;
+  padding-left: 16px;
+  color: var(--text-dim);
+}
+
+.llm-findings li + li {
+  margin-top: 3px;
+}
+
+.llm-report__probabilities {
+  margin-bottom: 12px;
+}
+
+.llm-decision-facts {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.llm-decision-facts > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.4fr) minmax(0, 1fr);
+  gap: 10px;
+  padding-bottom: 7px;
+  border-bottom: 1px solid var(--line);
+}
+
+.llm-decision-facts dt {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.llm-decision-facts dd {
+  margin: 0;
+  color: var(--text-dim);
+}
+
+.table--llm-findings {
+  min-width: 1040px;
+}
+
+@media (max-width: 900px) {
+  .llm-report__grid {
+    grid-template-columns: 1fr;
+  }
+}

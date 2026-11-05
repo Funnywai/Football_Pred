@@ -119,3 +119,53 @@ export interface LlmStatus {
   prompts?: LlmPrompt[] | null;
   separation?: LlmSeparation[] | null;
 }
+export interface LlmResearchFinding {
+  agent_id?: string | null;
+  summary?: string | null;
+  findings?: string[] | null;
+  confidence?: Numeric;
+  direction?: string | null;
+  evidence_refs?: string[] | null;
+  uncertainties?: string[] | null;
+  abstain?: boolean | null;
+  error?: string | null;
+}
+
+export interface LlmResearchRisk {
+  accepted?: boolean | null;
+  reason?: string | null;
+  selection?: string | null;
+  stake?: Numeric;
+  odds?: Numeric;
+  paper_bet_id?: string | null;
+  bankroll?: Numeric;
+}
+
+export interface LlmResearchReport {
+  summary?: string | null;
+  key_findings?: string[] | null;
+  market_view?: string | null;
+  risks?: string[] | null;
+  reasoning?: string | null;
+}
+
+export interface LlmResearchRun {
+  run_id?: string | null;
+  match_id?: string | null;
+  stage?: string | null;
+  as_of?: string | null;
+  status?: string | null;
+  model_version?: string | null;
+  prompt_version?: string | null;
+  provider?: string | null;
+  report?: LlmResearchReport | null;
+  probabilities?: OutcomeProbabilities | null;
+  recommended_side?: string | null;
+  recommended_stake_pct?: Numeric;
+  confidence?: Numeric;
+  abstain?: boolean | null;
+  risk?: LlmResearchRisk | null;
+  error?: string | null;
+  findings?: LlmResearchFinding[] | null;
+  created_at?: string | null;
+}
