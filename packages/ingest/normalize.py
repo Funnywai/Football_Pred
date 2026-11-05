@@ -15,7 +15,7 @@ from packages.db.models import (
     Match,
     OddsSnapshot,
 )
-from packages.domain.enums import MarketType, MatchStatus, SnapshotKind
+from packages.domain.enums import AvailabilityBasis, MarketType, MatchStatus, SnapshotKind
 from packages.domain.errors import DomainError
 from packages.ingest.aliases import resolve_team_id
 from packages.shared.time import ensure_utc, utc_now
@@ -126,11 +126,16 @@ def upsert_match(session: Session, fixture: NormalizedFixture) -> Match:
         else None
     )
     if existing is None:
+        observed_finished = fixture.status is MatchStatus.FINISHED
         existing = Match(
             competition_id=fixture.competition_id,
             season=fixture.season,
             kickoff_at=fixture.kickoff_at,
             first_seen_at=utc_now(),
+            result_available_at=utc_now() if observed_finished else None,
+            result_availability_basis=(
+                AvailabilityBasis.OBSERVED_SNAPSHOT if observed_finished else None
+            ),
             home_team_id=fixture.home_team_id,
             away_team_id=fixture.away_team_id,
             status=fixture.status,
@@ -145,6 +150,12 @@ def upsert_match(session: Session, fixture: NormalizedFixture) -> Match:
         session.add(existing)
         session.flush()
         return existing
+    if (
+        fixture.status is MatchStatus.FINISHED
+        and existing.result_available_at is None
+    ):
+        existing.result_available_at = utc_now()
+        existing.result_availability_basis = AvailabilityBasis.OBSERVED_SNAPSHOT
     existing.kickoff_at = fixture.kickoff_at
     existing.status = fixture.status
     existing.matchday = fixture.matchday

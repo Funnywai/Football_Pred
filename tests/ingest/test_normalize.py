@@ -8,7 +8,13 @@ import pytest
 from packages.adapters.football_data_org import FootballDataMatch
 from packages.adapters.hkjc import HkjcAdapter
 from packages.db.models import Competition, MarketLine, Match, OddsSnapshot, Team
-from packages.domain.enums import MarketType, MatchStatus, Side, SnapshotKind
+from packages.domain.enums import (
+    AvailabilityBasis,
+    MarketType,
+    MatchStatus,
+    Side,
+    SnapshotKind,
+)
 from packages.domain.errors import DomainError, UnresolvedTeamError
 from packages.ingest.aliases import canonical_team_slug, resolve_team_id
 from packages.ingest.normalize import (
@@ -240,7 +246,34 @@ def test_upsert_match_updates_existing_fixture(session):
     assert updated.away_goals_90 == 1
     assert updated.home_goals_final == 2
     assert updated.away_goals_final == 1
+    assert updated.result_available_at is not None
+    assert updated.result_availability_basis is AvailabilityBasis.OBSERVED_SNAPSHOT
     assert session.query(Match).count() == 1
+
+
+def test_upsert_match_keeps_result_availability_timestamp_once(session):
+    seed_competitions(session)
+    _seed_teams(session)
+    competition = get_competition(session, "EPL")
+    match = upsert_match(session, normalize_fixture(session, _dto(), competition.id))
+    assert match.result_available_at is None
+    finished = normalize_fixture(
+        session,
+        _dto(
+            status=MatchStatus.FINISHED,
+            home_goals_90=2,
+            away_goals_90=1,
+            home_goals_final=2,
+            away_goals_final=1,
+        ),
+        competition.id,
+    )
+    updated = upsert_match(session, finished)
+    observed = updated.result_available_at
+    assert observed is not None
+    assert updated.result_availability_basis is AvailabilityBasis.OBSERVED_SNAPSHOT
+    _ = upsert_match(session, finished)
+    assert updated.result_available_at == observed
 
 
 def test_upsert_match_updates_rescheduled_kickoff_instead_of_duplicating(session):
