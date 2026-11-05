@@ -3395,7 +3395,7 @@ th.num {
 
 .table--predictions th:nth-child(1),
 .table--predictions td:nth-child(1) {
-  width: 14%;
+  width: 16.7%;
 }
 
 .table--predictions th:nth-child(2),
