@@ -157,6 +157,35 @@ export function formatDateTime(value: string | null | undefined): string {
   }).format(date);
 }
 
+export function hktDateKey(value: string | null | undefined): string | null {
+  const date = parseDate(value);
+  if (!date) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: HKT,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value;
+  const year = part("year");
+  const month = part("month");
+  const day = part("day");
+  if (!year || !month || !day) return null;
+  return `${year}-${month}-${day}`;
+}
+
+export function formatDateKey(key: string | null | undefined): string {
+  if (!key) return "—";
+  const date = new Date(`${key}T00:00:00+08:00`);
+  if (Number.isNaN(date.getTime())) return key;
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: HKT,
+    year: "numeric",
+    month: "short",
+    day: "2-digit",
+  }).format(date);
+}
+
 export function formatKickoff(value: string | null | undefined): string {
   const date = parseDate(value);
   if (!date) return "—";

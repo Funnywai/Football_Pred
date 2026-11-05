@@ -12,12 +12,14 @@ import {
   formatOdds,
   formatSignedMoney,
   formatSignedPercent,
+  hktDateKey,
   profitTone,
   statusTone,
 } from "@/lib/format";
 import type { EndpointResult } from "@/lib/api";
 import type { Bet, Equity } from "@/lib/types";
 
+import { DayNavigator } from "./day-navigator";
 import { EquityChart } from "./equity-chart";
 import {
   DataWarning,
@@ -104,45 +106,6 @@ function SearchBox({ value, onChange }: { value: string; onChange: (value: strin
   );
 }
 
-function Pagination({
-  page,
-  totalPages,
-  totalRows,
-  onFirst,
-  onPrevious,
-  onNext,
-}: {
-  page: number;
-  totalPages: number;
-  totalRows: number;
-  onFirst: () => void;
-  onPrevious: () => void;
-  onNext: () => void;
-}) {
-  return (
-    <div className="ledger-pagination" aria-label="Bet ledger pagination">
-      <span className="ledger-pagination__status">
-        Page {page + 1} / {totalPages} · {formatNumber(totalRows)} rows
-      </span>
-      <div className="ledger-pagination__actions">
-        <button type="button" className="button button--quiet" onClick={onFirst} disabled={page === 0}>
-          Back to front
-        </button>
-        <button type="button" className="button button--quiet" onClick={onPrevious} disabled={page === 0}>
-          Previous
-        </button>
-        <button
-          type="button"
-          className="button button--quiet"
-          onClick={onNext}
-          disabled={page >= totalPages - 1}
-        >
-          Next
-        </button>
-      </div>
-    </div>
-  );
-}
 
 export function LedgerSection({
   betsResult,
@@ -170,7 +133,7 @@ export function LedgerSection({
   const challengerEquity = challengerEquityResult.data;
   const currency = "HKD";
   const [query, setQuery] = useState("");
-  const [page, setPage] = useState(0);
+  const [dayIndex, setDayIndex] = useState(0);
 
   const merged = useMemo<DisplayBet[]>(
     () =>
@@ -183,10 +146,29 @@ export function LedgerSection({
     [bets, challengerBets],
   );
 
+  const dayKeys = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          merged
+            .map((bet) => hktDateKey(bet.placed_at ?? bet.kickoff_at))
+            .filter((key): key is string => Boolean(key)),
+        ),
+      ).sort((left, right) => right.localeCompare(left)),
+    [merged],
+  );
+  const selectedDay = dayKeys[dayIndex] ?? null;
+  const dayBets = useMemo(
+    () =>
+      merged.filter(
+        (bet) => hktDateKey(bet.placed_at ?? bet.kickoff_at) === selectedDay,
+      ),
+    [merged, selectedDay],
+  );
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return merged;
-    return merged.filter((bet) =>
+    if (!needle) return dayBets;
+    return dayBets.filter((bet) =>
       [
         bet.displayLane,
         bet.home_team,
@@ -201,11 +183,9 @@ export function LedgerSection({
         .filter(Boolean)
         .some((value) => String(value).toLowerCase().includes(needle)),
     );
-  }, [merged, query]);
+  }, [dayBets, query]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages - 1);
-  const visibleBets = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const visibleBets = filtered.slice(0, PAGE_SIZE);
   const totalRows = merged.length;
   const betsUnavailable = Boolean(betsResult.error);
   const challengerUnavailable = Boolean(challengerBetsResult.error);
@@ -218,7 +198,6 @@ export function LedgerSection({
 
   const updateQuery = (next: string) => {
     setQuery(next);
-    setPage(0);
   };
 
   return (
@@ -287,18 +266,20 @@ export function LedgerSection({
       <Panel
         title="Bet ledger"
         kicker="V1 and V2 paper bets"
-        meta={`${filtered.length} matching rows · ${PAGE_SIZE} max`}
+        meta={`${visibleBets.length} / ${dayBets.length} rows · ${PAGE_SIZE} max`}
         bodyClassName="panel__body--flush"
       >
         <div className="ledger-toolbar">
           <SearchBox value={query} onChange={updateQuery} />
-          <Pagination
-            page={safePage}
-            totalPages={totalPages}
-            totalRows={filtered.length}
-            onFirst={() => setPage(0)}
-            onPrevious={() => setPage((current) => Math.max(0, current - 1))}
-            onNext={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
+          <DayNavigator
+            dayKey={selectedDay}
+            dayIndex={dayIndex}
+            dayCount={dayKeys.length}
+            onFirst={() => setDayIndex(0)}
+            onPrevious={() =>
+              setDayIndex((current) => Math.min(dayKeys.length - 1, current + 1))
+            }
+            onNext={() => setDayIndex((current) => Math.max(0, current - 1))}
           />
         </div>
 
@@ -308,7 +289,9 @@ export function LedgerSection({
               ? "Bet rows could not be loaded."
               : query.trim()
                 ? "No bets match this search."
-                : "No paper bets have been placed yet. The ledger is intentionally empty."}
+                : dayKeys.length > 0
+                  ? "No paper bets on this day."
+                  : "No paper bets have been placed yet. The ledger is intentionally empty."}
           </EmptyState>
         ) : (
           <TableFrame label="V1 and V2 paper bet ledger" wide>

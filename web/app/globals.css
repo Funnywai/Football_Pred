@@ -3422,3 +3422,51 @@ th.num {
 .table--predictions .match__teams {
   overflow-wrap: anywhere;
 }
+
+/* Day navigation for date-scoped feeds */
+.day-nav {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.day-nav__status {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.day-nav__label {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.day-nav__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.prediction-day-nav {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+@media (max-width: 760px) {
+  .day-nav,
+  .day-nav__actions {
+    width: 100%;
+  }
+
+  .day-nav__actions .button {
+    flex: 1;
+  }
+}

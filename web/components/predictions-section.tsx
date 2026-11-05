@@ -1,12 +1,18 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
 import {
   asNumber,
   formatKickoff,
   formatNumber,
   formatOdds,
   formatSignedRatioPercent,
+  hktDateKey,
   probabilitiesToPercents,
 } from "@/lib/format";
 import { buildPredictionsTsv } from "@/lib/predictions-export";
+import { DayNavigator } from "./day-navigator";
 import type { EndpointResult } from "@/lib/api";
 import type { Prediction } from "@/lib/types";
 
@@ -123,14 +129,47 @@ export function PredictionsSection({
   result: EndpointResult<Prediction[]>;
   v2Result: EndpointResult<Prediction[]>;
 }) {
-  const predictions = Array.isArray(result.data) ? result.data : [];
-  const v2Rows = Array.isArray(v2Result.data) ? v2Result.data : [];
+  const predictions = useMemo(
+    () => (Array.isArray(result.data) ? result.data : []),
+    [result.data],
+  );
+  const v2Rows = useMemo(
+    () => (Array.isArray(v2Result.data) ? v2Result.data : []),
+    [v2Result.data],
+  );
   const v2ByMatch = new Map(
     v2Rows
       .filter((row) => Boolean(row.match_id))
       .map((row) => [row.match_id as string, row]),
   );
-  const copyText = predictions.length > 0 ? buildPredictionsTsv(predictions) : "";
+  const sorted = useMemo(
+    () =>
+      [...predictions].sort(
+        (left, right) =>
+          Date.parse(right.kickoff_at ?? "") - Date.parse(left.kickoff_at ?? ""),
+      ),
+    [predictions],
+  );
+  const dayKeys = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          sorted
+            .map((prediction) => hktDateKey(prediction.kickoff_at))
+            .filter((key): key is string => Boolean(key)),
+        ),
+      ).sort((left, right) => right.localeCompare(left)),
+    [sorted],
+  );
+  const [dayIndex, setDayIndex] = useState(0);
+  const selectedDay = dayKeys[dayIndex] ?? null;
+  const visiblePredictions = useMemo(
+    () =>
+      sorted.filter((prediction) => hktDateKey(prediction.kickoff_at) === selectedDay),
+    [sorted, selectedDay],
+  );
+  const copyText =
+    visiblePredictions.length > 0 ? buildPredictionsTsv(visiblePredictions) : "";
   const researchOnly = predictions.some(
     (prediction) => prediction.decision_status === "prediction_only",
   );
@@ -159,10 +198,12 @@ export function PredictionsSection({
       {predictions.length > 0 ? (
         <Panel
           title="Prediction feed"
-          kicker="Ordered by kickoff"
+          kicker="Newest day first"
           meta={
             <div className="panel__meta-group">
-              <span>result · probabilities · odds · expected value</span>
+              <span>
+                {visiblePredictions.length} / {predictions.length} rows · HKT day
+              </span>
               {copyText ? <CopyTableButton text={copyText} label="Copy" /> : null}
             </div>
           }
@@ -175,6 +216,16 @@ export function PredictionsSection({
               all-competition paper policy and do not enter the ledger.
             </p>
           ) : null}
+          <div className="prediction-day-nav">
+            <DayNavigator
+              dayKey={selectedDay}
+              dayIndex={dayIndex}
+              dayCount={dayKeys.length}
+              onFirst={() => setDayIndex(0)}
+              onPrevious={() => setDayIndex((current) => Math.min(dayKeys.length - 1, current + 1))}
+              onNext={() => setDayIndex((current) => Math.max(0, current - 1))}
+            />
+          </div>
           <TableFrame label="Latest model predictions" wide>
             <table className="table--predictions">
               <caption className="sr-only">
@@ -197,7 +248,7 @@ export function PredictionsSection({
                 </tr>
               </thead>
               <tbody>
-                {predictions.map((prediction, index) => {
+                {visiblePredictions.map((prediction, index) => {
                   const v2 = prediction.match_id
                     ? v2ByMatch.get(prediction.match_id)
                     : undefined;
