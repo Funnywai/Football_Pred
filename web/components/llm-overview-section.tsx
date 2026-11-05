@@ -143,8 +143,8 @@ export function LlmOverviewSection({
             />
             <LlmKpi
               label="Predictions"
-              value={countOrDash(counts?.predictions)}
-              hint={`${countOrDash(counts?.predictions)} decisions · max DD ${drawdownLabel}`}
+              value={countOrDash(counts?.research_runs ?? counts?.predictions)}
+              hint={`${countOrDash(counts?.research_runs ?? counts?.predictions)} reports · max DD ${drawdownLabel}`}
             />
           </div>
 

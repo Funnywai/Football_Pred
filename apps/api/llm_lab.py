@@ -238,6 +238,7 @@ def llm_status(request: Request, session: SessionDep) -> dict[str, Any]:
             "evidence_packets": _count(session, LlmEvidencePacket),
             "agent_runs": _count(session, LlmAgentRun),
             "predictions": _count(session, LlmEnsemblePrediction),
+            "research_runs": _count(session, LlmResearchRun),
             "paper_bets": paper_bets,
         },
         "ledger": ledger,

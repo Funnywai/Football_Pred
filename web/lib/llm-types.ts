@@ -29,6 +29,7 @@ export interface LlmCounts {
   evidence_packets?: number | null;
   agent_runs?: number | null;
   predictions?: number | null;
+  research_runs?: number | null;
   paper_bets?: number | null;
 }
 
