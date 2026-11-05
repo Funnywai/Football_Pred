@@ -33,6 +33,7 @@ from packages.shared.time import ensure_utc, utc_now
 
 D = Decimal
 SCHEMA_VERSION = "evaluation-report-v1"
+_Z_95 = 1.959963984540054
 _HAD_SIDES = (Side.H, Side.D, Side.A)
 
 
@@ -43,6 +44,9 @@ class _Group:
     season: str
     observations: list[tuple[dict[str, Decimal], str]] = field(default_factory=list)
     market_observations: list[tuple[dict[str, Decimal], str]] = field(default_factory=list)
+    paired_observations: list[
+        tuple[dict[str, Decimal], dict[str, Decimal], str]
+    ] = field(default_factory=list)
 
 
 def _actual(home_goals: int, away_goals: int) -> str:
@@ -55,6 +59,36 @@ def _actual(home_goals: int, away_goals: int) -> str:
 
 def _iso(value: datetime | None) -> str | None:
     return None if value is None else ensure_utc(value).isoformat()
+
+
+def _mean_ci(values: list[Decimal]) -> list[str] | None:
+    if len(values) < 2:
+        return None
+    mean = sum(values, D(0)) / D(len(values))
+    variance = sum(((value - mean) ** 2 for value in values), D(0)) / D(
+        len(values) - 1
+    )
+    margin = Decimal(str(_Z_95)) * (variance / D(len(values))).sqrt()
+    return [str(mean - margin), str(mean + margin)]
+
+
+def _paired_delta_ci(
+    paired: list[tuple[dict[str, Decimal], dict[str, Decimal], str]],
+) -> dict[str, list[str] | None]:
+    if len(paired) < 2:
+        return {"brier": None, "log_loss": None}
+    brier_deltas = [
+        multiclass_brier(model, actual) - multiclass_brier(market, actual)
+        for model, market, actual in paired
+    ]
+    log_loss_deltas = [
+        multiclass_log_loss(model, actual) - multiclass_log_loss(market, actual)
+        for model, market, actual in paired
+    ]
+    return {
+        "brier": _mean_ci(brier_deltas),
+        "log_loss": _mean_ci(log_loss_deltas),
+    }
 
 
 def _metric_block(
@@ -72,11 +106,19 @@ def _metric_block(
     log_loss = sum(
         (multiclass_log_loss(probs, actual) for probs, actual in observations), D(0)
     )
+    brier_values = [
+        multiclass_brier(probs, actual) for probs, actual in observations
+    ]
+    log_loss_values = [
+        multiclass_log_loss(probs, actual) for probs, actual in observations
+    ]
     bins = calibration_bins(observations)
     return {
         "samples": len(observations),
         "brier": str(brier / count),
         "log_loss": str(log_loss / count),
+        "brier_ci95": _mean_ci(brier_values),
+        "log_loss_ci95": _mean_ci(log_loss_values),
         "calibration": {
             outcome: [
                 {
@@ -222,10 +264,17 @@ def build_evaluation_report(
     groups: dict[tuple[str, str, str], _Group] = {}
     after_kickoff = 0
     missing_market = 0
+    finished_matches = [
+        match for match in matches if match.status is MatchStatus.FINISHED
+    ]
     finished_missing_result_available_at = sum(
-        1
-        for match in matches
-        if match.status is MatchStatus.FINISHED and match.result_available_at is None
+        1 for match in finished_matches if match.result_available_at is None
+    )
+    result_timestamp_coverage = (
+        D(len(finished_matches) - finished_missing_result_available_at)
+        / D(len(finished_matches))
+        if finished_matches
+        else D(0)
     )
     by_run: dict[tuple[uuid.UUID, str, str], list[tuple[ModelPrediction, Match, Competition]]] = defaultdict(list)
     for prediction, match, competition in predictions:
@@ -311,6 +360,7 @@ def build_evaluation_report(
         )
         if market is not None:
             group.market_observations.append((market[0], actual))
+            group.paired_observations.append((probabilities, market[0], actual))
         else:
             missing_market += 1
 
@@ -341,6 +391,7 @@ def build_evaluation_report(
                     if model_log_loss is not None and market_log_loss is not None
                     else None
                 ),
+                "delta_ci95": _paired_delta_ci(group.paired_observations),
             }
         )
         missing_market += max(0, len(group.observations) - len(group.market_observations))
@@ -358,13 +409,14 @@ def build_evaluation_report(
         "generated_at": current.isoformat(),
         "universe": {
             "matches": len(matches),
-            "finished_matches": sum(1 for match in matches if match.status is MatchStatus.FINISHED),
+            "finished_matches": len(finished_matches),
             "prediction_runs": sum(len(group.observations) for group in groups.values()),
         },
         "models": group_payload,
         "bets": bet_rows,
         "integrity": {
             "finished_matches_missing_result_available_at": finished_missing_result_available_at,
+            "result_timestamp_coverage": str(result_timestamp_coverage),
             "predictions_after_kickoff": after_kickoff,
             "predictions_without_t30_market": missing_market,
             "bets_missing_experiment": legacy_bet_count,

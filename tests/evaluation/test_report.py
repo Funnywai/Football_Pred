@@ -192,7 +192,10 @@ def test_report_scores_model_against_same_time_market():
         assert report["bets"][0]["roi"] == "1.5"
         assert report["universe"]["finished_matches"] == 2
         assert report["integrity"]["finished_matches_missing_result_available_at"] == 1
+        assert report["integrity"]["result_timestamp_coverage"] == "0.5"
         assert report["integrity"]["predictions_after_kickoff"] == 0
+        assert model["model"]["brier_ci95"] is None
+        assert model["delta_ci95"]["brier"] is None
     finally:
         session.close()
         engine.dispose()
