@@ -21,6 +21,7 @@ from packages.db.models import (
     Competition,
     LedgerExperiment,
     LlmEnsemblePrediction,
+    LlmResearchRun,
     MarketLine,
     Match,
     ModelPrediction,
@@ -463,6 +464,58 @@ def build_evaluation_report(
             session,
             match.id,
             ensure_utc(prediction.created_at),
+            snapshot_cache,
+        )
+        if market is not None:
+            group.market_observations.append((market[0], actual))
+            group.paired_observations.append((probabilities, market[0], actual))
+            group.policy_observations.append((probabilities, market[2], actual))
+        else:
+            missing_market += 1
+
+    research_rows = session.execute(
+        select(LlmResearchRun, Match, Competition)
+        .join(Match, Match.id == LlmResearchRun.match_id)
+        .join(Competition, Competition.id == Match.competition_id)
+        .where(LlmResearchRun.probabilities.is_not(None))
+        .order_by(
+            LlmResearchRun.match_id,
+            LlmResearchRun.created_at.desc(),
+            LlmResearchRun.id.desc(),
+        )
+    ).all()
+    chosen_research: set[uuid.UUID] = set()
+    for run, match, competition in research_rows:
+        if run.match_id in chosen_research:
+            continue
+        chosen_research.add(run.match_id)
+        if match.status is not MatchStatus.FINISHED:
+            continue
+        if match.home_goals_90 is None or match.away_goals_90 is None:
+            continue
+        probabilities = {
+            outcome: Decimal(str(value))
+            for outcome, value in (run.probabilities or {}).items()
+        }
+        if set(probabilities) != set(HAD_OUTCOMES):
+            continue
+        if ensure_utc(run.created_at) >= ensure_utc(match.kickoff_at):
+            after_kickoff += 1
+        actual = _actual(match.home_goals_90, match.away_goals_90)
+        key = (run.model_version, competition.code, match.season)
+        group = groups.setdefault(
+            key,
+            _Group(
+                model_version=run.model_version,
+                competition=competition.code,
+                season=match.season,
+            ),
+        )
+        group.observations.append((probabilities, actual))
+        market = _market_probabilities(
+            session,
+            match.id,
+            ensure_utc(run.created_at),
             snapshot_cache,
         )
         if market is not None:

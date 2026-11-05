@@ -5,10 +5,12 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from packages.db.models import LedgerExperiment, Match
+from packages.db.models import BankrollAccount, LedgerExperiment, Match
 from packages.domain.enums import MarketType, Side
+from packages.feedback.service import ensure_model_version, ensure_strategy_version
 from packages.ledger.experiments import active_experiment, create_next_experiment
 from packages.ledger.service import LedgerService, PlaceBetRequest
 from packages.llm.research import MainAgentDecision
@@ -44,6 +46,21 @@ def llm_research_experiment(session: Session) -> LedgerExperiment:
         and existing.strategy_version == LLM_ASSISTANT_STRATEGY_VERSION
     ):
         return existing
+    _ = ensure_model_version(
+        session,
+        LLM_ASSISTANT_MODEL_VERSION,
+        "llm_research_assistant",
+        {"mode": "assistant", "roles": 7, "evidence": "frozen"},
+        {},
+        {},
+    )
+    _ = ensure_strategy_version(
+        session,
+        LLM_ASSISTANT_STRATEGY_VERSION,
+        LLM_ASSISTANT_MODEL_VERSION,
+        {"stake_cap": "0.02", "min_stake": "1.00", "selection": "main_agent"},
+        "research",
+    )
     return create_next_experiment(
         session,
         label=LLM_ASSISTANT_LABEL,
@@ -97,10 +114,22 @@ def apply_research_risk(
     available = ledger.available_bankroll()
     if available <= 0:
         return RiskOutcome(False, "no available bankroll", bankroll=available)
+    account = session.scalar(
+        select(BankrollAccount).where(
+            BankrollAccount.account_id == experiment.account_id
+        )
+    )
+    reserved = Decimal(str(account.reserved_stake)) if account is not None else Decimal(0)
+    exposure_cap = (
+        Decimal(str(experiment.initial_bankroll))
+        * get_settings().max_total_exposure_fraction
+    )
+    exposure_room = max(Decimal(0), exposure_cap - reserved)
     stake = min(
         available * decision.recommended_stake_pct,
         available * MAX_SINGLE_BET_FRACTION,
         available,
+        exposure_room,
     ).quantize(Decimal("0.01"))
     if stake < MIN_STAKE:
         return RiskOutcome(False, "stake below minimum", bankroll=available)
