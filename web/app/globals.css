@@ -3395,22 +3395,22 @@ th.num {
 
 .table--predictions th:nth-child(1),
 .table--predictions td:nth-child(1) {
-  width: 17%;
+  width: 14%;
 }
 
 .table--predictions th:nth-child(2),
 .table--predictions td:nth-child(2) {
-  width: 10%;
+  width: 9%;
 }
 
 .table--predictions th:nth-child(3),
 .table--predictions td:nth-child(3) {
-  width: 6%;
+  width: 5%;
 }
 
 .table--predictions th:nth-child(4),
 .table--predictions td:nth-child(4) {
-  width: 12%;
+  width: 18%;
 }
 
 .table--predictions th:nth-child(5),
@@ -3420,7 +3420,7 @@ th.num {
 
 .table--predictions th:nth-child(n + 6),
 .table--predictions td:nth-child(n + 6) {
-  width: 9.4%;
+  width: 7.66%;
 }
 
 .table--predictions .match__teams {
