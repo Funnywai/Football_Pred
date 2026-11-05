@@ -314,6 +314,7 @@ def build_evaluation_report(
         )
         if market is not None:
             group.market_observations.append((market[0], actual))
+            group.paired_observations.append((probabilities, market[0], actual))
     llm_rows = session.execute(
         select(LlmEnsemblePrediction, Match, Competition)
         .join(Match, Match.id == LlmEnsemblePrediction.match_id)
