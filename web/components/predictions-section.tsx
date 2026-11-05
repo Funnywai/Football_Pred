@@ -242,7 +242,7 @@ export function PredictionsSection({
                   <th scope="col">EV V1</th>
                   <th scope="col">Model V1</th>
                   <th scope="col">Decision V1</th>
-                  <th scope="col" className="num">EV V2</th>
+                  <th scope="col">EV V2</th>
                   <th scope="col">Model V2</th>
                   <th scope="col">Decision V2</th>
                 </tr>
