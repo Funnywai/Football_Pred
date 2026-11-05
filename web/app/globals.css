@@ -852,11 +852,30 @@ table {
 }
 
 .table--predictions {
-  min-width: 1500px;
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+}
+
+.table--predictions th,
+.table--predictions td {
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.table--predictions .cell-model {
+  font-size: 9px;
+  overflow-wrap: anywhere;
 }
 
 .table--bets {
-  min-width: 1360px;
+  min-width: 1320px;
+}
+
+.table--bets th,
+.table--bets td {
+  padding-left: 10px;
+  padding-right: 10px;
 }
 
 .table--fixtures {
@@ -3363,4 +3382,43 @@ th.num {
   .ledger-pagination__actions .button {
     flex: 1;
   }
+}
+
+/* Predictions has 11 columns; lock widths so Match and Kickoff cannot overlap. */
+.table--predictions td {
+  overflow: hidden;
+}
+
+.table--predictions th:nth-child(1),
+.table--predictions td:nth-child(1) {
+  width: 17%;
+}
+
+.table--predictions th:nth-child(2),
+.table--predictions td:nth-child(2) {
+  width: 10%;
+}
+
+.table--predictions th:nth-child(3),
+.table--predictions td:nth-child(3) {
+  width: 6%;
+}
+
+.table--predictions th:nth-child(4),
+.table--predictions td:nth-child(4) {
+  width: 12%;
+}
+
+.table--predictions th:nth-child(5),
+.table--predictions td:nth-child(5) {
+  width: 8%;
+}
+
+.table--predictions th:nth-child(n + 6),
+.table--predictions td:nth-child(n + 6) {
+  width: 9.4%;
+}
+
+.table--predictions .match__teams {
+  overflow-wrap: anywhere;
 }

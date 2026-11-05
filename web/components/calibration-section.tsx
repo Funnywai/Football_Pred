@@ -88,7 +88,11 @@ function EntityCard({
 
 export function ModelsPanel({ models }: { models: ModelRecord[] }) {
   return (
-    <Panel title="Models" kicker="Registry" meta={`${models.length} versions`}>
+    <Panel
+      title="Models"
+      kicker="Registry"
+      meta={`${models.length} ${models.length === 1 ? "version" : "versions"}`}
+    >
       {models.length === 0 ? (
         <EmptyState>No model versions registered.</EmptyState>
       ) : (
@@ -117,7 +121,11 @@ export function ModelsPanel({ models }: { models: ModelRecord[] }) {
 
 export function StrategiesPanel({ strategies }: { strategies: StrategyRecord[] }) {
   return (
-    <Panel title="Strategies" kicker="Policy registry" meta={`${strategies.length} versions`}>
+    <Panel
+      title="Strategies"
+      kicker="Policy registry"
+      meta={`${strategies.length} ${strategies.length === 1 ? "version" : "versions"}`}
+    >
       {strategies.length === 0 ? (
         <EmptyState>No strategy versions registered.</EmptyState>
       ) : (

@@ -188,9 +188,12 @@ export function PredictionsSection({
                   <th scope="col">Result</th>
                   <th scope="col">Model probability</th>
                   <th scope="col">Odds</th>
-                  <th scope="col">EV</th>
-                  <th scope="col">Model</th>
-                  <th scope="col">Decision</th>
+                  <th scope="col">EV V1</th>
+                  <th scope="col">Model V1</th>
+                  <th scope="col">Decision V1</th>
+                  <th scope="col" className="num">EV V2</th>
+                  <th scope="col">Model V2</th>
+                  <th scope="col">Decision V2</th>
                 </tr>
               </thead>
               <tbody>

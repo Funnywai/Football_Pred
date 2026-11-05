@@ -887,6 +887,7 @@ def technical(request: Request, session: SessionDep) -> dict[str, Any]:
                 "status": row[0].status,
                 "reason": row[0].reason,
                 "model_version": row[0].model_version,
+                "strategy_version": row[0].decision_slot_key.split(":", 1)[0],
                 "prediction_count": row[0].prediction_count,
                 "paper_bet_id": str(row[0].paper_bet_id)
                 if row[0].paper_bet_id is not None
