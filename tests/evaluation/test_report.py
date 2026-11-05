@@ -190,6 +190,12 @@ def test_report_scores_model_against_same_time_market():
         assert model["delta_brier"] is not None
         assert report["bets"][0]["experiment_id"] == str(experiment_id)
         assert report["bets"][0]["roi"] == "1.5"
+        assert report["bets"][0]["settlement_coverage"] == "1"
+        assert report["bets"][0]["clv_coverage"] == "1"
+        assert report["bets"][0]["missing_settlements"] == 0
+        assert report["bets"][0]["pending_stake"] == "0"
+        assert report["integrity"]["duplicate_bet_slots"] == 0
+        assert report["integrity"]["settled_bets_missing_settlement"] == 0
         assert report["universe"]["finished_matches"] == 2
         assert report["integrity"]["finished_matches_missing_result_available_at"] == 1
         assert report["integrity"]["result_timestamp_coverage"] == "0.5"

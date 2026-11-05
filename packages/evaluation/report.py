@@ -26,6 +26,7 @@ from packages.db.models import (
     ModelPrediction,
     OddsSnapshot,
     PaperBet,
+    Settlement,
 )
 from packages.domain.enums import MarketType, MatchStatus, Side, SnapshotKind
 from packages.ledger.service import LedgerService
@@ -271,6 +272,53 @@ def _bet_report(session: Session) -> list[dict[str, Any]]:
         if experiment is None:
             continue
         summary = LedgerService(session, experiment_id=experiment.id).summary()
+        bets = session.scalars(
+            select(PaperBet).where(PaperBet.experiment_id == experiment.id)
+        ).all()
+        settlement_count = int(
+            session.scalar(
+                select(func.count())
+                .select_from(Settlement)
+                .join(PaperBet, PaperBet.id == Settlement.paper_bet_id)
+                .where(PaperBet.experiment_id == experiment.id)
+            )
+            or 0
+        )
+        clv_count = int(
+            session.scalar(
+                select(func.count())
+                .select_from(Settlement)
+                .join(PaperBet, PaperBet.id == Settlement.paper_bet_id)
+                .where(
+                    PaperBet.experiment_id == experiment.id,
+                    Settlement.clv.is_not(None),
+                )
+            )
+            or 0
+        )
+        pending_stake = sum(
+            (D(str(bet.stake)) for bet in bets if bet.status.value == "pending"),
+            D(0),
+        )
+        max_bet_fraction = max(
+            (
+                D(str(bet.stake)) / D(str(experiment.initial_bankroll))
+                for bet in bets
+            ),
+            default=D(0),
+        )
+        missing_settlements = sum(
+            1
+            for bet in bets
+            if bet.status.value != "pending" and bet.id not in {
+                settlement.paper_bet_id
+                for settlement in session.scalars(
+                    select(Settlement).where(
+                        Settlement.paper_bet_id.in_([item.id for item in bets])
+                    )
+                ).all()
+            }
+        )
         output.append(
             {
                 "experiment_id": str(experiment.id),
@@ -286,10 +334,25 @@ def _bet_report(session: Session) -> list[dict[str, Any]]:
                 "settled_bets": summary.settled_count,
                 "pending_bets": summary.pending_count,
                 "max_drawdown": str(summary.max_drawdown),
+                "pending_stake": str(pending_stake),
+                "pending_exposure_pct": (
+                    str((pending_stake / D(str(experiment.initial_bankroll))).quantize(D("0.000001")))
+                    if experiment.initial_bankroll > 0
+                    else None
+                ),
+                "max_single_bet_fraction": str(max_bet_fraction),
+                "settlement_coverage": (
+                    str(D(settlement_count) / D(len(bets))) if bets else None
+                ),
+                "clv_coverage": (
+                    str(D(clv_count) / D(settlement_count))
+                    if settlement_count > 0
+                    else None
+                ),
+                "missing_settlements": missing_settlements,
             }
         )
     return output
-
 
 def build_evaluation_report(
     session: Session,
@@ -442,6 +505,30 @@ def build_evaluation_report(
         )
         missing_market += max(0, len(group.observations) - len(group.market_observations))
     bet_rows = _bet_report(session)
+    duplicate_slots = int(
+        session.scalar(
+            select(func.count())
+            .select_from(
+                select(PaperBet.decision_slot_key)
+                .group_by(PaperBet.decision_slot_key)
+                .having(func.count() > 1)
+                .subquery()
+            )
+        )
+        or 0
+    )
+    settled_without_settlement = int(
+        session.scalar(
+            select(func.count())
+            .select_from(PaperBet)
+            .outerjoin(Settlement, Settlement.paper_bet_id == PaperBet.id)
+            .where(
+                PaperBet.status != "pending",
+                Settlement.id.is_(None),
+            )
+        )
+        or 0
+    )
     legacy_bet_count = int(
         session.scalar(
             select(func.count())
@@ -466,5 +553,8 @@ def build_evaluation_report(
             "predictions_after_kickoff": after_kickoff,
             "predictions_without_t30_market": missing_market,
             "bets_missing_experiment": legacy_bet_count,
+            "duplicate_bet_slots": duplicate_slots,
+            "settled_bets_missing_settlement": settled_without_settlement,
+            "pending_stake": str(sum(D(str(row["pending_stake"])) for row in bet_rows)),
         },
     }
