@@ -8,6 +8,7 @@ export function DayNavigator({
   onPrevious,
   onNext,
   noun = "day",
+  direction = "descending",
 }: {
   dayKey: string | null;
   dayIndex: number;
@@ -16,6 +17,7 @@ export function DayNavigator({
   onPrevious: () => void;
   onNext: () => void;
   noun?: string;
+  direction?: "ascending" | "descending";
 }) {
   return (
     <div className="day-nav" aria-label={`${noun} navigation`}>
@@ -33,7 +35,12 @@ export function DayNavigator({
           type="button"
           className="button"
           onClick={onPrevious}
-          disabled={dayCount === 0 || dayIndex >= dayCount - 1}
+          disabled={
+            dayCount === 0 ||
+            (direction === "ascending"
+              ? dayIndex === 0
+              : dayIndex >= dayCount - 1)
+          }
         >
           Previous day
         </button>
@@ -41,7 +48,12 @@ export function DayNavigator({
           type="button"
           className="button"
           onClick={onNext}
-          disabled={dayCount === 0 || dayIndex === 0}
+          disabled={
+            dayCount === 0 ||
+            (direction === "ascending"
+              ? dayIndex >= dayCount - 1
+              : dayIndex === 0)
+          }
         >
           Next day
         </button>

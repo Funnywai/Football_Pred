@@ -208,6 +208,7 @@ export function LlmOverviewSection({
                   onNext={() =>
                     setDayIndex((current) => Math.min(dayKeys.length - 1, current + 1))
                   }
+                  direction="ascending"
                 />
               </div>
               {fixtures.length === 0 ? (
