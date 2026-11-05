@@ -188,7 +188,7 @@ def _next_fixtures(session: SessionDep, competition_codes: list[str]) -> list[di
                 Match.kickoff_at >= utc_now(),
             )
             .order_by(Match.kickoff_at.asc(), Match.id.asc())
-            .limit(8)
+            .limit(200)
         ).all()
     except SQLAlchemyError:
         session.rollback()
