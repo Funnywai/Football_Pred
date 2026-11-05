@@ -386,9 +386,6 @@ export function LedgerSection({
                       <td className="num">{formatFixed(bet.brier, 3)}</td>
                       <td>
                         <span className="mono cell-model">{bet.model_version ?? "—"}</span>
-                        {bet.decision_slot_key ? (
-                          <span className="subline mono">{bet.decision_slot_key}</span>
-                        ) : null}
                       </td>
                     </tr>
                   );
