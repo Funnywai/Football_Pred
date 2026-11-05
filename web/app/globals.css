@@ -1061,8 +1061,12 @@ th.num {
 .triplet__row {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  justify-content: flex-start;
+  gap: 6px;
+}
+
+.triplet__value {
+  white-space: nowrap;
 }
 
 .triplet__label {
