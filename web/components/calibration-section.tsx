@@ -86,7 +86,7 @@ function EntityCard({
   );
 }
 
-function ModelsPanel({ models }: { models: ModelRecord[] }) {
+export function ModelsPanel({ models }: { models: ModelRecord[] }) {
   return (
     <Panel title="Models" kicker="Registry" meta={`${models.length} versions`}>
       {models.length === 0 ? (
@@ -115,7 +115,7 @@ function ModelsPanel({ models }: { models: ModelRecord[] }) {
   );
 }
 
-function StrategiesPanel({ strategies }: { strategies: StrategyRecord[] }) {
+export function StrategiesPanel({ strategies }: { strategies: StrategyRecord[] }) {
   return (
     <Panel title="Strategies" kicker="Policy registry" meta={`${strategies.length} versions`}>
       {strategies.length === 0 ? (

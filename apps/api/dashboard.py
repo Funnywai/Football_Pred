@@ -356,18 +356,54 @@ def _odds_for_match(session: Session, match_id: uuid.UUID) -> dict[Side, Decimal
     return {row[0]: Decimal(str(row[1])) for row in rows}
 
 
-def _decision_for_match(session: Session, match_id: uuid.UUID) -> DecisionLog | None:
-    return _safe_scalar(
+def _decision_for_match(
+    session: Session,
+    match_id: uuid.UUID,
+    *,
+    experiment_id: uuid.UUID | None = None,
+    model_version: str | None = None,
+) -> DecisionLog | None:
+    if experiment_id is not None:
+        found = _safe_scalar(
+            session,
+            select(DecisionLog).where(
+                DecisionLog.decision_slot_key
+                == f"g1:{experiment_id}:{match_id}:T-30m"
+            ),
+        )
+        if found is not None:
+            return found
+    legacy = _safe_scalar(
         session,
         select(DecisionLog).where(
             DecisionLog.decision_slot_key == f"g1:{match_id}:T-30m"
         ),
     )
+    if legacy is not None:
+        return legacy
+    conditions = [DecisionLog.match_id == match_id]
+    if model_version is not None:
+        conditions.append(DecisionLog.model_version == model_version)
+    return _safe_scalar(
+        session,
+        select(DecisionLog)
+        .where(*conditions)
+        .order_by(DecisionLog.decision_at.desc(), DecisionLog.id.desc())
+        .limit(1),
+    )
 
 
 @router.get("/predictions")
-def predictions(session: SessionDep, limit: int = 50) -> list[dict[str, Any]]:
+def predictions(
+    session: SessionDep,
+    limit: int = 50,
+    model_version: str = "poisson-v1",
+) -> list[dict[str, Any]]:
     clamped = max(1, min(limit, 200))
+    experiment = active_experiment(
+        session,
+        "challenger" if model_version == "poisson-v2-shrunk" else "deterministic",
+    )
     run_stats = (
         select(
             ModelPrediction.match_id.label("match_id"),
@@ -376,6 +412,7 @@ def predictions(session: SessionDep, limit: int = 50) -> list[dict[str, Any]]:
             func.count(func.distinct(ModelPrediction.outcome)).label("outcome_count"),
         )
         .where(
+            ModelPrediction.model_version == model_version,
             ModelPrediction.market == _HAD,
             ModelPrediction.line_key == _HAD_LINE,
             ModelPrediction.outcome.in_(_SIDES),
@@ -460,7 +497,12 @@ def predictions(session: SessionDep, limit: int = 50) -> list[dict[str, Any]]:
         if len(probabilities) != 3:
             continue
         odds = _odds_for_match(session, match_id)
-        decision = _decision_for_match(session, match_id)
+        decision = _decision_for_match(
+            session,
+            match_id,
+            experiment_id=experiment.id if experiment is not None else None,
+            model_version=model_version,
+        )
         output.append(
             {
                 "match_id": str(match_id),
@@ -523,10 +565,11 @@ def _bet_model_version(session: Session, bet: PaperBet) -> str | None:
     )
 
 
-@router.get("/bets")
-def bets(request: Request, session: SessionDep, limit: int = 100) -> list[dict[str, Any]]:
-    clamped = max(1, min(limit, 500))
-    experiment = active_experiment(session)
+def _bets_for_experiment(
+    session: Session,
+    experiment: LedgerExperiment | None,
+    limit: int,
+) -> list[dict[str, Any]]:
     home = aliased(Team)
     away = aliased(Team)
     statement = (
@@ -544,7 +587,7 @@ def bets(request: Request, session: SessionDep, limit: int = 100) -> list[dict[s
         .join(away, away.id == Match.away_team_id)
         .outerjoin(Settlement, Settlement.paper_bet_id == PaperBet.id)
         .order_by(PaperBet.placed_at.desc(), PaperBet.id.desc())
-        .limit(clamped)
+        .limit(limit)
     )
     if experiment is not None:
         statement = statement.where(PaperBet.experiment_id == experiment.id)
@@ -580,16 +623,90 @@ def bets(request: Request, session: SessionDep, limit: int = 100) -> list[dict[s
                 "clv": _plain(settlement.clv) if settlement else None,
                 "brier": _plain(settlement.brier_score) if settlement else None,
                 "model_version": _bet_model_version(session, bet),
+                "lane": experiment.lane if experiment is not None else "legacy",
                 "decision_slot_key": bet.decision_slot_key,
             }
         )
     return output
 
 
-@router.get("/equity")
-def equity(request: Request, session: SessionDep) -> dict[str, Any]:
+@router.get("/bets")
+def bets(request: Request, session: SessionDep, limit: int = 100) -> list[dict[str, Any]]:
+    clamped = max(1, min(limit, 500))
+    return _bets_for_experiment(session, active_experiment(session), clamped)
+
+
+@router.get("/challenger")
+def challenger(request: Request, session: SessionDep) -> dict[str, Any]:
     settings = _settings(request)
-    experiment = active_experiment(session)
+    experiment = active_experiment(session, "challenger")
+    if experiment is None:
+        return {
+            "experiment": None,
+            "ledger": None,
+            "bankroll": None,
+            "counts": None,
+        }
+    summary = LedgerService(
+        session,
+        initial_bankroll=settings.initial_bankroll,
+        experiment_id=experiment.id,
+    ).summary()
+    return {
+        "experiment": {
+            "id": str(experiment.id),
+            "label": experiment.label,
+            "lane": experiment.lane,
+            "model_version": experiment.model_version,
+            "strategy_version": experiment.strategy_version,
+            "initial_bankroll": _money(Decimal(str(experiment.initial_bankroll))),
+        },
+        "bankroll": _bankroll(session, settings, experiment),
+        "ledger": {
+            "total_stake": _money(summary.total_stake),
+            "total_payout": _money(summary.total_payout),
+            "roi": _plain(summary.roi),
+            "settled_bets": summary.settled_count,
+            "pending_bets": summary.pending_count,
+            "max_drawdown": _plain(summary.max_drawdown),
+        },
+        "counts": {
+            "predictions": int(
+                _safe_scalar(
+                    session,
+                    select(func.count())
+                    .select_from(ModelPrediction)
+                    .where(
+                        ModelPrediction.model_version == "poisson-v2-shrunk"
+                    ),
+                )
+                or 0
+            ),
+            "bets": _scoped_count(session, PaperBet, experiment),
+            "decisions": _scoped_count(session, DecisionLog, experiment),
+            "settled_bets": summary.settled_count,
+        },
+    }
+
+
+@router.get("/challenger/bets")
+def challenger_bets(
+    request: Request,
+    session: SessionDep,
+    limit: int = 100,
+) -> list[dict[str, Any]]:
+    clamped = max(1, min(limit, 500))
+    experiment = active_experiment(session, "challenger")
+    if experiment is None:
+        return []
+    return _bets_for_experiment(session, experiment, clamped)
+
+
+def _equity_for_experiment(
+    session: Session,
+    settings: Settings,
+    experiment: LedgerExperiment | None,
+) -> dict[str, Any]:
     initial = (
         Decimal(str(experiment.initial_bankroll))
         if experiment is not None
@@ -607,11 +724,26 @@ def equity(request: Request, session: SessionDep) -> dict[str, Any]:
     balance = initial
     points: list[dict[str, str | None]] = [{"t": None, "bankroll": _money(initial)}]
     for settled_at, payout, stake in rows:
-        balance = (
-            balance - Decimal(str(stake)) + Decimal(str(payout))
-        )
+        balance = balance - Decimal(str(stake)) + Decimal(str(payout))
         points.append({"t": _iso(settled_at), "bankroll": _money(balance)})
     return {"initial": _money(initial), "points": points}
+
+
+@router.get("/equity")
+def equity(request: Request, session: SessionDep) -> dict[str, Any]:
+    return _equity_for_experiment(
+        session,
+        _settings(request),
+        active_experiment(session),
+    )
+
+
+@router.get("/challenger/equity")
+def challenger_equity(request: Request, session: SessionDep) -> dict[str, Any]:
+    experiment = active_experiment(session, "challenger")
+    if experiment is None:
+        return {"initial": None, "points": []}
+    return _equity_for_experiment(session, _settings(request), experiment)
 
 
 @router.get("/calibration")

@@ -852,11 +852,11 @@ table {
 }
 
 .table--predictions {
-  min-width: 1120px;
+  min-width: 1500px;
 }
 
 .table--bets {
-  min-width: 1180px;
+  min-width: 1360px;
 }
 
 .table--fixtures {
@@ -3143,4 +3143,224 @@ th.num {
   font-family: var(--font-mono);
   font-size: 10px;
   line-height: 1.55;
+}
+
+/* --------------------------------------------------------------------------
+   V1 / V2 lane additions
+   -------------------------------------------------------------------------- */
+
+.kpi-lane {
+  margin-top: 22px;
+}
+
+.kpi-lane:first-of-type {
+  margin-top: 0;
+}
+
+.kpi-lane__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.kpi-lane__badge,
+.lane-tag {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  padding: 2px 6px;
+  border: 1px solid var(--line-strong);
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+.kpi-lane__badge--v2,
+.lane-tag--v2 {
+  color: var(--info);
+  border-color: color-mix(in srgb, var(--info) 55%, var(--line-strong));
+}
+
+.kpi-lane .kpi-strip {
+  margin-top: 8px;
+}
+
+.ledger-summary-stack {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.ledger-summary--lane {
+  grid-template-columns: auto repeat(4, minmax(0, 1fr));
+  margin-top: 0;
+}
+
+.ledger-summary--lane > .lane-tag {
+  align-self: center;
+  margin-left: 14px;
+}
+
+.ledger-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.ledger-search {
+  display: flex;
+  flex: 1 1 320px;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 520px;
+}
+
+.ledger-search__label,
+.ledger-pagination__status {
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ledger-search__input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--bg-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.ledger-search__input::placeholder {
+  color: var(--text-faint);
+}
+
+.ledger-pagination {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ledger-pagination__actions {
+  display: flex;
+  gap: 6px;
+}
+
+.button {
+  min-height: 30px;
+  padding: 5px 9px;
+  border: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: var(--surface-2);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+
+.equity__legend {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 6px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.equity__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.equity__swatch {
+  width: 18px;
+  height: 2px;
+  display: inline-block;
+}
+
+.equity__swatch--v1 {
+  background: var(--accent);
+}
+
+.equity__swatch--v2 {
+  background: var(--info);
+}
+
+.equity__line--v2 {
+  stroke: var(--info);
+}
+
+.equity__dot--v2 {
+  fill: var(--info);
+}
+
+@media (max-width: 1100px) {
+  .ledger-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .ledger-search {
+    max-width: none;
+  }
+
+  .ledger-pagination {
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 760px) {
+  .kpi-lane {
+    overflow-x: auto;
+  }
+
+  .kpi-lane .kpi-strip {
+    grid-template-columns: repeat(5, minmax(150px, 1fr));
+    min-width: 780px;
+  }
+
+  .ledger-summary--lane {
+    grid-template-columns: auto repeat(2, minmax(0, 1fr));
+  }
+
+  .ledger-pagination__actions {
+    width: 100%;
+  }
+
+  .ledger-pagination__actions .button {
+    flex: 1;
+  }
 }

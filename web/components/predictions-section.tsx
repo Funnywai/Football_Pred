@@ -118,10 +118,18 @@ function Triplet({
 
 export function PredictionsSection({
   result,
+  v2Result,
 }: {
   result: EndpointResult<Prediction[]>;
+  v2Result: EndpointResult<Prediction[]>;
 }) {
   const predictions = Array.isArray(result.data) ? result.data : [];
+  const v2Rows = Array.isArray(v2Result.data) ? v2Result.data : [];
+  const v2ByMatch = new Map(
+    v2Rows
+      .filter((row) => Boolean(row.match_id))
+      .map((row) => [row.match_id as string, row]),
+  );
   const copyText = predictions.length > 0 ? buildPredictionsTsv(predictions) : "";
   const researchOnly = predictions.some(
     (prediction) => prediction.decision_status === "prediction_only",
@@ -186,7 +194,11 @@ export function PredictionsSection({
                 </tr>
               </thead>
               <tbody>
-                {predictions.map((prediction, index) => (
+                {predictions.map((prediction, index) => {
+                  const v2 = prediction.match_id
+                    ? v2ByMatch.get(prediction.match_id)
+                    : undefined;
+                  return (
                   <tr key={`${prediction.match_id ?? "match"}-${index}`}>
                     <td>
                       <MatchCell
@@ -224,15 +236,24 @@ export function PredictionsSection({
                       <span className="mono cell-model">{prediction.model_version ?? "—"}</span>
                     </td>
                     <td>
-                      <div className="decision">
-                        <StatusTag status={prediction.decision_status} />
-                        <span className="decision__reason" title={prediction.decision_reason ?? undefined}>
-                          {prediction.decision_reason?.trim() || "No reason recorded"}
-                        </span>
-                      </div>
+                      <StatusTag status={prediction.decision_status} />
+                    </td>
+                    <td>
+                      <Triplet
+                        values={[v2?.ev?.H, v2?.ev?.D, v2?.ev?.A]}
+                        format={formatSignedRatioPercent}
+                        toneBySign
+                      />
+                    </td>
+                    <td>
+                      <span className="mono cell-model">{v2?.model_version ?? "—"}</span>
+                    </td>
+                    <td>
+                      {v2 ? <StatusTag status={v2.decision_status} /> : <span className="text-muted">—</span>}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </TableFrame>

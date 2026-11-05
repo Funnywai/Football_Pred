@@ -8,49 +8,55 @@ interface PlotPoint {
   value: number;
 }
 
+interface Series {
+  key: "v1" | "v2";
+  label: string;
+  className: string;
+  plot: PlotPoint[];
+  initial: number | null;
+}
+
 const WIDTH = 960;
 const HEIGHT = 260;
 const PAD = { top: 18, right: 18, bottom: 30, left: 78 };
 
-function buildPlot(equity: Equity | null): {
-  plot: PlotPoint[];
-  initial: number | null;
-  min: number;
-  max: number;
-} | null {
+function buildSeries(
+  key: "v1" | "v2",
+  label: string,
+  className: string,
+  equity: Equity | null,
+): Series | null {
   const rawPoints = Array.isArray(equity?.points) ? equity.points : [];
   const plot = rawPoints
     .map((point) => ({ t: point.t ?? null, value: asNumber(point.bankroll) }))
     .filter((point): point is PlotPoint => point.value !== null);
   if (plot.length === 0) return null;
-
-  const initial = asNumber(equity?.initial);
-  const values = plot.map((point) => point.value);
-  if (initial !== null) values.push(initial);
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
-  const span = rawMax - rawMin;
-  const padding = span === 0 ? Math.max(Math.abs(rawMax) * 0.01, 1) : span * 0.12;
-
   return {
+    key,
+    label,
+    className,
     plot,
-    initial,
-    min: rawMin - padding,
-    max: rawMax + padding,
+    initial: asNumber(equity?.initial),
   };
 }
 
 export function EquityChart({
   equity,
+  challengerEquity = null,
   currency,
   unavailable = false,
 }: {
   equity: Equity | null;
+  challengerEquity?: Equity | null;
   currency: string;
   unavailable?: boolean;
 }) {
-  const built = buildPlot(equity);
-  if (!built) {
+  const series = [
+    buildSeries("v1", "V1", "equity__line--v1", equity),
+    buildSeries("v2", "V2", "equity__line--v2", challengerEquity),
+  ].filter((item): item is Series => item !== null);
+
+  if (series.length === 0) {
     return (
       <EmptyState>
         {unavailable
@@ -60,37 +66,58 @@ export function EquityChart({
     );
   }
 
-  const { plot, initial, min, max } = built;
+  const allValues = series.flatMap((item) => [
+    ...item.plot.map((point) => point.value),
+    ...(item.initial !== null ? [item.initial] : []),
+  ]);
+  const rawMin = Math.min(...allValues);
+  const rawMax = Math.max(...allValues);
+  const span = rawMax - rawMin;
+  const padding = span === 0 ? Math.max(Math.abs(rawMax) * 0.01, 1) : span * 0.12;
+  const min = rawMin - padding;
+  const max = rawMax + padding;
   const chartWidth = WIDTH - PAD.left - PAD.right;
   const chartHeight = HEIGHT - PAD.top - PAD.bottom;
-  const x = (index: number) =>
-    PAD.left + (plot.length === 1 ? chartWidth / 2 : (index / (plot.length - 1)) * chartWidth);
+  const x = (index: number, length: number) =>
+    PAD.left +
+    (length === 1 ? chartWidth / 2 : (index / (length - 1)) * chartWidth);
   const y = (value: number) =>
     PAD.top + ((max - value) / Math.max(max - min, 0.0001)) * chartHeight;
-
-  const line = plot.map((point, index) => `${x(index)},${y(point.value)}`).join(" ");
-  const first = plot[0];
-  const last = plot[plot.length - 1];
-  if (!first || !last) return <EmptyState>No equity points recorded yet.</EmptyState>;
-
-  const area = `${PAD.left},${PAD.top + chartHeight} ${line} ${x(plot.length - 1)},${
-    PAD.top + chartHeight
-  }`;
   const gridValues = [0, 0.25, 0.5, 0.75, 1].map((fraction) => max - fraction * (max - min));
-  const change = last.value - (initial ?? first.value);
+  const primary = series.find((item) => item.key === "v1") ?? series[0];
+  const first = primary?.plot[0];
+  const last = primary?.plot[primary.plot.length - 1];
+  if (!primary || !first || !last) return <EmptyState>No equity points recorded yet.</EmptyState>;
+
+  const lastValues = series.map((item) => ({
+    item,
+    value: item.plot[item.plot.length - 1]?.value ?? null,
+  }));
+  const change = last.value - (primary.initial ?? first.value);
+  const primaryLabel = primary.label;
 
   return (
     <figure className="equity">
+      <div className="equity__legend" aria-label="Equity series">
+        {series.map((item) => (
+          <span className="equity__legend-item" key={item.key}>
+            <i className={`equity__swatch equity__swatch--${item.key}`} aria-hidden="true" />
+            {item.label}
+          </span>
+        ))}
+      </div>
       <svg
         className="equity__svg"
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
-        aria-label={`Paper bankroll equity curve from ${formatMoney(
-          initial ?? first.value,
+        aria-label={`Paper bankroll equity curves for ${series
+          .map((item) => item.label)
+          .join(" and ")} from ${formatMoney(
+          primary.initial ?? first.value,
           currency,
-        )} to ${formatMoney(last.value, currency)} across ${plot.length} points`}
+        )} opening across ${series.reduce((count, item) => count + item.plot.length, 0)} points`}
       >
-        <title>Paper bankroll equity curve</title>
+        <title>Paper bankroll equity curves</title>
         <defs>
           <linearGradient id="equity-area" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" className="equity__fill-start" />
@@ -116,24 +143,52 @@ export function EquityChart({
           );
         })}
 
-        {initial !== null && initial >= min && initial <= max ? (
+        {primary.initial !== null && primary.initial >= min && primary.initial <= max ? (
           <g>
             <line
               x1={PAD.left}
-              y1={y(initial)}
+              y1={y(primary.initial)}
               x2={WIDTH - PAD.right}
-              y2={y(initial)}
+              y2={y(primary.initial)}
               className="equity__baseline"
             />
-            <text x={WIDTH - PAD.right} y={y(initial) - 6} textAnchor="end" className="equity__note">
-              initial
+            <text
+              x={WIDTH - PAD.right}
+              y={y(primary.initial) - 6}
+              textAnchor="end"
+              className="equity__note"
+            >
+              {primaryLabel} initial
             </text>
           </g>
         ) : null}
 
-        <polygon points={area} fill="url(#equity-area)" />
-        <polyline points={line} className="equity__line" />
-        <circle cx={x(plot.length - 1)} cy={y(last.value)} r="3.5" className="equity__dot" />
+        {series.map((item) => {
+          const itemLine = item.plot
+            .map((point, index) => `${x(index, item.plot.length)},${y(point.value)}`)
+            .join(" ");
+          const itemLast = item.plot[item.plot.length - 1];
+          if (!itemLast) return null;
+          return (
+            <g key={item.key}>
+              {item.key === "v1" ? (
+                <polygon
+                  points={`${PAD.left},${PAD.top + chartHeight} ${itemLine} ${
+                    x(item.plot.length - 1, item.plot.length)
+                  },${PAD.top + chartHeight}`}
+                  fill="url(#equity-area)"
+                />
+              ) : null}
+              <polyline points={itemLine} className={`equity__line ${item.className}`} />
+              <circle
+                cx={x(item.plot.length - 1, item.plot.length)}
+                cy={y(itemLast.value)}
+                r="3.5"
+                className={`equity__dot equity__dot--${item.key}`}
+              />
+            </g>
+          );
+        })}
 
         <text x={PAD.left} y={HEIGHT - 8} className="equity__axis">
           {formatKickoff(first.t)}
@@ -144,26 +199,30 @@ export function EquityChart({
       </svg>
 
       <figcaption className="equity__caption">
+        {lastValues.map(({ item, value }) => (
+          <span key={item.key}>
+            {item.label} current <b>{value === null ? "—" : formatMoney(value, currency)}</b>
+          </span>
+        ))}
         <span>
-          Current <b>{formatMoney(last.value, currency)}</b>
+          Peak <b>{formatMoney(Math.max(...allValues), currency)}</b>
         </span>
         <span>
-          Peak <b>{formatMoney(Math.max(...plot.map((point) => point.value)), currency)}</b>
-        </span>
-        <span>
-          Trough <b>{formatMoney(Math.min(...plot.map((point) => point.value)), currency)}</b>
+          Trough <b>{formatMoney(Math.min(...allValues), currency)}</b>
         </span>
         <span>
           Window <b>{`${formatKickoff(first.t)} → ${formatKickoff(last.t)}`}</b>
         </span>
         <span>
-          Change{" "}
+          {primaryLabel} change{" "}
           <b className={change > 0 ? "text-positive" : change < 0 ? "text-negative" : ""}>
             {change > 0 ? "+" : change < 0 ? "−" : ""}
             {formatMoney(Math.abs(change), currency)}
           </b>
         </span>
-        <span className="equity__points">{plot.length} points</span>
+        <span className="equity__points">
+          {series.map((item) => `${item.label} ${item.plot.length}`).join(" · ")} points
+        </span>
       </figcaption>
     </figure>
   );

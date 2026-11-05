@@ -3,6 +3,7 @@ import "server-only";
 import type {
   Bet,
   Calibration,
+  ChallengerSummary,
   Equity,
   Overview,
   Prediction,
@@ -28,6 +29,10 @@ export interface DashboardData {
   equity: EndpointResult<Equity>;
   calibration: EndpointResult<Calibration>;
   technical: EndpointResult<Technical>;
+  challenger: EndpointResult<ChallengerSummary>;
+  challengerPredictions: EndpointResult<Prediction[]>;
+  challengerBets: EndpointResult<Bet[]>;
+  challengerEquity: EndpointResult<Equity>;
 }
 
 export type PayloadKind = "array" | "object";
@@ -85,15 +90,43 @@ export async function getJson<T>(
  * single degraded endpoint never takes down the page.
  */
 export async function getDashboardData(): Promise<DashboardData> {
-  const [overview, predictions, bets, equity, calibration, technical] =
-    await Promise.all([
-      getJson<Overview>("/dashboard/overview", "object"),
-      getJson<Prediction[]>("/dashboard/predictions?limit=50", "array"),
-      getJson<Bet[]>("/dashboard/bets?limit=100", "array"),
-      getJson<Equity>("/dashboard/equity", "object"),
-      getJson<Calibration>("/dashboard/calibration", "object"),
-      getJson<Technical>("/dashboard/technical", "object"),
-    ]);
+  const [
+    overview,
+    predictions,
+    bets,
+    equity,
+    calibration,
+    technical,
+    challenger,
+    challengerPredictions,
+    challengerBets,
+    challengerEquity,
+  ] = await Promise.all([
+    getJson<Overview>("/dashboard/overview", "object"),
+    getJson<Prediction[]>("/dashboard/predictions?limit=50", "array"),
+    getJson<Bet[]>("/dashboard/bets?limit=500", "array"),
+    getJson<Equity>("/dashboard/equity", "object"),
+    getJson<Calibration>("/dashboard/calibration", "object"),
+    getJson<Technical>("/dashboard/technical", "object"),
+    getJson<ChallengerSummary>("/dashboard/challenger", "object"),
+    getJson<Prediction[]>(
+      "/dashboard/predictions?model_version=poisson-v2-shrunk&limit=50",
+      "array",
+    ),
+    getJson<Bet[]>("/dashboard/challenger/bets?limit=500", "array"),
+    getJson<Equity>("/dashboard/challenger/equity", "object"),
+  ]);
 
-  return { overview, predictions, bets, equity, calibration, technical };
+  return {
+    overview,
+    predictions,
+    bets,
+    equity,
+    calibration,
+    technical,
+    challenger,
+    challengerPredictions,
+    challengerBets,
+    challengerEquity,
+  };
 }

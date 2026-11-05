@@ -81,6 +81,13 @@ export interface SourceStatus {
 
 export interface Overview {
   generated_at?: string | null;
+  experiment?: {
+    id?: string | null;
+    label?: string | null;
+    model_version?: string | null;
+    strategy_version?: string | null;
+    initial_bankroll?: Numeric;
+  } | null;
   health?: Health | null;
   bankroll?: Bankroll | null;
   ledger?: LedgerSummary | null;
@@ -123,6 +130,7 @@ export interface Prediction {
 
 export interface Bet {
   bet_id?: string | null;
+  lane?: string | null;
   match_id?: string | null;
   kickoff_at?: string | null;
   competition?: string | null;
@@ -152,6 +160,22 @@ export interface EquityPoint {
 export interface Equity {
   initial?: Numeric;
   points?: EquityPoint[] | null;
+}
+
+export interface ChallengerExperiment {
+  id?: string | null;
+  label?: string | null;
+  lane?: string | null;
+  model_version?: string | null;
+  strategy_version?: string | null;
+  initial_bankroll?: Numeric;
+}
+
+export interface ChallengerSummary {
+  experiment?: ChallengerExperiment | null;
+  bankroll?: Bankroll | null;
+  ledger?: LedgerSummary | null;
+  counts?: Counts | null;
 }
 
 export interface ModelRecord {

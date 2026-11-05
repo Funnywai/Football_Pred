@@ -169,6 +169,73 @@ def test_positive_edge_persists_predictions_and_places_one_capped_bet(
     assert ensure_utc(bet.decision_at) == NOW
 
 
+def test_challenger_lane_runs_alongside_g1_without_changing_g1(
+    session: Session, fixed_prediction
+):
+    g1 = create_next_experiment(
+        session,
+        label="g1",
+        model_version="poisson-v1",
+        strategy_version="g1",
+        lane="deterministic",
+    )
+    challenger = create_next_experiment(
+        session,
+        label="v2-market-shrunk",
+        model_version="poisson-v2-shrunk",
+        strategy_version="g1",
+        lane="challenger",
+    )
+    match, snapshot = _seed(session)
+
+    result = decide_match(session, match, snapshot, now=NOW)
+
+    assert result.status == "bet"
+    bets = {bet.experiment_id: bet for bet in session.scalars(select(PaperBet)).all()}
+    assert set(bets) == {g1.id, challenger.id}
+    assert bets[g1.id].selection is bets[challenger.id].selection
+    assert bets[g1.id].decision_slot_key.startswith(f"g1:{g1.id}:")
+    assert bets[challenger.id].decision_slot_key.startswith(f"g1:{challenger.id}:")
+    model_versions = {
+        row.model_version
+        for row in session.scalars(select(ModelPrediction)).all()
+    }
+    assert model_versions == {"poisson-v1", "poisson-v2-shrunk"}
+    assert _prediction_count(session) == 6
+
+
+def test_challenger_failure_cannot_rollback_g1_bet(
+    session: Session, fixed_prediction, monkeypatch
+):
+    g1 = create_next_experiment(
+        session,
+        label="g1",
+        model_version="poisson-v1",
+        strategy_version="g1",
+        lane="deterministic",
+    )
+    _ = create_next_experiment(
+        session,
+        label="v2-market-shrunk",
+        model_version="poisson-v2-shrunk",
+        strategy_version="g1",
+        lane="challenger",
+    )
+    match, snapshot = _seed(session)
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("challenger boom")
+
+    monkeypatch.setattr("packages.decision.service.shrink_had_prediction", _boom)
+
+    result = decide_match(session, match, snapshot, now=NOW)
+
+    assert result.status == "bet"
+    bets = session.scalars(select(PaperBet)).all()
+    assert len(bets) == 1
+    assert bets[0].experiment_id == g1.id
+
+
 def test_no_edge_saves_predictions_but_places_no_bet(session: Session, fixed_prediction):
     match, snapshot = _seed(
         session,

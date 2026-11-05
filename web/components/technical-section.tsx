@@ -1,6 +1,8 @@
 import { formatDateTime, formatNumber } from "@/lib/format";
 import type { EndpointResult } from "@/lib/api";
-import type { Technical } from "@/lib/types";
+import type { Calibration, Technical } from "@/lib/types";
+
+import { ModelsPanel, StrategiesPanel } from "./calibration-section";
 
 import {
   DataWarning,
@@ -37,10 +39,18 @@ const COUNT_LABELS: Array<{ key: keyof NonNullable<Technical["counts"]>; label: 
 
 export function TechnicalSection({
   result,
+  calibrationResult,
 }: {
   result: EndpointResult<Technical>;
+  calibrationResult: EndpointResult<Calibration>;
 }) {
   const data = result.data;
+  const models = Array.isArray(calibrationResult.data?.models)
+    ? calibrationResult.data.models
+    : [];
+  const strategies = Array.isArray(calibrationResult.data?.strategies)
+    ? calibrationResult.data.strategies
+    : [];
   const counts = data?.counts;
   const sources = Array.isArray(data?.sources) ? data.sources : [];
   const visibleSources = sources.slice(0, 5);
@@ -53,7 +63,7 @@ export function TechnicalSection({
   return (
     <section id="technical" className="section" aria-labelledby="technical-title">
       <SectionHeader
-        index="05"
+        index="04"
         kicker="Runtime and ingestion"
         title="Technical"
         meta={
@@ -128,6 +138,9 @@ export function TechnicalSection({
               </dl>
             </Panel>
           </div>
+
+          <ModelsPanel models={models} />
+          <StrategiesPanel strategies={strategies} />
 
           <Panel
             title="Source runs"
@@ -261,17 +274,6 @@ export function TechnicalSection({
             )}
           </Panel>
 
-          <Panel
-            title="Paper-forward run"
-            kicker="Forward test"
-            meta={data.paper_forward === null || data.paper_forward === undefined ? "none" : "present"}
-          >
-            {data.paper_forward === null || data.paper_forward === undefined ? (
-              <p className="panel__note">No paper-forward run has been recorded yet.</p>
-            ) : (
-              <pre className="raw-block">{JSON.stringify(data.paper_forward, null, 2)}</pre>
-            )}
-          </Panel>
         </>
       )}
     </section>

@@ -23,7 +23,7 @@ def main() -> None:
     parser.add_argument(
         "--lane",
         default="deterministic",
-        choices=("deterministic", "llm"),
+        choices=("deterministic", "llm", "challenger"),
     )
     parser.add_argument("--model-version", required=True)
     parser.add_argument("--strategy-version", required=True)

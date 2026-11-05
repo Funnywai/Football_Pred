@@ -1,7 +1,6 @@
 import { getDashboardData } from "@/lib/api";
 import { formatDateTime } from "@/lib/format";
 
-import { CalibrationSection } from "@/components/calibration-section";
 import { LedgerSection } from "@/components/ledger-section";
 import { Masthead, SiteNav } from "@/components/masthead";
 import { OverviewSection } from "@/components/overview-section";
@@ -30,11 +29,15 @@ export default async function DashboardPage() {
       <SiteNav generatedAt={generatedAt} />
 
       <main id="main" className="main">
-        <OverviewSection result={data.overview} />
-        <PredictionsSection result={data.predictions} />
-        <LedgerSection betsResult={data.bets} equityResult={data.equity} />
-        <CalibrationSection result={data.calibration} />
-        <TechnicalSection result={data.technical} />
+        <OverviewSection result={data.overview} challengerResult={data.challenger} />
+        <PredictionsSection result={data.predictions} v2Result={data.challengerPredictions} />
+        <LedgerSection
+          betsResult={data.bets}
+          equityResult={data.equity}
+          challengerBetsResult={data.challengerBets}
+          challengerEquityResult={data.challengerEquity}
+        />
+        <TechnicalSection result={data.technical} calibrationResult={data.calibration} />
       </main>
 
       <footer className="site-footer">

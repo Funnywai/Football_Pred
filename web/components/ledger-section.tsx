@@ -1,3 +1,7 @@
+"use client";
+
+import { useMemo, useState } from "react";
+
 import {
   asNumber,
   formatDateTime,
@@ -25,6 +29,10 @@ import {
 } from "./ui";
 import { TableFrame } from "./table-frame";
 
+const PAGE_SIZE = 10;
+
+type DisplayBet = Bet & { displayLane: "V1" | "V2" };
+
 function isOpen(status: string | null | undefined): boolean {
   return statusTone(status) === "accent";
 }
@@ -34,29 +42,184 @@ function isSettled(bet: Bet): boolean {
   return Boolean(bet.settled_at) || ["won", "win", "lost", "loss", "void", "push", "settled"].includes(status);
 }
 
+function summarize(bets: Bet[]) {
+  return {
+    staked: bets.reduce((total, bet) => total + (asNumber(bet.stake) ?? 0), 0),
+    profit: bets.reduce((total, bet) => total + (asNumber(bet.profit) ?? 0), 0),
+    open: bets.filter((bet) => isOpen(bet.status)).length,
+    settled: bets.filter(isSettled).length,
+  };
+}
+
+function LaneSummary({
+  lane,
+  bets,
+  unavailable,
+  currency,
+}: {
+  lane: "V1" | "V2";
+  bets: Bet[];
+  unavailable: boolean;
+  currency: string;
+}) {
+  const total = summarize(bets);
+  const netTone = profitTone(total.profit);
+  return (
+    <div className="ledger-summary ledger-summary--lane">
+      <span className={`lane-tag lane-tag--${lane.toLowerCase()}`}>{lane}</span>
+      <div className="ledger-summary__item">
+        <span>Stake in window</span>
+        <b>{unavailable || bets.length === 0 ? "—" : formatMoney(total.staked, currency)}</b>
+      </div>
+      <div className="ledger-summary__item">
+        <span>Realised P/L</span>
+        <b className={`text-${netTone}`}>
+          {unavailable || bets.length === 0 ? "—" : formatSignedMoney(total.profit, currency)}
+        </b>
+      </div>
+      <div className="ledger-summary__item">
+        <span>Open</span>
+        <b>{unavailable ? "—" : formatNumber(total.open)}</b>
+      </div>
+      <div className="ledger-summary__item">
+        <span>Settled</span>
+        <b>{unavailable ? "—" : formatNumber(total.settled)}</b>
+      </div>
+    </div>
+  );
+}
+
+function SearchBox({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="ledger-search">
+      <span className="ledger-search__label">Search ledger</span>
+      <input
+        className="ledger-search__input"
+        type="search"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Team, pick, lane, status or model"
+      />
+    </label>
+  );
+}
+
+function Pagination({
+  page,
+  totalPages,
+  totalRows,
+  onFirst,
+  onPrevious,
+  onNext,
+}: {
+  page: number;
+  totalPages: number;
+  totalRows: number;
+  onFirst: () => void;
+  onPrevious: () => void;
+  onNext: () => void;
+}) {
+  return (
+    <div className="ledger-pagination" aria-label="Bet ledger pagination">
+      <span className="ledger-pagination__status">
+        Page {page + 1} / {totalPages} · {formatNumber(totalRows)} rows
+      </span>
+      <div className="ledger-pagination__actions">
+        <button type="button" className="button button--quiet" onClick={onFirst} disabled={page === 0}>
+          Back to front
+        </button>
+        <button type="button" className="button button--quiet" onClick={onPrevious} disabled={page === 0}>
+          Previous
+        </button>
+        <button
+          type="button"
+          className="button button--quiet"
+          onClick={onNext}
+          disabled={page >= totalPages - 1}
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function LedgerSection({
   betsResult,
   equityResult,
+  challengerBetsResult,
+  challengerEquityResult,
 }: {
   betsResult: EndpointResult<Bet[]>;
   equityResult: EndpointResult<Equity>;
+  challengerBetsResult: EndpointResult<Bet[]>;
+  challengerEquityResult: EndpointResult<Equity>;
 }) {
-  const bets = Array.isArray(betsResult.data) ? betsResult.data : [];
+  const bets = useMemo(
+    () => (Array.isArray(betsResult.data) ? betsResult.data : []),
+    [betsResult.data],
+  );
+  const challengerBets = useMemo(
+    () =>
+      Array.isArray(challengerBetsResult.data)
+        ? challengerBetsResult.data
+        : [],
+    [challengerBetsResult.data],
+  );
   const equity = equityResult.data;
+  const challengerEquity = challengerEquityResult.data;
   const currency = "HKD";
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
 
-  const staked = bets.reduce((total, bet) => total + (asNumber(bet.stake) ?? 0), 0);
-  const settledProfit = bets.reduce((total, bet) => {
-    const profit = asNumber(bet.profit);
-    return total + (profit ?? 0);
-  }, 0);
-  const openCount = bets.filter((bet) => isOpen(bet.status)).length;
-  const settledCount = bets.filter(isSettled).length;
-  const netTone = profitTone(settledProfit);
+  const merged = useMemo<DisplayBet[]>(
+    () =>
+      [
+        ...bets.map((bet) => ({ ...bet, displayLane: "V1" as const })),
+        ...challengerBets.map((bet) => ({ ...bet, displayLane: "V2" as const })),
+      ].sort((left, right) =>
+        (right.placed_at ?? "").localeCompare(left.placed_at ?? ""),
+      ),
+    [bets, challengerBets],
+  );
+
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return merged;
+    return merged.filter((bet) =>
+      [
+        bet.displayLane,
+        bet.home_team,
+        bet.away_team,
+        bet.competition,
+        bet.market,
+        bet.selection,
+        bet.status,
+        bet.model_version,
+        bet.lane,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle)),
+    );
+  }, [merged, query]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const visibleBets = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+  const totalRows = merged.length;
   const betsUnavailable = Boolean(betsResult.error);
+  const challengerUnavailable = Boolean(challengerBetsResult.error);
   const observations = Array.isArray(equity?.points)
     ? equity.points.filter((point) => point.t).length
     : 0;
+  const challengerObservations = Array.isArray(challengerEquity?.points)
+    ? challengerEquity.points.filter((point) => point.t).length
+    : 0;
+
+  const updateQuery = (next: string) => {
+    setQuery(next);
+    setPage(0);
+  };
 
   return (
     <section id="paper-ledger" className="section" aria-labelledby="paper-ledger-title">
@@ -65,82 +228,98 @@ export function LedgerSection({
         kicker="Paper account"
         title="Paper Ledger"
         meta={
-          betsResult.error || equityResult.error
-            ? "ledger unavailable"
-            : `${bets.length} ${bets.length === 1 ? "bet" : "bets"} · ${formatMoney(
-                equity?.initial,
-                currency,
-              )} opening`
+          betsResult.error || equityResult.error || challengerBetsResult.error
+            ? "ledger partially unavailable"
+            : `${totalRows} ${totalRows === 1 ? "bet" : "bets"} · V1 + V2`
         }
       />
 
       {equityResult.error ? (
-        <DataWarning label="Equity" endpoint="/dashboard/equity" error={equityResult.error} />
+        <DataWarning label="V1 equity" endpoint="/dashboard/equity" error={equityResult.error} />
       ) : null}
       {betsResult.error ? (
-        <DataWarning label="Bets" endpoint="/dashboard/bets?limit=100" error={betsResult.error} />
+        <DataWarning label="V1 bets" endpoint="/dashboard/bets?limit=500" error={betsResult.error} />
+      ) : null}
+      {challengerEquityResult.error ? (
+        <DataWarning
+          label="V2 equity"
+          endpoint="/dashboard/challenger/equity"
+          error={challengerEquityResult.error}
+        />
+      ) : null}
+      {challengerBetsResult.error ? (
+        <DataWarning
+          label="V2 bets"
+          endpoint="/dashboard/challenger/bets?limit=500"
+          error={challengerBetsResult.error}
+        />
       ) : null}
 
       <Panel
         title="Equity curve"
         kicker="Bankroll over time"
         meta={
-          equityResult.error
+          equityResult.error && challengerEquityResult.error
             ? "equity unavailable"
-            : observations > 0
-              ? `${observations} settled observation${observations === 1 ? "" : "s"}`
-              : "no settled observations"
+            : `${observations + challengerObservations} settled observation${
+                observations + challengerObservations === 1 ? "" : "s"
+              }`
         }
       >
         <EquityChart
           equity={equity}
+          challengerEquity={challengerEquity}
           currency={currency}
-          unavailable={Boolean(equityResult.error)}
+          unavailable={Boolean(equityResult.error && challengerEquityResult.error)}
         />
       </Panel>
 
-      <div className="ledger-summary" role="group" aria-label="Derived ledger totals">
-        <div className="ledger-summary__item">
-          <span>Stake in window</span>
-          <b>{betsUnavailable || bets.length === 0 ? "—" : formatMoney(staked, currency)}</b>
-        </div>
-        <div className="ledger-summary__item">
-          <span>Realised P/L</span>
-          <b className={`text-${netTone}`}>
-            {betsUnavailable || bets.length === 0 ? "—" : formatSignedMoney(settledProfit, currency)}
-          </b>
-        </div>
-        <div className="ledger-summary__item">
-          <span>Open</span>
-          <b>{betsUnavailable ? "—" : formatNumber(openCount)}</b>
-        </div>
-        <div className="ledger-summary__item">
-          <span>Settled</span>
-          <b>{betsUnavailable ? "—" : formatNumber(settledCount)}</b>
-        </div>
+      <div className="ledger-summary-stack" role="group" aria-label="Derived ledger totals by lane">
+        <LaneSummary lane="V1" bets={bets} unavailable={betsUnavailable} currency={currency} />
+        <LaneSummary
+          lane="V2"
+          bets={challengerBets}
+          unavailable={challengerUnavailable}
+          currency={currency}
+        />
       </div>
 
       <Panel
         title="Bet ledger"
-        kicker="Placed and settled paper bets"
-        meta={betsResult.error ? "bets unavailable" : `${bets.length} rows · newest first`}
+        kicker="V1 and V2 paper bets"
+        meta={`${filtered.length} matching rows · ${PAGE_SIZE} max`}
         bodyClassName="panel__body--flush"
       >
-        {bets.length === 0 ? (
+        <div className="ledger-toolbar">
+          <SearchBox value={query} onChange={updateQuery} />
+          <Pagination
+            page={safePage}
+            totalPages={totalPages}
+            totalRows={filtered.length}
+            onFirst={() => setPage(0)}
+            onPrevious={() => setPage((current) => Math.max(0, current - 1))}
+            onNext={() => setPage((current) => Math.min(totalPages - 1, current + 1))}
+          />
+        </div>
+
+        {visibleBets.length === 0 ? (
           <EmptyState>
-            {betsResult.error
+            {betsResult.error || challengerBetsResult.error
               ? "Bet rows could not be loaded."
-              : "No paper bets have been placed yet. The ledger is intentionally empty."}
+              : query.trim()
+                ? "No bets match this search."
+                : "No paper bets have been placed yet. The ledger is intentionally empty."}
           </EmptyState>
         ) : (
-          <TableFrame label="Paper bet ledger" wide>
+          <TableFrame label="V1 and V2 paper bet ledger" wide>
             <table className="table--bets">
               <caption className="sr-only">
-                Paper bet ledger including stake, settlement profit, closing-line value and
-                Brier score
+                V1 and V2 paper bet ledger including lane, stake, settlement profit,
+                closing-line value and Brier score
               </caption>
               <thead>
                 <tr>
+                  <th scope="col">Lane</th>
                   <th scope="col">Placed (HKT)</th>
                   <th scope="col">Match</th>
                   <th scope="col">Market / selection</th>
@@ -154,11 +333,16 @@ export function LedgerSection({
                 </tr>
               </thead>
               <tbody>
-                {bets.map((bet, index) => {
+                {visibleBets.map((bet) => {
                   const profit = asNumber(bet.profit);
                   const tone = profitTone(profit);
                   return (
-                    <tr key={bet.bet_id ?? `bet-${index}`}>
+                    <tr key={bet.bet_id ?? `${bet.match_id}-${bet.placed_at}`}>
+                      <td>
+                        <span className={`lane-tag lane-tag--${bet.displayLane.toLowerCase()}`}>
+                          {bet.displayLane}
+                        </span>
+                      </td>
                       <td className="cell-time">
                         <time dateTime={bet.placed_at ?? undefined}>
                           {formatDateTime(bet.placed_at)}

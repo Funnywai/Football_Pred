@@ -1,7 +1,6 @@
 import {
   asNumber,
   formatDateTime,
-  formatFixed,
   formatKickoff,
   formatMoney,
   formatNumber,
@@ -9,7 +8,7 @@ import {
   formatSignedPercent,
 } from "@/lib/format";
 import type { EndpointResult } from "@/lib/api";
-import type { Overview } from "@/lib/types";
+import type { ChallengerSummary, Overview } from "@/lib/types";
 
 import {
   DataWarning,
@@ -48,10 +47,13 @@ function Kpi({
 
 export function OverviewSection({
   result,
+  challengerResult,
 }: {
   result: EndpointResult<Overview>;
+  challengerResult: EndpointResult<ChallengerSummary>;
 }) {
   const data = result.data;
+  const v2 = challengerResult.data;
   const currency = data?.bankroll?.currency?.trim() || "HKD";
   const roi = asNumber(data?.ledger?.roi);
   const drawdown = asNumber(data?.ledger?.max_drawdown);
@@ -63,9 +65,15 @@ export function OverviewSection({
         : formatMoney(drawdown, currency);
   const fixtures = Array.isArray(data?.next_fixtures) ? data.next_fixtures : [];
   const sources = Array.isArray(data?.latest_sources) ? data.latest_sources : [];
-  const calibration = Array.isArray(data?.latest_calibration)
-    ? data.latest_calibration
-    : [];
+  const v2Currency = v2?.bankroll?.currency?.trim() || "HKD";
+  const v2Roi = asNumber(v2?.ledger?.roi);
+  const v2Drawdown = asNumber(v2?.ledger?.max_drawdown);
+  const v2DrawdownLabel =
+    v2Drawdown === null
+      ? "—"
+      : Math.abs(v2Drawdown) <= 1
+        ? formatPercent(v2Drawdown)
+        : formatMoney(v2Drawdown, v2Currency);
 
   return (
     <section id="overview" className="section" aria-labelledby="overview-title">
@@ -94,7 +102,12 @@ export function OverviewSection({
         </EmptyState>
       ) : (
         <>
-          <div className="kpi-strip" role="group" aria-label="Key performance indicators">
+          <div className="kpi-lane">
+            <div className="kpi-lane__head">
+              <span className="kpi-lane__badge">V1</span>
+              <span>{data.experiment?.model_version ?? "poisson-v1"} · {data.experiment?.strategy_version ?? "g1"}</span>
+            </div>
+            <div className="kpi-strip" role="group" aria-label="V1 key performance indicators">
             <Kpi
               label="Bankroll"
               value={formatMoney(data.bankroll?.balance, currency)}
@@ -123,6 +136,48 @@ export function OverviewSection({
               value={formatNumber(data.counts?.predictions)}
               hint={`${formatNumber(data.counts?.decisions)} decisions · max DD ${drawdownLabel}`}
             />
+            </div>
+          </div>
+
+          <div className="kpi-lane">
+            <div className="kpi-lane__head">
+              <span className="kpi-lane__badge kpi-lane__badge--v2">V2</span>
+              <span>
+                {v2?.experiment?.model_version ?? "poisson-v2-shrunk"} ·{" "}
+                {v2?.experiment?.strategy_version ?? "g1"}
+                {v2?.experiment ? "" : " · not active"}
+              </span>
+            </div>
+            <div className="kpi-strip" role="group" aria-label="V2 key performance indicators">
+              <Kpi
+                label="Bankroll"
+                value={formatMoney(v2?.bankroll?.balance, v2Currency)}
+                hint={`initial ${formatMoney(v2?.bankroll?.initial, v2Currency)} · ${v2Currency}`}
+              />
+              <Kpi
+                label="Available"
+                value={formatMoney(v2?.bankroll?.available, v2Currency)}
+                hint={`reserved ${formatMoney(v2?.bankroll?.reserved, v2Currency)}`}
+              />
+              <Kpi
+                label="ROI"
+                value={formatSignedPercent(v2Roi)}
+                tone={v2Roi === null ? "muted" : v2Roi > 0 ? "positive" : v2Roi < 0 ? "negative" : "neutral"}
+                hint={`${formatMoney(v2?.ledger?.total_stake, v2Currency)} staked`}
+              />
+              <Kpi
+                label="Open bets"
+                value={formatNumber(v2?.ledger?.pending_bets)}
+                unit="bets"
+                hint={`${formatNumber(v2?.ledger?.settled_bets)} settled`}
+                tone="accent"
+              />
+              <Kpi
+                label="Predictions"
+                value={formatNumber(v2?.counts?.predictions)}
+                hint={`${formatNumber(v2?.counts?.decisions)} decisions · max DD ${v2DrawdownLabel}`}
+              />
+            </div>
           </div>
 
           <div className="overview-grid">
@@ -209,68 +264,6 @@ export function OverviewSection({
             </Panel>
           </div>
 
-          <Panel
-            title="Latest calibration"
-            kicker="Model review"
-            meta={`${calibration.length} slices`}
-            bodyClassName="panel__body--flush"
-          >
-            {calibration.length === 0 ? (
-              <EmptyState>No calibration slices have been computed yet.</EmptyState>
-            ) : (
-              <TableFrame label="Latest calibration slices" wide>
-                <table className="table--calibration">
-                  <caption className="sr-only">Latest calibration metrics by model slice</caption>
-                  <thead>
-                    <tr>
-                      <th scope="col">Model</th>
-                      <th scope="col">Slice</th>
-                      <th scope="col" className="num">N</th>
-                      <th scope="col" className="num">Brier</th>
-                      <th scope="col" className="num">Log loss</th>
-                      <th scope="col" className="num">ROI</th>
-                      <th scope="col" className="num">CLV</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {calibration.map((row, index) => {
-                      const rowRoi = asNumber(row.roi);
-                      return (
-                        <tr key={`${row.model_version ?? "model"}-${index}`}>
-                          <td>
-                            <span className="mono">{row.model_version ?? "—"}</span>
-                            {row.strategy_version ? (
-                              <span className="subline">strategy {row.strategy_version}</span>
-                            ) : null}
-                          </td>
-                          <td className="cell-muted">
-                            {[row.competition, row.market, row.time_block]
-                              .filter(Boolean)
-                              .join(" · ") || "—"}
-                          </td>
-                          <td className="num">{formatNumber(row.sample_count)}</td>
-                          <td className="num">{formatFixed(row.brier, 3)}</td>
-                          <td className="num">{formatFixed(row.log_loss, 3)}</td>
-                          <td
-                            className={`num ${
-                              rowRoi !== null && rowRoi > 0
-                                ? "text-positive"
-                                : rowRoi !== null && rowRoi < 0
-                                  ? "text-negative"
-                                  : ""
-                            }`}
-                          >
-                            {formatSignedPercent(rowRoi)}
-                          </td>
-                          <td className="num">{formatSignedPercent(row.clv)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </TableFrame>
-            )}
-          </Panel>
         </>
       )}
     </section>

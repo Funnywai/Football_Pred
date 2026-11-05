@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -21,6 +22,7 @@ from packages.db.models import (
     SourceFetchRun,
 )
 from packages.domain.enums import FetchRunStatus, MarketType, MatchStatus, Side
+from packages.feedback.service import ensure_model_version
 from packages.ingest.quality import QualityInput, evaluate_quality
 from packages.ingest.triggers import bet_intent_key as build_bet_intent_key
 from packages.ingest.triggers import decision_slot_key as build_decision_slot_key
@@ -31,6 +33,10 @@ from packages.models.poisson import (
     fit_poisson_ratings,
     predict_had,
     save_had_predictions,
+)
+from packages.models.shrinkage import (
+    CHALLENGER_MODEL_VERSION,
+    shrink_had_prediction,
 )
 from packages.payoff.kelly import kelly_fraction
 from packages.payoff.returns import MIN_ODDS, expected_value, return_distribution
@@ -43,6 +49,8 @@ MAX_STAKE_FRACTION: Final[Decimal] = Decimal("0.02")
 MAX_ODDS_AGE: Final[timedelta] = timedelta(minutes=10)
 MIN_STAKE: Final[Decimal] = Decimal("1.00")
 STRATEGY_VERSION: Final[str] = "g1"
+CHALLENGER_LANE: Final[str] = "challenger"
+CHALLENGER_WEIGHT: Final[Decimal] = Decimal("0.50")
 HAD_LINE_KEY: Final[str] = "0.0"
 
 STATUS_BET: Final[str] = "bet"
@@ -68,6 +76,7 @@ _STATUS_RANK: Final[dict[str, int]] = {
     STATUS_NO_BET: 2,
     STATUS_BET: 3,
 }
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -141,6 +150,8 @@ def _decide_match(
     now: datetime | None = None,
     experiment_id: uuid.UUID | None = None,
     experiment_is_legacy: bool = False,
+    model_version: str | None = None,
+    market_weight: Decimal | None = None,
 ) -> DecisionResult:
     """Run the deterministic HAD decision for one T-30m odds snapshot."""
     competition = session.get(Competition, match.competition_id)
@@ -189,6 +200,15 @@ def _decide_match(
 
     ratings = fit_poisson_ratings(session, match.competition_id, as_of=decision_at)
     prediction = predict_had(ratings, match.home_team_id, match.away_team_id)
+    if model_version == CHALLENGER_MODEL_VERSION:
+        shrunken = shrink_had_prediction(
+            prediction,
+            {side: lines[side].odds_decimal for side in _HAD_SIDES},
+            market_weight if market_weight is not None else CHALLENGER_WEIGHT,
+        )
+        if shrunken is None:
+            return _skipped("market shrinkage unavailable")
+        prediction = shrunken
     analysis_run_key = f"{prediction.model_version}:{match.id}:{_DECISION_TRIGGER}"
     _ = save_had_predictions(
         session,
@@ -456,5 +476,51 @@ def decide_match(
         now=now,
         experiment_id=experiment_id,
         experiment_is_legacy=experiment_is_legacy,
+    )
+    try:
+        with session.begin_nested():
+            decide_challenger_match(session, match, snapshot, now=now)
+    except Exception:
+        logger.exception("challenger decision failed for match %s", match.id)
+    return result
+
+
+def decide_challenger_match(
+    session: Session,
+    match: Match,
+    snapshot: OddsSnapshot | None,
+    *,
+    now: datetime | None = None,
+) -> DecisionResult | None:
+    """Run the market-shrunk challenger decision when its lane is active."""
+    experiment = active_experiment(session, CHALLENGER_LANE)
+    if experiment is None:
+        return None
+    _ = ensure_model_version(
+        session,
+        CHALLENGER_MODEL_VERSION,
+        "poisson_market_shrink",
+        {"base": "poisson-v1", "market_weight": "0.5", "devig": "proportional"},
+        {},
+        {},
+    )
+    result = _decide_match(
+        session,
+        match,
+        snapshot,
+        now=now,
+        experiment_id=experiment.id,
+        experiment_is_legacy=False,
+        model_version=CHALLENGER_MODEL_VERSION,
+        market_weight=CHALLENGER_WEIGHT,
+    )
+    _log_decision(
+        session,
+        match,
+        snapshot,
+        result,
+        now=now,
+        experiment_id=experiment.id,
+        experiment_is_legacy=False,
     )
     return result

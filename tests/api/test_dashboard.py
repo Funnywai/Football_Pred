@@ -36,6 +36,7 @@ from packages.domain.enums import (
     Side,
     SnapshotKind,
 )
+from packages.ledger.experiments import create_next_experiment
 from packages.shared.config import Settings
 
 D = Decimal
@@ -403,6 +404,116 @@ def test_bets_contract(app, client):
     assert float(row["brier"]) == 0.25
     assert row["model_version"] == "poisson-v1"
     assert row["settled_at"] is not None
+
+
+def test_challenger_bets_are_empty_without_challenger_experiment(app, client):
+    _seed(app)
+    assert client.get("/dashboard/challenger/bets").json() == []
+
+
+def test_challenger_endpoints_are_scoped_to_challenger_experiment(app, client):
+    seeded = _seed(app)
+    session = app.state.session_factory()
+    try:
+        deterministic = create_next_experiment(
+            session,
+            label="g1",
+            model_version="poisson-v1",
+            strategy_version="g1",
+            lane="deterministic",
+        )
+        g1_bet = session.get(PaperBet, seeded["bet_id"])
+        g1_bet.experiment_id = deterministic.id
+        challenger = create_next_experiment(
+            session,
+            label="v2-market-shrunk",
+            model_version="poisson-v2-shrunk",
+            strategy_version="g1",
+            lane="challenger",
+        )
+        match_id = seeded["match_id"]
+        challenger_bet = PaperBet(
+            experiment_id=challenger.id,
+            match_id=match_id,
+            market=MarketType.HAD,
+            line_key="0.0",
+            selection=Side.H,
+            odds_decimal=D("2.50"),
+            stake=D("50.00"),
+            bankroll_before=D("10000.00"),
+            placed_at=NOW,
+            status=BetStatus.PENDING,
+            analysis_run_key="poisson-v2-shrunk:match:T-30m",
+            decision_slot_key=f"g1:{challenger.id}:{match_id}:T-30m",
+            bet_intent_key=f"g1:{challenger.id}:{match_id}:T-30m:HAD:0.0:H",
+            decision_at=NOW,
+        )
+        session.add(challenger_bet)
+        v2_run_key = "poisson-v2-shrunk:match:T-30m"
+        for side, probability in (
+            (Side.H, "0.350000"),
+            (Side.D, "0.300000"),
+            (Side.A, "0.350000"),
+        ):
+            session.add(
+                ModelPrediction(
+                    match_id=match_id,
+                    market=MarketType.HAD,
+                    line_key="0.0",
+                    outcome=side,
+                    probability=D(probability),
+                    score_distribution={},
+                    decision_at=NOW,
+                    model_version="poisson-v2-shrunk",
+                    analysis_run_key=v2_run_key,
+                )
+            )
+        session.add(
+            DecisionLog(
+                experiment_id=challenger.id,
+                match_id=match_id,
+                decision_slot_key=f"g1:{challenger.id}:{match_id}:T-30m",
+                snapshot_id=None,
+                decision_at=NOW,
+                status="bet",
+                reason="",
+                model_version="poisson-v2-shrunk",
+                prediction_count=3,
+                paper_bet_id=challenger_bet.id,
+            )
+        )
+        session.commit()
+        challenger_bet_id = str(challenger_bet.id)
+    finally:
+        session.close()
+
+    overview = client.get("/dashboard/challenger")
+    assert overview.status_code == 200
+    payload = overview.json()
+    assert payload["experiment"]["lane"] == "challenger"
+    assert payload["ledger"]["pending_bets"] == 1
+    assert payload["counts"]["bets"] == 1
+    assert payload["counts"]["predictions"] == 3
+    assert payload["counts"]["decisions"] == 1
+
+    v2_predictions = client.get(
+        "/dashboard/predictions?model_version=poisson-v2-shrunk"
+    ).json()
+    assert len(v2_predictions) == 1
+    assert v2_predictions[0]["model_version"] == "poisson-v2-shrunk"
+    assert v2_predictions[0]["decision_status"] == "bet"
+
+    v2_equity = client.get("/dashboard/challenger/equity").json()
+    assert v2_equity["initial"] == "10000.00"
+    assert len(v2_equity["points"]) == 1
+
+    bets = client.get("/dashboard/challenger/bets?limit=100").json()
+    assert len(bets) == 1
+    assert bets[0]["bet_id"] == challenger_bet_id
+
+    deterministic_bets = client.get("/dashboard/bets?limit=100").json()
+    assert len(deterministic_bets) == 1
+    assert deterministic_bets[0]["bet_id"] == str(seeded["bet_id"])
 
 
 def test_equity_contract(app, client):

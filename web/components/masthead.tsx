@@ -7,9 +7,8 @@ const NAV_ITEMS = [
   { href: "#overview", label: "Overview", index: "01" },
   { href: "#predictions", label: "Predictions", index: "02" },
   { href: "#paper-ledger", label: "Paper ledger", index: "03" },
-  { href: "#calibration", label: "Calibration", index: "04" },
-  { href: "#technical", label: "Technical", index: "05" },
-  { href: "/llm", label: "LLM Lab", index: "06" },
+  { href: "#technical", label: "Technical", index: "04" },
+  { href: "/llm", label: "LLM Lab", index: "05" },
 ];
 
 export function Masthead({
