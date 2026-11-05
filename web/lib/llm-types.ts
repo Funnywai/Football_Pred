@@ -6,7 +6,7 @@
  * when the API is older or the lane has not been populated yet.
  */
 
-import type { Numeric } from "./types";
+import type { Numeric, OutcomeEv, OutcomeOdds, OutcomeProbabilities } from "./types";
 
 export interface LlmRuntime {
   decision_layer?: string | null;
@@ -75,9 +75,34 @@ export interface LlmLedger {
   strategy_version?: string | null;
   initial_bankroll?: string | null;
   bankroll?: string | null;
+  available?: string | null;
+  reserved?: string | null;
+  currency?: string | null;
+  total_stake?: string | null;
+  total_payout?: string | null;
   roi?: string | null;
   settled_bets?: number | null;
   pending_bets?: number | null;
+  max_drawdown?: string | null;
+}
+
+export interface LlmPrediction {
+  match_id?: string | null;
+  kickoff_at?: string | null;
+  competition?: string | null;
+  home_team?: string | null;
+  away_team?: string | null;
+  probabilities?: OutcomeProbabilities | null;
+  odds?: OutcomeOdds | null;
+  ev?: OutcomeEv | null;
+  model_version?: string | null;
+  generated_at?: string | null;
+  decision_status?: string | null;
+  paper_bet_id?: string | null;
+  paper_bet_status?: string | null;
+  paper_bet_selection?: string | null;
+  paper_bet_odds?: Numeric;
+  paper_bet_stake?: Numeric;
 }
 
 export interface LlmStatus {

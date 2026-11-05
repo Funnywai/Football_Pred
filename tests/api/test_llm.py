@@ -47,5 +47,7 @@ def test_llm_status_contract(tmp_path):
         }
         assert all(prompt["sha256"] for prompt in payload["prompts"])
         assert client.get("/llm/predictions").json() == []
+        assert client.get("/llm/bets").json() == []
+        assert client.get("/llm/equity").json() == {"initial": None, "points": []}
     finally:
         application.state.engine.dispose()

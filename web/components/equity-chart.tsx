@@ -45,14 +45,16 @@ export function EquityChart({
   challengerEquity = null,
   currency,
   unavailable = false,
+  primaryLabel = "V1",
 }: {
   equity: Equity | null;
   challengerEquity?: Equity | null;
   currency: string;
   unavailable?: boolean;
+  primaryLabel?: string;
 }) {
   const series = [
-    buildSeries("v1", "V1", "equity__line--v1", equity),
+    buildSeries("v1", primaryLabel, "equity__line--v1", equity),
     buildSeries("v2", "V2", "equity__line--v2", challengerEquity),
   ].filter((item): item is Series => item !== null);
 
@@ -94,7 +96,7 @@ export function EquityChart({
     value: item.plot[item.plot.length - 1]?.value ?? null,
   }));
   const change = last.value - (primary.initial ?? first.value);
-  const primaryLabel = primary.label;
+  const primarySeriesLabel = primary.label;
 
   return (
     <figure className="equity">
@@ -158,7 +160,7 @@ export function EquityChart({
               textAnchor="end"
               className="equity__note"
             >
-              {primaryLabel} initial
+              {primarySeriesLabel} initial
             </text>
           </g>
         ) : null}
@@ -214,7 +216,7 @@ export function EquityChart({
           Window <b>{`${formatKickoff(first.t)} → ${formatKickoff(last.t)}`}</b>
         </span>
         <span>
-          {primaryLabel} change{" "}
+          {primarySeriesLabel} change{" "}
           <b className={change > 0 ? "text-positive" : change < 0 ? "text-negative" : ""}>
             {change > 0 ? "+" : change < 0 ? "−" : ""}
             {formatMoney(Math.abs(change), currency)}

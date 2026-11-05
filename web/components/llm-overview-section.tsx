@@ -1,7 +1,14 @@
 import type { ReactNode } from "react";
 
 import type { EndpointResult } from "@/lib/api";
-import { formatKickoff, formatNumber, formatSignedPercent } from "@/lib/format";
+import {
+  asNumber,
+  formatKickoff,
+  formatMoney,
+  formatNumber,
+  formatPercent,
+  formatSignedPercent,
+} from "@/lib/format";
 import type { LlmStatus } from "@/lib/llm-types";
 
 import { TableFrame } from "./table-frame";
@@ -33,7 +40,7 @@ function LlmKpi({
   value: string;
   unit?: string;
   hint?: string;
-  tone?: "neutral" | "muted" | "accent";
+  tone?: "neutral" | "muted" | "accent" | "positive" | "negative";
 }) {
   return (
     <div className="kpi">
@@ -73,6 +80,15 @@ export function LlmOverviewSection({
   const ledger = data?.ledger ?? null;
   const allFixtures = Array.isArray(data?.next_fixtures) ? data.next_fixtures : [];
   const fixtures = allFixtures.slice(0, 5);
+  const roi = asNumber(ledger?.roi);
+  const drawdown = asNumber(ledger?.max_drawdown);
+  const drawdownLabel =
+    drawdown === null
+      ? "—"
+      : Math.abs(drawdown) <= 1
+        ? formatPercent(drawdown)
+        : formatMoney(drawdown, ledger?.currency ?? "HKD");
+  const currency = ledger?.currency?.trim() || "HKD";
   const competitions = Array.isArray(data?.competitions)
     ? data.competitions.filter((item) => typeof item === "string" && item.trim())
     : [];
@@ -115,30 +131,40 @@ export function LlmOverviewSection({
             aria-label="LLM lane key indicators"
           >
             <LlmKpi
-              label="Evidence packets"
-              value={countOrDash(counts?.evidence_packets)}
-              hint="frozen pre-kickoff inputs"
+              label="Bankroll"
+              value={formatMoney(ledger?.bankroll, currency)}
+              hint={`initial ${formatMoney(ledger?.initial_bankroll, currency)} · ${currency}`}
             />
             <LlmKpi
-              label="Agent runs"
-              value={countOrDash(counts?.agent_runs)}
-              hint={
-                counts?.agent_runs === 0
-                  ? "not executed in this snapshot"
-                  : typeof counts?.agent_runs === "number"
-                    ? "recorded at snapshot time"
-                    : "run count not reported"
+              label="Available"
+              value={formatMoney(ledger?.available, currency)}
+              hint={`reserved ${formatMoney(ledger?.reserved, currency)}`}
+            />
+            <LlmKpi
+              label="ROI"
+              value={formatSignedPercent(roi)}
+              tone={
+                roi === null
+                  ? "muted"
+                  : roi > 0
+                    ? "positive"
+                    : roi < 0
+                      ? "negative"
+                      : "neutral"
               }
+              hint={`${formatMoney(ledger?.total_stake, currency)} staked`}
+            />
+            <LlmKpi
+              label="Open bets"
+              value={formatNumber(ledger?.pending_bets)}
+              unit="bets"
+              hint={`${formatNumber(ledger?.settled_bets)} settled`}
+              tone="accent"
             />
             <LlmKpi
               label="Predictions"
               value={countOrDash(counts?.predictions)}
-              hint="ensemble output rows"
-            />
-            <LlmKpi
-              label="Paper bets"
-              value={countOrDash(counts?.paper_bets)}
-              hint="separate LLM paper ledger"
+              hint={`${countOrDash(counts?.predictions)} decisions · max DD ${drawdownLabel}`}
             />
           </div>
 
@@ -240,6 +266,16 @@ export function LlmOverviewSection({
                 <LaneFact label="LLM bankroll">
                   <span className="llm-state__value">
                     {ledger?.bankroll ?? "—"}
+                  </span>
+                </LaneFact>
+                <LaneFact label="Evidence packets">
+                  <span className="llm-state__value">
+                    {countOrDash(counts?.evidence_packets)}
+                  </span>
+                </LaneFact>
+                <LaneFact label="Agent runs">
+                  <span className="llm-state__value">
+                    {countOrDash(counts?.agent_runs)}
                   </span>
                 </LaneFact>
                 <LaneFact label="Prompt / agent counts">

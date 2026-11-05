@@ -2,7 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { LlmAgentWorkflow } from "@/components/llm-agent-workflow";
+import { LlmLedgerSection } from "@/components/llm-ledger-section";
 import { LlmOverviewSection } from "@/components/llm-overview-section";
+import { LlmPredictionsSection } from "@/components/llm-predictions-section";
 import { TableFrame } from "@/components/table-frame";
 import {
   EmptyState,
@@ -11,7 +13,7 @@ import {
   StatusTag,
 } from "@/components/ui";
 import { formatDateTime, formatNumber } from "@/lib/format";
-import { getLlmStatus } from "@/lib/llm-api";
+import { getLlmPageData } from "@/lib/llm-api";
 import type {
   LlmAgent,
   LlmCounts,
@@ -25,19 +27,17 @@ export const revalidate = 0;
 export const metadata: Metadata = {
   title: "LLM Ensemble Lab — Touchline/Lab",
   description:
-    "Separate research lane for the LLM football forecasting ensemble: lane overview, next fixtures, animated agent workflow, initial weights, prediction output and paper ledger.",
+    "Separate research lane for the LLM football forecasting ensemble: lane overview, animated agent workflow, initial weights, prediction feed and separate paper ledger.",
 };
 
 const NAV_ITEMS = [
   { href: "#llm-overview", label: "Overview", index: "01" },
   { href: "#llm-workflow", label: "Agent workflow", index: "02" },
   { href: "#llm-weights", label: "Weights", index: "03" },
-  { href: "#llm-output", label: "Output", index: "04" },
+  { href: "#llm-predictions", label: "Predictions", index: "04" },
+  { href: "#llm-paper-ledger", label: "Paper ledger", index: "05" },
 ];
 
-function countOrDash(value: number | null | undefined): string {
-  return typeof value === "number" ? formatNumber(value) : "—";
-}
 
 function weightValue(weight: LlmWeight): string {
   if (typeof weight.weight === "string" && weight.weight.trim()) {
@@ -56,15 +56,14 @@ function agentName(agents: LlmAgent[], agentId: string | null | undefined): stri
 }
 
 export default async function LlmLabPage() {
-  const result = await getLlmStatus();
+  const { status: result, predictions: predictionsResult, bets: betsResult, equity: equityResult } =
+    await getLlmPageData();
   const data: LlmStatus | null = result.data;
   const counts: LlmCounts | null | undefined = data?.counts;
   const generatedAt = data?.generated_at ?? null;
 
   const agents = Array.isArray(data?.agents) ? data.agents : [];
   const weights = Array.isArray(data?.weights) ? data.weights : [];
-  const predictions = counts?.predictions;
-  const paperBets = counts?.paper_bets;
 
   return (
     <div className="shell llm-shell">
@@ -206,61 +205,13 @@ export default async function LlmLabPage() {
           </Panel>
         </section>
 
-        <section
-          id="llm-output"
-          className="section"
-          aria-labelledby="output-ledger-title"
-        >
-          <SectionHeader
-            index="04"
-            kicker="Separate paper lane"
-            title="Output ledger"
-            meta="separate paper lane"
-          />
+        <LlmPredictionsSection result={predictionsResult} />
+        <LlmLedgerSection
+          ledger={data?.ledger ?? null}
+          betsResult={betsResult}
+          equityResult={equityResult}
+        />
 
-          <div className="llm-split">
-            <Panel
-              title="Predictions"
-              kicker="Decision layer"
-              meta={`${countOrDash(predictions)} rows`}
-            >
-              {typeof predictions === "number" && predictions > 0 ? (
-                <p className="panel__note">
-                  {formatNumber(predictions)} predictions are recorded. Row-level
-                  predictions are not exposed by <code>/llm/status</code> yet, so
-                  none are listed here.
-                </p>
-              ) : (
-                <EmptyState>
-                  No LLM predictions have been persisted yet. Once the provider
-                  is enabled, the T-28m pre-kickoff job will write frozen evidence,
-                  agent runs, a deterministic ensemble prediction and the EV/Kelly
-                  paper-bet decision.
-                </EmptyState>
-              )}
-            </Panel>
-
-            <Panel
-              title="Paper bets"
-              kicker="Separate ledger"
-              meta={`${countOrDash(paperBets)} rows`}
-            >
-              {typeof paperBets === "number" && paperBets > 0 ? (
-                <p className="panel__note">
-                  {formatNumber(paperBets)} paper bets are recorded. Row-level bets
-                  are not exposed by <code>/llm/status</code> yet, so none are
-                  listed here.
-                </p>
-              ) : (
-                <EmptyState>
-                  No LLM paper bets have been placed yet. This experiment has an
-                  independent bankroll and applies the deterministic EV/Kelly,
-                  odds-freshness and risk gates after each ensemble prediction.
-                </EmptyState>
-              )}
-            </Panel>
-          </div>
-        </section>
       </main>
 
       <footer className="site-footer llm-footer">

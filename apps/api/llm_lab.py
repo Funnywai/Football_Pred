@@ -13,15 +13,19 @@ from sqlalchemy.orm import aliased
 
 from apps.api.dashboard import SessionDep
 from packages.db.models import (
+    BankrollAccount,
     Competition,
     LlmAgentRun,
     LlmEnsemblePrediction,
     LlmEvidencePacket,
+    MarketLine,
     Match,
+    OddsSnapshot,
     PaperBet,
+    Settlement,
     Team,
 )
-from packages.domain.enums import MatchStatus
+from packages.domain.enums import MarketType, MatchStatus, Side, SnapshotKind
 from packages.ledger.experiments import active_experiment
 from packages.ledger.service import LedgerService
 from packages.llm.prompts.registry import PromptRegistry
@@ -64,6 +68,49 @@ def _money(value: Decimal | None) -> str | None:
     return None if value is None else str(value.quantize(Decimal("0.01")))
 
 
+def _decimal(value: object) -> Decimal | None:
+    if value is None or value == "":
+        return None
+    try:
+        parsed = Decimal(str(value))
+    except (ValueError, ArithmeticError):
+        return None
+    return parsed if parsed.is_finite() else None
+
+
+def _odds_for_match(session: SessionDep, match_id: object) -> dict[str, str]:
+    snapshot = session.scalar(
+        select(OddsSnapshot)
+        .where(
+            OddsSnapshot.match_id == match_id,
+            OddsSnapshot.market == MarketType.HAD,
+            OddsSnapshot.snapshot_kind == SnapshotKind.T30M,
+        )
+        .order_by(OddsSnapshot.snapshot_at.desc(), OddsSnapshot.id.desc())
+        .limit(1)
+    )
+    if snapshot is None:
+        snapshot = session.scalar(
+            select(OddsSnapshot)
+            .where(
+                OddsSnapshot.match_id == match_id,
+                OddsSnapshot.market == MarketType.HAD,
+            )
+            .order_by(OddsSnapshot.snapshot_at.desc(), OddsSnapshot.id.desc())
+            .limit(1)
+        )
+    if snapshot is None:
+        return {}
+    rows = session.execute(
+        select(MarketLine.side, MarketLine.odds_decimal).where(
+            MarketLine.snapshot_id == snapshot.id,
+            MarketLine.odds_type == MarketType.HAD,
+            MarketLine.condition_raw == "0.0",
+        )
+    ).all()
+    return {row[0].value: str(row[1]) for row in rows}
+
+
 def _competition_codes(value: object) -> list[str]:
     raw = value if isinstance(value, str) else "UCL"
     return sorted({code.strip().upper() for code in raw.split(",") if code.strip()})
@@ -75,6 +122,11 @@ def _llm_ledger(session: SessionDep) -> tuple[dict[str, Any] | None, int]:
         if experiment is None:
             return None, 0
         summary = LedgerService(session, experiment_id=experiment.id).summary()
+        account = session.scalar(
+            select(BankrollAccount).where(
+                BankrollAccount.account_id == experiment.account_id
+            )
+        )
         paper_bets = int(
             session.scalar(
                 select(func.count())
@@ -86,6 +138,8 @@ def _llm_ledger(session: SessionDep) -> tuple[dict[str, Any] | None, int]:
     except SQLAlchemyError:
         session.rollback()
         return None, 0
+    reserved = Decimal(str(account.reserved_stake)) if account is not None else Decimal("0.00")
+    balance = Decimal(str(summary.bankroll))
     return (
         {
             "experiment_id": str(experiment.id),
@@ -94,13 +148,18 @@ def _llm_ledger(session: SessionDep) -> tuple[dict[str, Any] | None, int]:
             "strategy_version": experiment.strategy_version,
             "initial_bankroll": str(experiment.initial_bankroll),
             "bankroll": str(summary.bankroll),
+            "available": str(balance - reserved),
+            "reserved": str(reserved),
+            "currency": account.currency if account is not None else "HKD",
+            "total_stake": str(summary.total_stake),
+            "total_payout": str(summary.total_payout),
             "roi": str(summary.roi),
             "settled_bets": summary.settled_count,
             "pending_bets": summary.pending_count,
+            "max_drawdown": str(summary.max_drawdown),
         },
         paper_bets,
     )
-
 
 def _next_fixtures(session: SessionDep, competition_codes: list[str]) -> list[dict[str, Any]]:
     if not competition_codes:
@@ -220,6 +279,7 @@ def llm_predictions(
     except SQLAlchemyError:
         session.rollback()
         return []
+    experiment = active_experiment(session, "llm")
     output: list[dict[str, Any]] = []
     seen: set[str] = set()
     for row in rows:
@@ -233,7 +293,6 @@ def llm_predictions(
         competition = session.get(Competition, match.competition_id)
         home = session.get(Team, match.home_team_id)
         away = session.get(Team, match.away_team_id)
-        experiment = active_experiment(session, "llm")
         bet = (
             session.scalar(
                 select(PaperBet)
@@ -247,6 +306,17 @@ def llm_predictions(
             if experiment is not None
             else None
         )
+        odds = _odds_for_match(session, row.match_id)
+        probabilities = row.probabilities
+        ev: dict[str, str | None] = {}
+        for side in (Side.H, Side.D, Side.A):
+            probability = _decimal(probabilities.get(side.value))
+            price = _decimal(odds.get(side.value))
+            ev[side.value] = (
+                str(probability * price - Decimal(1))
+                if probability is not None and price is not None
+                else None
+            )
         output.append(
             {
                 "match_id": match_id,
@@ -254,7 +324,9 @@ def llm_predictions(
                 "competition": competition.code if competition else None,
                 "home_team": home.name if home else None,
                 "away_team": away.name if away else None,
-                "probabilities": row.probabilities,
+                "probabilities": probabilities,
+                "odds": odds,
+                "ev": ev,
                 "weights": row.weights,
                 "active_agents": row.active_agents,
                 "red_team": row.red_team,
@@ -262,14 +334,123 @@ def llm_predictions(
                 "model_version": row.model_version,
                 "generated_at": _iso(row.created_at),
                 "decision_status": (
-            "prediction_only" if experiment is None else "bet" if bet is not None else "no_bet"
-        ),
-        "paper_bet_id": str(bet.id) if bet is not None else None,
-        "paper_bet_status": bet.status.value if bet is not None else None,
-        "paper_bet_odds": _money(bet.odds_decimal) if bet is not None else None,
-        "paper_bet_stake": _money(bet.stake) if bet is not None else None,
+                    "prediction_only"
+                    if experiment is None
+                    else "bet"
+                    if bet is not None
+                    else "no_bet"
+                ),
+                "paper_bet_id": str(bet.id) if bet is not None else None,
+                "paper_bet_status": bet.status.value if bet is not None else None,
+                "paper_bet_selection": (
+                    bet.selection.value if bet is not None else None
+                ),
+                "paper_bet_odds": _money(bet.odds_decimal) if bet is not None else None,
+                "paper_bet_stake": _money(bet.stake) if bet is not None else None,
             }
         )
         if len(output) >= limit:
             break
     return output
+
+
+@router.get("/bets")
+def llm_bets(
+    session: SessionDep,
+    limit: int = Query(default=100, ge=1, le=500),
+) -> list[dict[str, Any]]:
+    try:
+        experiment = active_experiment(session, "llm")
+    except SQLAlchemyError:
+        session.rollback()
+        return []
+    if experiment is None:
+        return []
+    home = aliased(Team)
+    away = aliased(Team)
+    try:
+        rows = session.execute(
+            select(
+                PaperBet,
+                Match.kickoff_at,
+                Competition.code,
+                home.name,
+                away.name,
+                Settlement,
+            )
+            .join(Match, Match.id == PaperBet.match_id)
+            .join(Competition, Competition.id == Match.competition_id)
+            .join(home, home.id == Match.home_team_id)
+            .join(away, away.id == Match.away_team_id)
+            .outerjoin(Settlement, Settlement.paper_bet_id == PaperBet.id)
+            .where(PaperBet.experiment_id == experiment.id)
+            .order_by(PaperBet.placed_at.desc(), PaperBet.id.desc())
+            .limit(limit)
+        ).all()
+    except SQLAlchemyError:
+        session.rollback()
+        return []
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        bet: PaperBet = row[0]
+        settlement: Settlement | None = row[5]
+        payout = Decimal(str(settlement.payout)) if settlement is not None else None
+        output.append(
+            {
+                "bet_id": str(bet.id),
+                "match_id": str(bet.match_id),
+                "kickoff_at": _iso(row[1]),
+                "competition": row[2],
+                "home_team": row[3],
+                "away_team": row[4],
+                "market": bet.market.value,
+                "selection": bet.selection.value,
+                "line_key": bet.line_key,
+                "odds": str(bet.odds_decimal),
+                "stake": _money(bet.stake),
+                "status": bet.status.value,
+                "placed_at": _iso(bet.placed_at),
+                "settled_at": _iso(settlement.settled_at) if settlement else None,
+                "payout": _money(payout),
+                "profit": _money(payout - Decimal(str(bet.stake)))
+                if payout is not None
+                else None,
+                "clv": str(settlement.clv) if settlement and settlement.clv is not None else None,
+                "brier": str(settlement.brier_score)
+                if settlement and settlement.brier_score is not None
+                else None,
+                "model_version": bet.analysis_run_key.split(":", 1)[0],
+            }
+        )
+    return output
+
+
+@router.get("/equity")
+def llm_equity(request: Request, session: SessionDep) -> dict[str, Any]:
+    try:
+        experiment = active_experiment(session, "llm")
+    except SQLAlchemyError:
+        session.rollback()
+        return {"initial": None, "points": []}
+    if experiment is None:
+        return {"initial": None, "points": []}
+    initial = Decimal(str(experiment.initial_bankroll))
+    try:
+        rows = session.execute(
+            select(Settlement.settled_at, Settlement.payout, PaperBet.stake)
+            .join(PaperBet, PaperBet.id == Settlement.paper_bet_id)
+            .where(
+                PaperBet.experiment_id == experiment.id,
+                Settlement.provisional.is_(False),
+            )
+            .order_by(Settlement.settled_at.asc(), Settlement.id.asc())
+        ).all()
+    except SQLAlchemyError:
+        session.rollback()
+        return {"initial": _money(initial), "points": []}
+    balance = initial
+    points: list[dict[str, str | None]] = [{"t": None, "bankroll": _money(initial)}]
+    for settled_at, payout, stake in rows:
+        balance = balance - Decimal(str(stake)) + Decimal(str(payout))
+        points.append({"t": _iso(settled_at), "bankroll": _money(balance)})
+    return {"initial": _money(initial), "points": points}
