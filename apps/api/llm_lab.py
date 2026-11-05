@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -18,6 +19,8 @@ from packages.db.models import (
     LlmAgentRun,
     LlmEnsemblePrediction,
     LlmEvidencePacket,
+    LlmResearchFinding,
+    LlmResearchRun,
     MarketLine,
     Match,
     OddsSnapshot,
@@ -262,6 +265,78 @@ def llm_status(request: Request, session: SessionDep) -> dict[str, Any]:
                 "detail": "LLM agents, weighted aggregation, separate paper ledger.",
             },
         ],
+    }
+
+
+@router.get("/research-runs")
+def llm_research_runs(
+    session: SessionDep,
+    limit: int = Query(default=50, ge=1, le=200),
+) -> list[dict[str, Any]]:
+    try:
+        rows = session.scalars(
+            select(LlmResearchRun)
+            .order_by(LlmResearchRun.created_at.desc(), LlmResearchRun.id.desc())
+            .limit(limit)
+        ).all()
+    except SQLAlchemyError:
+        session.rollback()
+        return []
+    return [_research_run_payload(row) for row in rows]
+
+
+@router.get("/research-runs/{run_id}")
+def llm_research_run(run_id: str, session: SessionDep) -> dict[str, Any]:
+    try:
+        run = session.get(LlmResearchRun, uuid.UUID(run_id))
+    except (ValueError, SQLAlchemyError):
+        return {}
+    if run is None:
+        return {}
+    findings = session.scalars(
+        select(LlmResearchFinding)
+        .where(LlmResearchFinding.run_id == run.id)
+        .order_by(LlmResearchFinding.agent_id)
+    ).all()
+    payload = _research_run_payload(run)
+    payload["findings"] = [
+        {
+            "agent_id": finding.agent_id,
+            "summary": finding.summary,
+            "findings": finding.findings,
+            "confidence": str(finding.confidence) if finding.confidence is not None else None,
+            "direction": finding.direction,
+            "evidence_refs": finding.evidence_refs,
+            "uncertainties": finding.uncertainties,
+            "abstain": finding.abstain,
+            "error": finding.error,
+        }
+        for finding in findings
+    ]
+    return payload
+
+
+def _research_run_payload(run: LlmResearchRun) -> dict[str, Any]:
+    return {
+        "run_id": str(run.id),
+        "match_id": str(run.match_id),
+        "stage": run.stage,
+        "as_of": _iso(run.as_of),
+        "status": run.status,
+        "model_version": run.model_version,
+        "prompt_version": run.prompt_version,
+        "provider": run.provider,
+        "report": run.report,
+        "probabilities": run.probabilities,
+        "recommended_side": run.recommended_side,
+        "recommended_stake_pct": str(run.recommended_stake_pct)
+        if run.recommended_stake_pct is not None
+        else None,
+        "confidence": str(run.confidence) if run.confidence is not None else None,
+        "abstain": run.abstain,
+        "risk": run.risk,
+        "error": run.error,
+        "created_at": _iso(run.created_at),
     }
 
 

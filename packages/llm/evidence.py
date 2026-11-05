@@ -230,6 +230,50 @@ def build_evidence_packet(
                 if not present
             ],
         },
+        "source_audit": {
+            "odds": {
+                "status": "present" if snapshot is not None and len(odds) == 3 else "missing",
+                "source": "hkjc",
+                "ref": f"odds:{snapshot.id}" if snapshot is not None else None,
+                "as_of": _iso(snapshot.snapshot_at) if snapshot is not None else None,
+            },
+            "recent_matches": {
+                "status": "present" if recent_home and recent_away else "partial",
+                "source": "football-data.org",
+                "home_count": len(recent_home),
+                "away_count": len(recent_away),
+            },
+            "lineups": {
+                "status": "present" if lineups else "missing",
+                "source": "fotmob",
+                "count": len(lineups),
+            },
+            "availability": {
+                "status": "present" if availability else "missing",
+                "source": "football-data.org",
+                "count": len(availability),
+            },
+            "weather": {
+                "status": "missing",
+                "source": "open-meteo",
+                "reason": "venue coordinates and weather ingestion are not wired yet",
+            },
+            "news": {
+                "status": "missing",
+                "source": "rss",
+                "reason": "news ingestion is not wired yet",
+            },
+            "standings": {
+                "status": "missing",
+                "source": "football-data.org",
+                "reason": "standings are not part of the current packet",
+            },
+            "xg": {
+                "status": "missing",
+                "source": "understat",
+                "reason": "xG is not part of the current packet",
+            },
+        },
         "source_refs": [
             f"match:{match.id}",
             *([f"odds:{snapshot.id}"] if snapshot is not None else []),

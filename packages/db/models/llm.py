@@ -113,3 +113,62 @@ class LlmEnsemblePrediction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     red_team: Mapped[dict[str, object] | None] = mapped_column(json_type())
     judge: Mapped[dict[str, object] | None] = mapped_column(json_type())
     model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+
+
+class LlmResearchRun(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "llm_research_runs"
+    __table_args__ = (
+        UniqueConstraint(
+            "match_id",
+            "stage",
+            "evidence_hash",
+            "model_version",
+            name="uq_llm_research_runs_match_stage_evidence_model",
+        ),
+        Index("ix_llm_research_runs_match_id_created_at", "match_id", "created_at"),
+    )
+
+    match_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("matches.id", ondelete="CASCADE"), nullable=False
+    )
+    stage: Mapped[str] = mapped_column(String(16), nullable=False)
+    as_of: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    evidence_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    model_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    prompt_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    provider: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False)
+    report: Mapped[dict[str, object] | None] = mapped_column(json_type())
+    probabilities: Mapped[dict[str, str] | None] = mapped_column(json_type())
+    recommended_side: Mapped[str | None] = mapped_column(String(8))
+    recommended_stake_pct: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    abstain: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    risk: Mapped[dict[str, object] | None] = mapped_column(json_type())
+    raw_response: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+
+
+class LlmResearchFinding(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "llm_research_findings"
+    __table_args__ = (
+        UniqueConstraint("run_id", "agent_id", name="uq_llm_research_findings_run_agent"),
+        Index("ix_llm_research_findings_run_id", "run_id"),
+    )
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("llm_research_runs.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    findings: Mapped[list[dict[str, object]]] = mapped_column(
+        json_type(), default=list, nullable=False
+    )
+    confidence: Mapped[Decimal | None] = mapped_column(Numeric(8, 6))
+    direction: Mapped[str | None] = mapped_column(String(16))
+    evidence_refs: Mapped[list[str]] = mapped_column(json_type(), default=list, nullable=False)
+    uncertainties: Mapped[list[str]] = mapped_column(json_type(), default=list, nullable=False)
+    abstain: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    raw_response: Mapped[str | None] = mapped_column(Text)
+    error: Mapped[str | None] = mapped_column(Text)
+    latency_ms: Mapped[int | None] = mapped_column(Integer)

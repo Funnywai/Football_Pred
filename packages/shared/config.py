@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     hkjc_query_version: str = "captured-2026-11"
     hkjc_result_semantics: HkjcResultSemantics = HkjcResultSemantics.UNVERIFIED
     llm_enabled: bool = False
+    llm_mode: str = "assistant"
     llm_provider: str = "openai_compatible"
     llm_model: str = "deepseek-v4.1-flash"
     llm_base_url: str = "https://opencode.ai/zen/go/v1"

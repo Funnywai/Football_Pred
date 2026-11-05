@@ -18,6 +18,8 @@ from packages.db.models.llm import (
     LlmAgentRun,
     LlmEnsemblePrediction,
     LlmEvidencePacket,
+    LlmResearchFinding,
+    LlmResearchRun,
 )
 from packages.db.models.news import NewsSignal
 from packages.db.models.odds import MarketLine, OddsSnapshot
@@ -38,6 +40,8 @@ __all__ = [
     "LlmAgentRun",
     "LlmEnsemblePrediction",
     "LlmEvidencePacket",
+    "LlmResearchFinding",
+    "LlmResearchRun",
     "MarketLine",
     "Match",
     "ModelPrediction",

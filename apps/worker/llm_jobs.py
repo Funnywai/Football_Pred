@@ -14,10 +14,12 @@ from packages.domain.enums import MatchStatus
 from packages.ingest.triggers import TRIGGER_SCAN_WINDOW
 from packages.llm.orchestrator import run_llm_prediction
 from packages.llm.providers import build_provider
+from packages.llm.research_assistant import run_llm_research_assistant
 from packages.shared.config import get_settings
 from packages.shared.time import ensure_utc, utc_now
 
 _PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts" / "llm"
+_ASSISTANT_PROMPT_DIR = _PROMPT_DIR / "research"
 _LLM_DEDUPE_TTL_SECONDS = 6 * 60 * 60
 _LLM_PREDICTION_OFFSET = timedelta(minutes=28)
 # Six specialists, red team and judge can take several minutes in total.
@@ -36,6 +38,14 @@ def run_llm_prediction_job(match_id: str, stage: str = "T-30m") -> dict[str, obj
     factory = build_session_factory(engine)
     try:
         with session_scope(factory) as session:
+            if settings.llm_mode == "assistant":
+                return run_llm_research_assistant(
+                    session,
+                    uuid.UUID(match_id),
+                    stage=stage,
+                    provider=provider,
+                    prompt_dir=_ASSISTANT_PROMPT_DIR,
+                )
             return run_llm_prediction(
                 session,
                 uuid.UUID(match_id),
