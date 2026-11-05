@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from packages.db.models import Competition, Match
 from packages.db.session import build_engine, build_session_factory, session_scope
 from packages.domain.enums import MatchStatus
+from packages.ingest.evidence import collect_match_evidence
+from packages.ingest.pipeline import build_adapters
 from packages.ingest.triggers import TRIGGER_SCAN_WINDOW
 from packages.llm.orchestrator import run_llm_prediction
 from packages.llm.providers import build_provider
@@ -39,6 +41,17 @@ def run_llm_prediction_job(match_id: str, stage: str = "T-30m") -> dict[str, obj
     try:
         with session_scope(factory) as session:
             if settings.llm_mode == "assistant":
+                match = session.get(Match, uuid.UUID(match_id))
+                if match is not None:
+                    try:
+                        collect_match_evidence(
+                            session,
+                            match,
+                            build_adapters(settings),
+                            settings,
+                        )
+                    except Exception:  # noqa: BLE001 - missing evidence must not stop the run
+                        session.rollback()
                 return run_llm_research_assistant(
                     session,
                     uuid.UUID(match_id),

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from packages.db.models import (
     Availability,
     Competition,
+    EvidenceRecord,
     Lineup,
     MarketLine,
     Match,
@@ -149,6 +150,28 @@ def build_evidence_packet(
             )
         ).all()
     )
+    evidence_records = list(
+        session.scalars(
+            select(EvidenceRecord)
+            .where(
+                EvidenceRecord.match_id == match.id,
+                EvidenceRecord.available_at <= cutoff,
+            )
+            .order_by(EvidenceRecord.kind, EvidenceRecord.available_at.desc())
+        ).all()
+    )
+    evidence: dict[str, list[dict[str, Any]]] = {}
+    for record in evidence_records:
+        evidence.setdefault(record.kind, []).append(
+            {
+                "evidence_ref": f"evidence:{record.id}",
+                "source_name": record.source_name,
+                "source_url": record.source_url,
+                "available_at": _iso(record.available_at),
+                "fetched_at": _iso(record.fetched_at),
+                "payload": record.payload,
+            }
+        )
 
     packet: dict[str, Any] = {
         "match": {
@@ -230,6 +253,7 @@ def build_evidence_packet(
                 if not present
             ],
         },
+        "evidence": evidence,
         "source_audit": {
             "odds": {
                 "status": "present" if snapshot is not None and len(odds) == 3 else "missing",
@@ -254,24 +278,25 @@ def build_evidence_packet(
                 "count": len(availability),
             },
             "weather": {
-                "status": "missing",
+                "status": "present" if evidence.get("weather") else "missing",
                 "source": "open-meteo",
-                "reason": "venue coordinates and weather ingestion are not wired yet",
+                "count": len(evidence.get("weather", [])),
+                "reason": None if evidence.get("weather") else "venue coordinates are not curated",
             },
             "news": {
-                "status": "missing",
+                "status": "present" if evidence.get("news") else "missing",
                 "source": "rss",
-                "reason": "news ingestion is not wired yet",
+                "count": len(evidence.get("news", [])),
             },
             "standings": {
-                "status": "missing",
+                "status": "present" if evidence.get("standings") else "missing",
                 "source": "football-data.org",
-                "reason": "standings are not part of the current packet",
+                "count": len(evidence.get("standings", [])),
             },
             "xg": {
-                "status": "missing",
+                "status": "present" if evidence.get("xg") else "missing",
                 "source": "understat",
-                "reason": "xG is not part of the current packet",
+                "count": len(evidence.get("xg", [])),
             },
         },
         "source_refs": [
@@ -281,6 +306,7 @@ def build_evidence_packet(
             *[f"match:{item['match_id']}" for item in recent_away],
             *[f"lineup:{lineup.id}" for lineup in lineups],
             *[f"availability:{item.id}" for item in availability],
+            *[f"evidence:{record.id}" for record in evidence_records],
         ],
     }
     encoded = json.dumps(packet, sort_keys=True, separators=(",", ":"), default=str)

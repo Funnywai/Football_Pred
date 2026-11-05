@@ -6,6 +6,7 @@ from packages.db.models.calibration import (
 )
 from packages.db.models.catalog import Competition, Match, Player, Team
 from packages.db.models.decisions import DecisionLog
+from packages.db.models.evidence import EvidenceRecord
 from packages.db.models.ledger import (
     BankrollAccount,
     BankrollReservation,
@@ -34,6 +35,7 @@ __all__ = [
     "CalibrationMetric",
     "Competition",
     "DecisionLog",
+    "EvidenceRecord",
     "LedgerExperiment",
     "Lineup",
     "LlmAgentOutput",

@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 60.0
     llm_competitions: str = "EPL,LALIGA,BUNDESLIGA,SERIEA,LIGUE1,UCL"
     llm_session_id: str = ""
+    news_feed_urls: str = "https://feeds.bbci.co.uk/sport/football/rss.xml"
     max_total_exposure_fraction: Decimal = Decimal("0.20")
 
 
