@@ -47,7 +47,12 @@ class _FakeScheduledHkjc:
     def fetch_market_odds(self, market: object, match_source_id: str) -> FetchResult:
         raise AssertionError("linking must not fetch odds")
 
-    def fetch_match_results(self, match_source_id: str) -> FetchResult:
+    def fetch_match_results(
+        self,
+        match_source_id: str,
+        *,
+        match_date: date | None = None,
+    ) -> FetchResult:
         raise AssertionError("linking must not fetch results")
 
 

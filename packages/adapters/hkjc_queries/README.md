@@ -67,14 +67,19 @@ data.matches[] -> id, matchDate, results[], poolInfo{}
 ```
 
 Full-time is `stageId == 5`, `resultType == 1`, `payoutConfirmed == true`, with
-non-negative scores; the highest `sequence` wins.
+non-negative scores; the highest `sequence` wins. The live API caps a results
+page at 10 rows: `startIndex=1,endIndex=100` returns `data.matches=[]` even
+though `matchNumByDate.total` is non-zero. The adapter therefore requests pages
+of 10 and paginates.
 
 ## Rules
 
 - Never hand write or edit these query strings. If HKJC changes its whitelist,
   re-run the capture and update `FP_HKJC_QUERY_VERSION`.
-- Keep `FP_HKJC_RESULT_SEMANTICS` at `unverified` until a known UCL extra-time
-  match has been checked against the live `matchResults` response.
+- Keep `FP_HKJC_RESULT_SEMANTICS` at `unverified` for UCL knockout matches until
+  a known extra-time match has been checked against the live `matchResults`
+  response. UCL league phase (matchday 1-8) cannot go to extra time, so its
+  full-time score is the 90-minute score and is settled without this gate.
 - `payoutRefundPools` and `refundPools` live at `match.poolInfo`. Both appeared
   as lists of strings in the live sample; objects are also accepted by the
   parser. Re-run the capture if the live response uses a third shape.
@@ -92,8 +97,9 @@ final score. Only set `FP_HKJC_RESULT_SEMANTICS=regulation_time` when the fields
 match the 90-minute score. Otherwise leave it unverified and UCL settlement
 stays blocked.
 
-Status: **not executed.** The 2026-11-01 live sample contains no UCL match, so
-there is no evidence yet. Do not claim 90-minute semantics.
+Status: **not executed for knockout.** The league-phase exception is safe by
+competition format; the extra-time semantics of the same fields remain
+unverified for UCL knockout matches. Do not claim 90-minute semantics there.
 
 ### Gate B: refund pool shape — SHAPE RECORDED, REFUND SEMANTICS CONSERVATIVE
 

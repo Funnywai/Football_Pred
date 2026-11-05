@@ -40,7 +40,7 @@ POOL_NOT_OFFERED = "NOT_OFFERED"
 LINE_AVAILABLE = "AVAILABLE"
 FULL_TIME_STAGE_ID = 5
 FULL_TIME_RESULT_TYPE = 1
-RESULTS_PAGE_SIZE = 100
+RESULTS_PAGE_SIZE = 10
 MAX_RESULTS_PAGES = 10
 
 _UNKNOWN_STATUS = "UNKNOWN"
@@ -391,6 +391,7 @@ class HkjcAdapter(BaseAdapter):
         self._queries_dir: Path = Path(queries_dir)
         self._graphql_url: str = graphql_url
         self.query_version: str = query_version
+        self._result_pages: dict[tuple[str, int, int], FetchResult] = {}
 
     def _headers(self) -> dict[str, str]:
         return {
@@ -550,14 +551,27 @@ class HkjcAdapter(BaseAdapter):
         matches = _matches_from_payload(result.payload)
         return _match_date(_select_match(matches, match_source_id))
 
-    def fetch_match_results(self, match_source_id: str) -> FetchResult:
+    def fetch_match_results(
+        self,
+        match_source_id: str,
+        *,
+        match_date: date | None = None,
+    ) -> FetchResult:
         parsed_match_id = _require_match_source_id(match_source_id)
-        match_date = self._resolve_match_date(parsed_match_id)
+        resolved_date = match_date or date.fromisoformat(
+            self._resolve_match_date(parsed_match_id)
+        )
+        date_text = resolved_date.isoformat()
         start_index = 1
         for _ in range(MAX_RESULTS_PAGES):
-            result = self._post_match_results(
-                match_date, start_index, start_index + RESULTS_PAGE_SIZE - 1
-            )
+            end_index = start_index + RESULTS_PAGE_SIZE - 1
+            cache_key = (date_text, start_index, end_index)
+            result = self._result_pages.get(cache_key)
+            if result is None:
+                result = self._post_match_results(
+                    date_text, start_index, end_index
+                )
+                self._result_pages[cache_key] = result
             matches = _matches_from_payload(result.payload)
             for raw_match in matches:
                 match = _as_mapping(raw_match, "data.matches[]")
@@ -574,7 +588,7 @@ class HkjcAdapter(BaseAdapter):
                 break
             start_index = next_index
         raise AdapterSchemaError(
-            f"match {parsed_match_id} not found in matchResults for {match_date}"
+            f"match {parsed_match_id} not found in matchResults for {date_text}"
         )
 
     @staticmethod

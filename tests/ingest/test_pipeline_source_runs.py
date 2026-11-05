@@ -63,7 +63,12 @@ class _FakeHkjc:
     ) -> FetchResult:
         return _result("hkjc", HAD_PAYLOAD)
 
-    def fetch_match_results(self, match_source_id: str) -> FetchResult:
+    def fetch_match_results(
+        self,
+        match_source_id: str,
+        *,
+        match_date: date | None = None,
+    ) -> FetchResult:
         raise AssertionError("pipeline tests must not fetch results")
 
 

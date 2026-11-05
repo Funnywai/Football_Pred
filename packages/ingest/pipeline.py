@@ -66,7 +66,12 @@ class HkjcMarketFetcher(Protocol):
 class HkjcResultFetcher(Protocol):
     schema_version: ClassVar[str]
 
-    def fetch_match_results(self, match_source_id: str) -> FetchResult: ...
+    def fetch_match_results(
+        self,
+        match_source_id: str,
+        *,
+        match_date: date | None = None,
+    ) -> FetchResult: ...
 
 
 @runtime_checkable

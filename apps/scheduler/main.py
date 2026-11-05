@@ -30,7 +30,10 @@ def _enqueue_recent_result_refresh(queue: Queue) -> None:
 
 
 def _enqueue_settlement_scan(queue: Queue) -> None:
-    queue.enqueue("apps.worker.jobs.run_settlement_scan")
+    queue.enqueue(
+        "apps.worker.jobs.run_settlement_scan",
+        job_timeout=30 * 60,
+    )
 
 
 def _enqueue_decision_reconciliation(queue: Queue) -> None:

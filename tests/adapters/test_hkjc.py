@@ -729,10 +729,59 @@ def test_fetch_match_results_resolves_date_then_fetches_results():
         "startDate": "2026-10-31",
         "endDate": "2026-10-31",
         "startIndex": 1,
-        "endIndex": 100,
+        "endIndex": 10,
         "teamId": None,
     }
     assert result.payload == RESULTS_PAYLOAD
+
+
+@respx.mock
+def test_fetch_match_results_accepts_explicit_date_without_match_list():
+    route = respx.post(GRAPHQL_URL).mock(
+        return_value=httpx.Response(200, json=RESULTS_PAYLOAD)
+    )
+    adapter = HkjcAdapter(
+        queries_dir=QUERIES_DIR, query_version="test-v1", limiter=NO_LIMIT
+    )
+    try:
+        result = adapter.fetch_match_results(
+            "50078622",
+            match_date=date(2026, 11, 4),
+        )
+    finally:
+        adapter.close()
+
+    assert route.call_count == 1
+    body = json.loads(route.calls[0].request.content)
+    assert body["operationName"] == "matchResults"
+    assert body["variables"]["startDate"] == "2026-11-04"
+    assert body["variables"]["endDate"] == "2026-11-04"
+    assert body["variables"]["endIndex"] == 10
+    assert result.payload == RESULTS_PAYLOAD
+
+
+@respx.mock
+def test_fetch_match_results_reuses_a_cached_date_page():
+    route = respx.post(GRAPHQL_URL).mock(
+        return_value=httpx.Response(200, json=RESULTS_PAYLOAD)
+    )
+    adapter = HkjcAdapter(
+        queries_dir=QUERIES_DIR, query_version="test-v1", limiter=NO_LIMIT
+    )
+    try:
+        first = adapter.fetch_match_results(
+            "50078622",
+            match_date=date(2026, 11, 4),
+        )
+        second = adapter.fetch_match_results(
+            "50078622",
+            match_date=date(2026, 11, 4),
+        )
+    finally:
+        adapter.close()
+
+    assert route.call_count == 1
+    assert first.payload == second.payload
 
 
 @respx.mock

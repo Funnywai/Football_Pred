@@ -1,7 +1,7 @@
 import copy
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
@@ -11,11 +11,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from apps.scheduler.main import build_scheduler
+from apps.scheduler.main import _enqueue_settlement_scan, build_scheduler
 from apps.worker.jobs import (
     OddsNotOfferedError,
     _decision_probability,
     _load_hkjc_result,
+    _ucl_result_requires_gate,
     check_lineup,
     enqueue_due_match_triggers,
     ingest_trigger_odds,
@@ -195,7 +196,12 @@ class _FakeHkjc:
     ) -> FetchResult:
         return _fetch_result("hkjc", HAD_PAYLOAD)
 
-    def fetch_match_results(self, match_source_id: str) -> FetchResult:
+    def fetch_match_results(
+        self,
+        match_source_id: str,
+        *,
+        match_date: date | None = None,
+    ) -> FetchResult:
         return _fetch_result("hkjc", RESULTS_PAYLOAD)
 
     def fetch_scheduled_matches(
@@ -238,7 +244,12 @@ class _FailingScheduledHkjc:
     ) -> FetchResult:
         raise AdapterHTTPError("hkjc unavailable")
 
-    def fetch_match_results(self, match_source_id: str) -> FetchResult:
+    def fetch_match_results(
+        self,
+        match_source_id: str,
+        *,
+        match_date: date | None = None,
+    ) -> FetchResult:
         raise AdapterHTTPError("hkjc unavailable")
 
     def fetch_scheduled_matches(
@@ -286,6 +297,16 @@ class _NoopQueue:
 
     def enqueue(self, *args: object, **kwargs: object) -> None:
         return None
+
+
+class _CapturingQueue:
+    connection = None
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+    def enqueue(self, *args: object, **kwargs: object) -> None:
+        self.calls.append((args, kwargs))
 
 
 def _match(
@@ -850,6 +871,13 @@ def test_lineup_check_rejects_a_non_lineup_trigger(session):
         )
 
 
+def test_ucl_result_gate_only_applies_to_knockout_matches():
+    assert _ucl_result_requires_gate("UCL", 4) is False
+    assert _ucl_result_requires_gate("UCL", 9) is True
+    assert _ucl_result_requires_gate("UCL", None) is True
+    assert _ucl_result_requires_gate("EPL", None) is False
+
+
 def test_settlement_scan_settles_only_pending_matches_after_kickoff(
     session, monkeypatch
 ):
@@ -890,7 +918,7 @@ def test_settlement_scan_settles_only_pending_matches_after_kickoff(
     monkeypatch.setattr("apps.worker.jobs.build_session_factory", lambda _engine: factory)
     monkeypatch.setattr(
         "apps.worker.jobs.settle_match",
-        lambda _match_id: {"settled": 1},
+        lambda _match_id, **_kwargs: {"settled": 1},
     )
 
     result = run_settlement_scan(
@@ -1002,6 +1030,15 @@ def test_scheduler_includes_a_recent_result_refresh_job():
 def test_scheduler_includes_a_settlement_scan_job():
     scheduler = build_scheduler(queue=_NoopQueue())
     assert scheduler.get_job("settlement-scan") is not None
+
+
+def test_settlement_scan_allows_the_rate_limited_result_pipeline():
+    queue = _CapturingQueue()
+    _enqueue_settlement_scan(queue)
+
+    assert queue.calls == [
+        (("apps.worker.jobs.run_settlement_scan",), {"job_timeout": 1800})
+    ]
 
 
 def test_scheduler_includes_a_decision_reconciliation_job():
@@ -1249,7 +1286,7 @@ def test_settlement_scan_isolates_per_match_errors(monkeypatch):
 
     calls = {"count": 0}
 
-    def _fake_settle(_match_id):
+    def _fake_settle(_match_id, **_kwargs):
         calls["count"] += 1
         if calls["count"] == 1:
             raise RuntimeError("settlement boom")

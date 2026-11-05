@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from zoneinfo import ZoneInfo
 
@@ -555,9 +555,10 @@ def _fetch_and_persist_result(
     session: Session,
     hkjc: HkjcResultFetcher,
     source_id: str,
+    match_date: date,
     run_id: str,
 ) -> FetchResult:
-    fetched = hkjc.fetch_match_results(source_id)
+    fetched = hkjc.fetch_match_results(source_id, match_date=match_date)
     _ = persist_raw_payload(
         session,
         fetched,
@@ -571,12 +572,13 @@ def _load_hkjc_result(
     session: Session,
     settings: Settings,
     match: Match,
+    hkjc: HkjcResultFetcher | None = None,
 ) -> HkjcMatchResult | None:
     source_id = (match.source_match_ids or {}).get("hkjc")
     if source_id is None:
         return None
-    adapters = build_adapters(settings)
-    hkjc = adapters.hkjc
+    if hkjc is None:
+        hkjc = build_adapters(settings).hkjc
     if not isinstance(hkjc, HkjcResultFetcher):
         return None
     fetched = _run_source_fetch(
@@ -587,6 +589,7 @@ def _load_hkjc_result(
             session,
             hkjc,
             source_id,
+            ensure_utc(match.kickoff_at).astimezone(HONG_KONG).date(),
             run_id,
         ),
         field_scope="match results",
@@ -635,7 +638,25 @@ def _decision_probability(session: Session, bet: PaperBet) -> Decimal | None:
     return Decimal(str(row))
 
 
-def settle_match(match_id: str) -> dict[str, int]:
+def _ucl_result_requires_gate(
+    competition_code: str | None,
+    matchday: int | None,
+) -> bool:
+    """UCL league-phase matches cannot go to extra time.
+
+    ``matchday`` 1-8 is the league phase, where a draw is final after 90
+    minutes. Knockout matches (no matchday) remain behind the semantics gate.
+    """
+    if competition_code != "UCL":
+        return False
+    return not (matchday is not None and 1 <= matchday <= 8)
+
+
+def settle_match(
+    match_id: str,
+    *,
+    hkjc: HkjcResultFetcher | None = None,
+) -> dict[str, int]:
     settings = get_settings()
     engine = build_engine(settings.database_url)
     factory = build_session_factory(engine)
@@ -643,14 +664,17 @@ def settle_match(match_id: str) -> dict[str, int]:
         match = session.get(Match, uuid.UUID(match_id))
         if match is None:
             raise ValueError(f"unknown match {match_id}")
-        result = _load_hkjc_result(session, settings, match)
+        result = _load_hkjc_result(session, settings, match, hkjc)
         if result is None:
             return {"settled": 0}
         competition = session.get(Competition, match.competition_id)
         goals = HkjcAdapter.goals_90_from_result(
             result,
             settings.hkjc_result_semantics,
-            is_ucl=competition.code == "UCL" if competition is not None else False,
+            is_ucl=_ucl_result_requires_gate(
+                competition.code if competition is not None else None,
+                match.matchday,
+            ),
         )
         if goals is None:
             return {"settled": 0}
@@ -702,13 +726,21 @@ def run_settlement_scan(now: datetime | None = None) -> dict[str, int]:
                 .distinct()
             ).scalars()
         )
+    adaptive_hkjc = HkjcAdapter(
+        queries_dir=settings.hkjc_queries_dir,
+        query_version=settings.hkjc_query_version,
+        graphql_url=settings.hkjc_graphql_url,
+    )
     settled = 0
     errors = 0
-    for match_id in match_ids:
-        try:
-            settled += settle_match(str(match_id))["settled"]
-        except Exception:  # noqa: BLE001 - isolate one match from the batch
-            errors += 1
+    try:
+        for match_id in match_ids:
+            try:
+                settled += settle_match(str(match_id), hkjc=adaptive_hkjc)["settled"]
+            except Exception:  # noqa: BLE001 - isolate one match from the batch
+                errors += 1
+    finally:
+        adaptive_hkjc.close()
     return {"matches": len(match_ids), "settled": settled, "errors": errors}
 
 
