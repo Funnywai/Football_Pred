@@ -47,6 +47,9 @@ class _Group:
     paired_observations: list[
         tuple[dict[str, Decimal], dict[str, Decimal], str]
     ] = field(default_factory=list)
+    policy_observations: list[
+        tuple[dict[str, Decimal], dict[str, Decimal], str]
+    ] = field(default_factory=list)
 
 
 def _actual(home_goals: int, away_goals: int) -> str:
@@ -89,6 +92,37 @@ def _paired_delta_ci(
         "brier": _mean_ci(brier_deltas),
         "log_loss": _mean_ci(log_loss_deltas),
     }
+
+
+def _policy_controls(
+    observations: list[tuple[dict[str, Decimal], dict[str, Decimal], str]],
+) -> dict[str, Any]:
+    controls: dict[str, Any] = {}
+    for threshold in (D("0.03"), D("0.05"), D("0.10"), D("0.15")):
+        stake = D(0)
+        payout = D(0)
+        bets = 0
+        wins = 0
+        for probabilities, odds, actual in observations:
+            evaluations = {
+                side: probabilities[side] * odds[side] - D(1) for side in HAD_OUTCOMES
+            }
+            side, best_ev = max(evaluations.items(), key=lambda item: item[1])
+            if best_ev < threshold:
+                continue
+            bets += 1
+            stake += D(1)
+            if side == actual:
+                wins += 1
+                payout += odds[side]
+        controls[f"{threshold:.0%}"] = {
+            "bets": bets,
+            "wins": wins,
+            "stake": str(stake),
+            "payout": str(payout),
+            "roi": str((payout - stake) / stake) if stake > 0 else None,
+        }
+    return controls
 
 
 def _metric_block(
@@ -139,8 +173,11 @@ def _market_probabilities(
     session: Session,
     match_id: uuid.UUID,
     decision_at: datetime,
-    snapshot_cache: dict[tuple[uuid.UUID, datetime], tuple[dict[Side, Decimal], uuid.UUID] | None],
-) -> tuple[dict[str, Decimal], uuid.UUID] | None:
+    snapshot_cache: dict[
+        tuple[uuid.UUID, datetime],
+        tuple[dict[str, Decimal], uuid.UUID, dict[str, Decimal]] | None,
+    ],
+) -> tuple[dict[str, Decimal], uuid.UUID, dict[str, Decimal]] | None:
     key = (match_id, decision_at)
     if key in snapshot_cache:
         return snapshot_cache[key]
@@ -178,7 +215,11 @@ def _market_probabilities(
         "D": devig[1],
         "A": devig[2],
     }
-    result = (probabilities, snapshot.id)
+    result = (
+        probabilities,
+        snapshot.id,
+        {side.value: odds[side] for side in _HAD_SIDES},
+    )
     snapshot_cache[key] = result
     return result
 
@@ -259,7 +300,8 @@ def build_evaluation_report(
     matches = session.scalars(select(Match)).all()
     predictions = _latest_prediction_runs(session)
     snapshot_cache: dict[
-        tuple[uuid.UUID, datetime], tuple[dict[str, Decimal], uuid.UUID] | None
+        tuple[uuid.UUID, datetime],
+        tuple[dict[str, Decimal], uuid.UUID, dict[str, Decimal]] | None,
     ] = {}
     groups: dict[tuple[str, str, str], _Group] = {}
     after_kickoff = 0
@@ -315,6 +357,7 @@ def build_evaluation_report(
         if market is not None:
             group.market_observations.append((market[0], actual))
             group.paired_observations.append((probabilities, market[0], actual))
+            group.policy_observations.append((probabilities, market[2], actual))
     llm_rows = session.execute(
         select(LlmEnsemblePrediction, Match, Competition)
         .join(Match, Match.id == LlmEnsemblePrediction.match_id)
@@ -362,6 +405,7 @@ def build_evaluation_report(
         if market is not None:
             group.market_observations.append((market[0], actual))
             group.paired_observations.append((probabilities, market[0], actual))
+            group.policy_observations.append((probabilities, market[2], actual))
         else:
             missing_market += 1
 
@@ -393,6 +437,7 @@ def build_evaluation_report(
                     else None
                 ),
                 "delta_ci95": _paired_delta_ci(group.paired_observations),
+                "policy_controls": _policy_controls(group.policy_observations),
             }
         )
         missing_market += max(0, len(group.observations) - len(group.market_observations))

@@ -196,6 +196,9 @@ def test_report_scores_model_against_same_time_market():
         assert report["integrity"]["predictions_after_kickoff"] == 0
         assert model["model"]["brier_ci95"] is None
         assert model["delta_ci95"]["brier"] is None
+        assert model["policy_controls"]["3%"]["bets"] == 1
+        assert model["policy_controls"]["3%"]["wins"] == 1
+        assert D(model["policy_controls"]["3%"]["roi"]) == D("1.5")
     finally:
         session.close()
         engine.dispose()
