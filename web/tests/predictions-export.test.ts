@@ -63,6 +63,15 @@ describe("prediction TSV export", () => {
     expect(row).toContain("positive ev signal");
   });
 
+  it("exports EV ratios above 100% as percentage points", () => {
+    const tsv = buildPredictionsTsv([
+      { ...sample, ev: { H: "3.021329", D: "0.5004725", A: "-0.46524164" } },
+    ]);
+    const row = tsv.split("\n")[1] ?? "";
+
+    expect(row).toContain("302.13\t50.05\t-46.52");
+  });
+
   it("exports a live score with a LIVE result type", () => {
     const tsv = buildPredictionsTsv([
       { ...sample, status: "live", home_goals_90: "0", away_goals_90: "3" },

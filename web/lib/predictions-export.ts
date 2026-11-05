@@ -50,6 +50,11 @@ function percentCell(value: string | number | null | undefined): string {
   return points === null ? "" : formatNumber(points, 2);
 }
 
+function ratioPercentCell(value: string | number | null | undefined): string {
+  const parsed = asNumber(value);
+  return parsed === null ? "" : formatNumber(parsed * 100, 2);
+}
+
 function resultFields(prediction: Prediction): {
   result: string;
   resultType: string;
@@ -103,9 +108,9 @@ export function buildPredictionsTsv(predictions: Prediction[]): string {
       formatOdds(odds.H) === "—" ? "" : formatOdds(odds.H),
       formatOdds(odds.D) === "—" ? "" : formatOdds(odds.D),
       formatOdds(odds.A) === "—" ? "" : formatOdds(odds.A),
-      percentCell(ev.H),
-      percentCell(ev.D),
-      percentCell(ev.A),
+      ratioPercentCell(ev.H),
+      ratioPercentCell(ev.D),
+      ratioPercentCell(ev.A),
       textCell(prediction.model_version),
       textCell(prediction.decision_status),
       textCell(prediction.decision_reason),

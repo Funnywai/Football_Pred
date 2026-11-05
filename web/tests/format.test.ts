@@ -6,6 +6,7 @@ import {
   formatMoney,
   formatPercent,
   formatSignedPercent,
+  formatSignedRatioPercent,
   probabilitiesToPercents,
   toPercentPoints,
 } from "../lib/format";
@@ -29,6 +30,12 @@ describe("rate formatting", () => {
     expect(formatSignedPercent("-0.0423", 2)).toBe("−4.23%");
     expect(formatSignedPercent("0.1", 1)).toBe("+10.0%");
     expect(formatSignedPercent(null)).toBe("—");
+  });
+
+  it("formats EV ratios above 100% without the heuristic", () => {
+    expect(formatSignedRatioPercent("3.021329", 1)).toBe("+302.1%");
+    expect(formatSignedRatioPercent("0.5004725", 1)).toBe("+50.0%");
+    expect(formatSignedRatioPercent("-0.46524164", 1)).toBe("−46.5%");
   });
 
   it("formats percent and money with fallbacks", () => {

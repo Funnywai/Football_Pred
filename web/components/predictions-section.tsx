@@ -3,7 +3,7 @@ import {
   formatKickoff,
   formatNumber,
   formatOdds,
-  formatSignedPercent,
+  formatSignedRatioPercent,
   probabilitiesToPercents,
 } from "@/lib/format";
 import { buildPredictionsTsv } from "@/lib/predictions-export";
@@ -216,7 +216,7 @@ export function PredictionsSection({
                     <td>
                       <Triplet
                         values={[prediction.ev?.H, prediction.ev?.D, prediction.ev?.A]}
-                        format={formatSignedPercent}
+                        format={formatSignedRatioPercent}
                         toneBySign
                       />
                     </td>

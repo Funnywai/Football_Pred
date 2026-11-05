@@ -95,6 +95,24 @@ export function formatPercent(value: Numeric, digits = 1, fallback = "—"): str
   }).format(points)}%`;
 }
 
+/** Format a ratio (0.5 = 50%, 3.02 = 302%) without the tolerant heuristic. */
+export function formatSignedRatioPercent(
+  value: Numeric,
+  digits = 1,
+  fallback = "—",
+): string {
+  const parsed = asNumber(value);
+  if (parsed === null) return fallback;
+  const points = parsed * 100;
+  const body = new Intl.NumberFormat("en-HK", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(Math.abs(points));
+  if (points > 0) return `+${body}%`;
+  if (points < 0) return `−${body}%`;
+  return `${body}%`;
+}
+
 export function formatSignedPercent(
   value: Numeric,
   digits = 1,
