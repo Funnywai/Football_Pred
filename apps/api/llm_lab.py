@@ -213,7 +213,7 @@ def llm_status(request: Request, session: SessionDep) -> dict[str, Any]:
     enabled = bool(getattr(settings, "llm_enabled", False))
     provider = getattr(settings, "llm_provider", "openai_compatible")
     model = getattr(settings, "llm_model", "deepseek-v4.1-flash")
-    competition_codes = _competition_codes(getattr(settings, "llm_competitions", "UCL"))
+    competition_codes = _competition_codes(getattr(settings, "llm_competitions", "EPL,LALIGA,BUNDESLIGA,SERIEA,LIGUE1,UCL"))
     ledger, paper_bets = _llm_ledger(session)
     return {
         "generated_at": datetime.now(UTC).isoformat(),

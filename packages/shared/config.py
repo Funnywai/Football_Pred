@@ -30,7 +30,7 @@ class Settings(BaseSettings):
     llm_temperature: float = 0.0
     llm_max_tokens: int = 4000
     llm_timeout_seconds: float = 60.0
-    llm_competitions: str = "UCL"
+    llm_competitions: str = "EPL,LALIGA,BUNDESLIGA,SERIEA,LIGUE1,UCL"
     llm_session_id: str = ""
     max_total_exposure_fraction: Decimal = Decimal("0.20")
 

@@ -20,7 +20,7 @@ def test_llm_status_contract(tmp_path):
         assert payload["counts"]["prompts"] == 9
         assert payload["counts"]["predictions"] == 0
         assert payload["counts"]["paper_bets"] == 0
-        assert payload["competitions"] == ["UCL"]
+        assert payload["competitions"] == ["BUNDESLIGA", "EPL", "LALIGA", "LIGUE1", "SERIEA", "UCL"]
         assert payload["next_fixtures"] == []
         assert payload["safety"] == {
             "paper_only": True,
