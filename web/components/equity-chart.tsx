@@ -223,7 +223,9 @@ export function EquityChart({
           </b>
         </span>
         <span className="equity__points">
-          {series.map((item) => `${item.label} ${item.plot.length}`).join(" · ")} points
+          {series
+            .map((item) => `${item.label} ${item.plot.length} ${item.plot.length === 1 ? "point" : "points"}`)
+            .join(" · ")}
         </span>
       </figcaption>
     </figure>

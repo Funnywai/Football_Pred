@@ -3573,3 +3573,7 @@ th.num {
     grid-template-columns: 1fr;
   }
 }
+
+.overview-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}

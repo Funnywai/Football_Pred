@@ -115,7 +115,7 @@ export function LlmLedgerSection({
   return (
     <section id="llm-paper-ledger" className="section" aria-labelledby="llm-paper-ledger-title">
       <SectionHeader
-        index="05"
+        index="03"
         kicker="Separate paper account"
         title="Paper Ledger"
         meta={
@@ -144,7 +144,7 @@ export function LlmLedgerSection({
         }
       >
         <EquityChart
-          equity={equity}
+          equity={observations > 0 ? equity : null}
           currency={currency}
           unavailable={Boolean(equityResult.error)}
           primaryLabel="LLM"

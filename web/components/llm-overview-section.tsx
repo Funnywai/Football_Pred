@@ -148,7 +148,7 @@ export function LlmOverviewSection({
             />
           </div>
 
-          <div className="overview-grid">
+          <div className="overview-grid overview-grid--single">
             <Panel
               title="Next fixtures"
               kicker="Scheduled LLM competitions"
