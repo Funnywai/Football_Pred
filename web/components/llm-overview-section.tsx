@@ -1,4 +1,8 @@
+"use client";
+
 import type { EndpointResult } from "@/lib/api";
+import { useMemo, useState } from "react";
+
 import {
   asNumber,
   formatKickoff,
@@ -6,9 +10,11 @@ import {
   formatNumber,
   formatPercent,
   formatSignedPercent,
+  hktDateKey,
 } from "@/lib/format";
 import type { LlmStatus } from "@/lib/llm-types";
 
+import { DayNavigator } from "./day-navigator";
 import { TableFrame } from "./table-frame";
 import {
   DataWarning,
@@ -61,8 +67,34 @@ export function LlmOverviewSection({
   const data = result.data;
   const counts = data?.counts;
   const ledger = data?.ledger ?? null;
-  const allFixtures = Array.isArray(data?.next_fixtures) ? data.next_fixtures : [];
-  const fixtures = allFixtures.slice(0, 5);
+  const allFixtures = useMemo(
+    () => (Array.isArray(data?.next_fixtures) ? data.next_fixtures : []),
+    [data],
+  );
+  const dayKeys = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          allFixtures
+            .map((fixture) => hktDateKey(fixture.kickoff_at))
+            .filter((key): key is string => Boolean(key)),
+        ),
+      ).sort(),
+    [allFixtures],
+  );
+  const [dayIndex, setDayIndex] = useState(0);
+  const [fixtureQuery, setFixtureQuery] = useState("");
+  const selectedDay = dayKeys[dayIndex] ?? null;
+  const fixtures = useMemo(() => {
+    const needle = fixtureQuery.trim().toLowerCase();
+    return allFixtures.filter((fixture) => {
+      if (hktDateKey(fixture.kickoff_at) !== selectedDay) return false;
+      if (!needle) return true;
+      return [fixture.home_team, fixture.away_team, fixture.competition, fixture.status]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(needle));
+    });
+  }, [allFixtures, fixtureQuery, selectedDay]);
   const roi = asNumber(ledger?.roi);
   const drawdown = asNumber(ledger?.max_drawdown);
   const drawdownLabel =
@@ -73,10 +105,7 @@ export function LlmOverviewSection({
         : formatMoney(drawdown, ledger?.currency ?? "HKD");
   const currency = ledger?.currency?.trim() || "HKD";
 
-  const fixtureMeta =
-    allFixtures.length > fixtures.length
-      ? `${fixtures.length} of ${allFixtures.length} listed`
-      : `${fixtures.length} listed`;
+  const fixtureMeta = `${fixtures.length} / ${allFixtures.length} listed`;
 
   return (
     <section id="llm-overview" className="section" aria-labelledby="overview-title">
@@ -156,10 +185,36 @@ export function LlmOverviewSection({
               className="overview-grid__fixtures"
               bodyClassName="panel__body--flush"
             >
+              <div className="ledger-toolbar">
+                <label className="ledger-search">
+                  <span className="ledger-search__label">Search fixtures</span>
+                  <input
+                    className="ledger-search__input"
+                    type="search"
+                    value={fixtureQuery}
+                    onChange={(event) => {
+                      setFixtureQuery(event.target.value);
+                      setDayIndex(0);
+                    }}
+                    placeholder="Team, competition or status"
+                  />
+                </label>
+                <DayNavigator
+                  dayKey={selectedDay}
+                  dayIndex={dayIndex}
+                  dayCount={dayKeys.length}
+                  onFirst={() => setDayIndex(0)}
+                  onPrevious={() => setDayIndex((current) => Math.max(0, current - 1))}
+                  onNext={() =>
+                    setDayIndex((current) => Math.min(dayKeys.length - 1, current + 1))
+                  }
+                />
+              </div>
               {fixtures.length === 0 ? (
                 <EmptyState>
-                  No scheduled LLM fixtures were returned in this snapshot. Fixtures
-                  are not inferred from the deterministic schedule.
+                  {fixtureQuery.trim()
+                    ? "No fixtures match this search on the selected day."
+                    : "No scheduled LLM fixtures were returned in this snapshot. Fixtures are not inferred from the deterministic schedule."}
                 </EmptyState>
               ) : (
                 <TableFrame label="Upcoming LLM fixtures">
