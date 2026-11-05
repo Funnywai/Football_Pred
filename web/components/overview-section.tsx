@@ -145,7 +145,7 @@ export function OverviewSection({
               <span>
                 {v2?.experiment?.model_version ?? "poisson-v2-shrunk"} ·{" "}
                 {v2?.experiment?.strategy_version ?? "g1"}
-                {v2?.experiment ? "" : " · not active"}
+                {v2?.experiment ? " · active" : " · not active"}
               </span>
             </div>
             <div className="kpi-strip" role="group" aria-label="V2 key performance indicators">
