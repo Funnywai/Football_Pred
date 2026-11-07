@@ -302,6 +302,7 @@ def test_overview_contract(app, client):
     assert payload["counts"] == {
         "matches": 2,
         "predictions": 3,
+        "predicted_matches": 1,
         "bets": 1,
         "settlements": 1,
         "decisions": 1,
@@ -494,6 +495,7 @@ def test_challenger_endpoints_are_scoped_to_challenger_experiment(app, client):
     assert payload["ledger"]["pending_bets"] == 1
     assert payload["counts"]["bets"] == 1
     assert payload["counts"]["predictions"] == 3
+    assert payload["counts"]["predicted_matches"] == 1
     assert payload["counts"]["decisions"] == 1
 
     v2_predictions = client.get(
@@ -576,6 +578,7 @@ def test_empty_database_returns_zeros(app, client):
     assert payload["counts"] == {
         "matches": 0,
         "predictions": 0,
+        "predicted_matches": 0,
         "bets": 0,
         "settlements": 0,
         "decisions": 0,

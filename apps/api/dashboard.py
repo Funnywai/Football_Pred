@@ -127,6 +127,23 @@ def _account(session: Session, account_id: str) -> BankrollAccount | None:
     )
 
 
+def _predicted_match_count(
+    session: Session, experiment: LedgerExperiment | None
+) -> int:
+    """Matches with an actual bet/no-bet decision, excluding prediction-only."""
+    statement = (
+        select(func.count(func.distinct(DecisionLog.match_id)))
+        .select_from(DecisionLog)
+        .where(DecisionLog.status.in_(("bet", "no_bet")))
+    )
+    if experiment is not None:
+        statement = statement.where(DecisionLog.experiment_id == experiment.id)
+    else:
+        statement = statement.where(DecisionLog.experiment_id.is_(None))
+    value = _safe_scalar(session, statement)
+    return int(value or 0)
+
+
 def _scoped_count(session: Session, model: Any, experiment: LedgerExperiment | None) -> int:
     statement = select(func.count()).select_from(model)
     if experiment is not None:
@@ -278,6 +295,7 @@ def overview(request: Request, session: SessionDep) -> dict[str, Any]:
         "counts": {
             "matches": _count(session, Match),
             "predictions": _count(session, ModelPrediction),
+            "predicted_matches": _predicted_match_count(session, experiment),
             "bets": _scoped_count(session, PaperBet, experiment),
             "settlements": _count(session, Settlement),
             "decisions": _scoped_count(session, DecisionLog, experiment),
@@ -682,6 +700,7 @@ def challenger(request: Request, session: SessionDep) -> dict[str, Any]:
                 )
                 or 0
             ),
+            "predicted_matches": _predicted_match_count(session, experiment),
             "bets": _scoped_count(session, PaperBet, experiment),
             "decisions": _scoped_count(session, DecisionLog, experiment),
             "settled_bets": summary.settled_count,

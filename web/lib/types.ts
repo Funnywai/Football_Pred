@@ -26,6 +26,7 @@ export interface Health {
 export interface Counts {
   matches?: number | null;
   predictions?: number | null;
+  predicted_matches?: number | null;
   bets?: number | null;
   settlements?: number | null;
   decisions?: number | null;

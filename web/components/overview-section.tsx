@@ -133,8 +133,8 @@ export function OverviewSection({
             />
             <Kpi
               label="Predictions"
-              value={formatNumber(data.counts?.predictions)}
-              hint={`${formatNumber(data.counts?.decisions)} decisions · max DD ${drawdownLabel}`}
+              value={formatNumber(data.counts?.predicted_matches)}
+              hint={`max DD ${drawdownLabel}`}
             />
             </div>
           </div>
@@ -174,8 +174,8 @@ export function OverviewSection({
               />
               <Kpi
                 label="Predictions"
-                value={formatNumber(v2?.counts?.predictions)}
-                hint={`${formatNumber(v2?.counts?.decisions)} decisions · max DD ${v2DrawdownLabel}`}
+                value={formatNumber(v2?.counts?.predicted_matches)}
+                hint={`max DD ${v2DrawdownLabel}`}
               />
             </div>
           </div>

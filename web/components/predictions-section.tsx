@@ -170,10 +170,6 @@ export function PredictionsSection({
   );
   const copyText =
     visiblePredictions.length > 0 ? buildPredictionsTsv(visiblePredictions) : "";
-  const researchOnly = predictions.some(
-    (prediction) => prediction.decision_status === "prediction_only",
-  );
-
   return (
     <section id="predictions" className="section" aria-labelledby="predictions-title">
       <SectionHeader
@@ -209,13 +205,6 @@ export function PredictionsSection({
           }
           bodyClassName="panel__body--flush"
         >
-          {researchOnly ? (
-            <p className="prediction-caveat">
-              EV is a research diagnostic (model probability × T-30m odds − 1),
-              not a bet recommendation. Rows marked prediction only predate the
-              all-competition paper policy and do not enter the ledger.
-            </p>
-          ) : null}
           <div className="prediction-day-nav">
             <DayNavigator
               dayKey={selectedDay}
