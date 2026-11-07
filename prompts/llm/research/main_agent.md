@@ -29,3 +29,6 @@ Return JSON only with this schema:
   "abstain": false,
   "abstain_reason": null
 }
+
+Write all report prose fields (summary, key_findings, market_view, risks, reasoning)
+in Traditional Chinese (zh-Hant, Taiwan); keep the JSON schema and enum values unchanged.
