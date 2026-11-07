@@ -7,8 +7,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
-from fastapi import APIRouter, Query, Request
-from sqlalchemy import func, select
+from fastapi import APIRouter, HTTPException, Query, Request
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import aliased
 
@@ -274,32 +274,104 @@ def llm_research_runs(
     session: SessionDep,
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[dict[str, Any]]:
+    home = aliased(Team)
+    away = aliased(Team)
     try:
-        rows = session.scalars(
-            select(LlmResearchRun)
+        rows = session.execute(
+            select(
+                LlmResearchRun,
+                Match.kickoff_at,
+                Competition.code,
+                home.name,
+                away.name,
+            )
+            .join(Match, Match.id == LlmResearchRun.match_id)
+            .join(Competition, Competition.id == Match.competition_id)
+            .join(home, home.id == Match.home_team_id)
+            .join(away, away.id == Match.away_team_id)
             .order_by(LlmResearchRun.created_at.desc(), LlmResearchRun.id.desc())
             .limit(limit)
         ).all()
-    except SQLAlchemyError:
+        counts: dict[object, tuple[int, int]] = {}
+        run_ids = [row[0].id for row in rows]
+        if run_ids:
+            count_rows = session.execute(
+                select(
+                    LlmResearchFinding.run_id,
+                    func.count(),
+                    func.sum(case((LlmResearchFinding.abstain.is_(False), 1), else_=0)),
+                )
+                .where(LlmResearchFinding.run_id.in_(run_ids))
+                .group_by(LlmResearchFinding.run_id)
+            ).all()
+            counts = {
+                run_id: (int(active or 0), int(total or 0))
+                for run_id, total, active in count_rows
+            }
+    except SQLAlchemyError as exc:
         session.rollback()
-        return []
-    return [_research_run_payload(row) for row in rows]
+        raise HTTPException(
+            status_code=503, detail="research run store unavailable"
+        ) from exc
+    output: list[dict[str, Any]] = []
+    for row in rows:
+        active_findings, total_findings = counts.get(row[0].id, (0, 0))
+        output.append(
+            _research_run_payload(
+                row[0],
+                home_team=row[3],
+                away_team=row[4],
+                competition=row[2],
+                kickoff_at=row[1],
+                active_findings=active_findings,
+                total_findings=total_findings,
+            )
+        )
+    return output
 
 
 @router.get("/research-runs/{run_id}")
 def llm_research_run(run_id: str, session: SessionDep) -> dict[str, Any]:
     try:
         run = session.get(LlmResearchRun, uuid.UUID(run_id))
-    except (ValueError, SQLAlchemyError):
+    except ValueError:
         return {}
+    except SQLAlchemyError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=503, detail="research run store unavailable"
+        ) from exc
     if run is None:
         return {}
-    findings = session.scalars(
-        select(LlmResearchFinding)
-        .where(LlmResearchFinding.run_id == run.id)
-        .order_by(LlmResearchFinding.agent_id)
-    ).all()
-    payload = _research_run_payload(run)
+    home = aliased(Team)
+    away = aliased(Team)
+    try:
+        context = session.execute(
+            select(Match.kickoff_at, Competition.code, home.name, away.name)
+            .join(Competition, Competition.id == Match.competition_id)
+            .join(home, home.id == Match.home_team_id)
+            .join(away, away.id == Match.away_team_id)
+            .where(Match.id == run.match_id)
+        ).first()
+        findings = session.scalars(
+            select(LlmResearchFinding)
+            .where(LlmResearchFinding.run_id == run.id)
+            .order_by(LlmResearchFinding.agent_id)
+        ).all()
+    except SQLAlchemyError as exc:
+        session.rollback()
+        raise HTTPException(
+            status_code=503, detail="research run store unavailable"
+        ) from exc
+    payload = _research_run_payload(
+        run,
+        home_team=context[2] if context is not None else None,
+        away_team=context[3] if context is not None else None,
+        competition=context[1] if context is not None else None,
+        kickoff_at=context[0] if context is not None else None,
+        active_findings=sum(1 for finding in findings if not finding.abstain),
+        total_findings=len(findings),
+    )
     payload["findings"] = [
         {
             "agent_id": finding.agent_id,
@@ -317,7 +389,16 @@ def llm_research_run(run_id: str, session: SessionDep) -> dict[str, Any]:
     return payload
 
 
-def _research_run_payload(run: LlmResearchRun) -> dict[str, Any]:
+def _research_run_payload(
+    run: LlmResearchRun,
+    *,
+    home_team: str | None = None,
+    away_team: str | None = None,
+    competition: str | None = None,
+    kickoff_at: datetime | None = None,
+    active_findings: int = 0,
+    total_findings: int = 0,
+) -> dict[str, Any]:
     return {
         "run_id": str(run.id),
         "match_id": str(run.match_id),
@@ -338,6 +419,12 @@ def _research_run_payload(run: LlmResearchRun) -> dict[str, Any]:
         "risk": run.risk,
         "error": run.error,
         "created_at": _iso(run.created_at),
+        "home_team": home_team,
+        "away_team": away_team,
+        "competition": competition,
+        "kickoff_at": _iso(kickoff_at),
+        "active_findings": active_findings,
+        "total_findings": total_findings,
     }
 
 

@@ -29,10 +29,6 @@ export async function getLlmResearchRuns(): Promise<EndpointResult<LlmResearchRu
   return getJson<LlmResearchRun[]>("/llm/research-runs?limit=20", "array");
 }
 
-export async function getLlmResearchRun(runId: string): Promise<EndpointResult<LlmResearchRun>> {
-  return getJson<LlmResearchRun>(`/llm/research-runs/${runId}`, "object");
-}
-
 export async function getLlmPageData() {
   const [status, predictions, bets, equity, researchRuns] = await Promise.all([
     getLlmStatus(),

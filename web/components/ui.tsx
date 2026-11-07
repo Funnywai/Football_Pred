@@ -143,10 +143,12 @@ export function MatchCell({
     <div className="match">
       <span className="match__teams">
         <span>{homeLabel}</span>
-        <span className="match__vs" aria-hidden="true">
-          v
+        <span>
+          <span className="match__vs" aria-hidden="true">
+            v&nbsp;
+          </span>
+          {awayLabel}
         </span>
-        <span>{awayLabel}</span>
       </span>
       {meta ? <span className="match__meta">{meta}</span> : null}
     </div>

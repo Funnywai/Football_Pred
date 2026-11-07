@@ -156,6 +156,12 @@ export interface LlmResearchRun {
   stage?: string | null;
   as_of?: string | null;
   status?: string | null;
+  home_team?: string | null;
+  away_team?: string | null;
+  competition?: string | null;
+  kickoff_at?: string | null;
+  active_findings?: number | null;
+  total_findings?: number | null;
   model_version?: string | null;
   prompt_version?: string | null;
   provider?: string | null;

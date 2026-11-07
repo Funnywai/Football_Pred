@@ -5,7 +5,7 @@ import { LlmLedgerSection } from "@/components/llm-ledger-section";
 import { LlmOverviewSection } from "@/components/llm-overview-section";
 import { LlmResearchSection } from "@/components/llm-research-section";
 import { formatDateTime } from "@/lib/format";
-import { getLlmPageData, getLlmResearchRun } from "@/lib/llm-api";
+import { getLlmPageData } from "@/lib/llm-api";
 import type { LlmStatus } from "@/lib/llm-types";
 
 export const dynamic = "force-dynamic";
@@ -32,12 +32,6 @@ export default async function LlmLabPage() {
   } = await getLlmPageData();
   const data: LlmStatus | null = result.data;
   const generatedAt = data?.generated_at ?? null;
-  const latestRun = Array.isArray(researchRunsResult.data)
-    ? researchRunsResult.data[0]
-    : null;
-  const latestRunResult = latestRun?.run_id
-    ? await getLlmResearchRun(latestRun.run_id)
-    : null;
 
   return (
     <div className="shell llm-shell">
@@ -98,10 +92,7 @@ export default async function LlmLabPage() {
 
       <main id="main" className="main llm-main">
         <LlmOverviewSection result={result} />
-        <LlmResearchSection
-          runsResult={researchRunsResult}
-          latestResult={latestRunResult}
-        />
+        <LlmResearchSection runsResult={researchRunsResult} />
         <LlmLedgerSection
           ledger={data?.ledger ?? null}
           betsResult={betsResult}
