@@ -4,7 +4,9 @@ import { useMemo, useState } from "react";
 
 import { asNumber, formatKickoff } from "@/lib/format";
 import type { LlmResearchRun } from "@/lib/llm-types";
+import { buildLlmRunsTsv } from "@/lib/llm-runs-export";
 
+import { CopyTableButton } from "./copy-table-button";
 import { LlmRunDialog } from "./llm-run-dialog";
 import { TableFrame } from "./table-frame";
 import { EmptyState, MatchCell, Panel, StatusTag } from "./ui";
@@ -65,11 +67,27 @@ export function LlmRunsTable({ runs }: { runs: LlmResearchRun[] }) {
     });
   }, [activeStatus, query, runs]);
 
+  const copyText = useMemo(() => buildLlmRunsTsv(visible), [visible]);
+
   return (
     <Panel
       title="Research runs"
       kicker="Evidence → synthesis → risk"
-      meta={`${visible.length} / ${runs.length}`}
+      meta={
+        <div className="panel__meta-group">
+          <span>
+            {visible.length} / {runs.length}
+          </span>
+          {visible.length > 0 ? (
+            <CopyTableButton
+              text={copyText}
+              label="Copy"
+              title="Copy the filtered research runs as tab-separated values"
+              copiedMessage="Filtered research runs copied to clipboard"
+            />
+          ) : null}
+        </div>
+      }
       bodyClassName="panel__body--flush"
     >
       <div className="ledger-toolbar llm-runs-toolbar">

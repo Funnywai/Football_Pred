@@ -22,9 +22,13 @@ function fallbackCopy(text: string): void {
 export function CopyTableButton({
   text,
   label = "Copy",
+  title = "Copy the full prediction table as tab-separated values",
+  copiedMessage = "Prediction table copied to clipboard",
 }: {
   text: string;
   label?: string;
+  title?: string;
+  copiedMessage?: string;
 }) {
   const [state, setState] = useState<CopyState>("idle");
 
@@ -60,8 +64,8 @@ export function CopyTableButton({
       type="button"
       className={`panel-copy panel-copy--${state}`}
       onClick={copy}
-      title="Copy the full prediction table as tab-separated values"
-      aria-label="Copy the full prediction table as tab-separated values"
+      title={title}
+      aria-label={title}
     >
       <svg
         className="panel-copy__icon"
@@ -75,7 +79,7 @@ export function CopyTableButton({
       <span>{visibleLabel}</span>
       <span className="sr-only" aria-live="polite">
         {state === "copied"
-          ? "Prediction table copied to clipboard"
+          ? copiedMessage
           : state === "error"
             ? "Copy failed; try again"
             : ""}
