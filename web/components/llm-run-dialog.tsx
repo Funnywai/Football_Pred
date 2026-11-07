@@ -246,7 +246,7 @@ function AnalystTable({ run }: { run: LlmResearchRun }) {
               </td>
               <td data-label="立場">
                 {finding?.abstain ? (
-                  <StatusTag status="abstained" tone="negative" />
+                  <StatusTag status="abstained" />
                 ) : finding?.direction ? (
                   <StatusTag status={finding.direction} />
                 ) : (

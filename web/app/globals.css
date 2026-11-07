@@ -1666,7 +1666,9 @@ th.num {
   .equity__note {
     display: none;
   }
+}
 
+@media (max-width: 940px) {
   .table-frame--wide .table-frame__hint {
     display: block;
   }
@@ -3855,6 +3857,7 @@ th.num {
 }
 
 .llm-analyst__summary {
+  max-width: 65ch;
   margin: 0;
   color: var(--text-dim);
   font-size: 12px;
@@ -3862,6 +3865,7 @@ th.num {
 }
 
 .llm-analyst__findings {
+  max-width: 65ch;
   margin: 4px 0 0;
   padding-left: 14px;
   color: var(--text-dim);
