@@ -21,8 +21,8 @@ class LlmOutputTruncatedError(LlmProviderError):
 
 
 _TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504})
-_MAX_REQUEST_ATTEMPTS = 3
-_BACKOFF_SECONDS = (15.0, 30.0)
+_MAX_REQUEST_ATTEMPTS = 2
+_BACKOFF_SECONDS = (15.0,)
 
 
 @dataclass(frozen=True, slots=True)
@@ -218,6 +218,32 @@ class OpenAICompatibleProvider:
         raise last_error or LlmProviderError("LLM provider did not return JSON")
 
 
+class OllamaCloudProvider(OpenAICompatibleProvider):
+    provider = "ollama_cloud"
+
+
+class FallbackProvider:
+    """Try the primary provider, then the fallback provider."""
+
+    def __init__(self, primary: LlmProvider, fallback: LlmProvider) -> None:
+        self._primary = primary
+        self._fallback = fallback
+        self.provider = primary.provider
+        self.model = primary.model
+
+    def complete_json(self, system: str, user: str) -> ProviderResponse:
+        try:
+            return self._primary.complete_json(system, user)
+        except LlmProviderError as primary_error:
+            try:
+                return self._fallback.complete_json(system, user)
+            except LlmProviderError as fallback_error:
+                raise LlmProviderError(
+                    f"primary provider failed: {primary_error}; "
+                    f"fallback provider failed: {fallback_error}"
+                ) from fallback_error
+
+
 def build_provider(settings: Settings) -> LlmProvider | None:
     if not settings.llm_enabled:
         return None
@@ -225,7 +251,7 @@ def build_provider(settings: Settings) -> LlmProvider | None:
         return MockProvider(())
     if settings.llm_provider not in {"openai_compatible", "opencode_go"}:
         raise LlmProviderError(f"unsupported LLM provider {settings.llm_provider!r}")
-    return OpenAICompatibleProvider(
+    primary = OpenAICompatibleProvider(
         base_url=settings.llm_base_url,
         api_key=settings.llm_api_key or "",
         model=settings.llm_model,
@@ -234,6 +260,18 @@ def build_provider(settings: Settings) -> LlmProvider | None:
         timeout_seconds=settings.llm_timeout_seconds,
         session_id=settings.llm_session_id or None,
     )
+    fallback_key = (settings.llm_fallback_api_key or "").strip()
+    if not fallback_key:
+        return primary
+    fallback = OllamaCloudProvider(
+        base_url=settings.llm_fallback_base_url,
+        api_key=fallback_key,
+        model=settings.llm_fallback_model,
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
+        timeout_seconds=settings.llm_timeout_seconds,
+    )
+    return FallbackProvider(primary, fallback)
 
 
 def normalize_json_content(content: str) -> str:

@@ -331,6 +331,7 @@ def run_llm_research_assistant(
         return _result(run, findings, None, None)
 
     run.raw_response = response.content
+    run.provider = response.provider
     run.report = decision.report
     run.probabilities = {side: str(value) for side, value in decision.probabilities.items()}
     run.recommended_side = decision.recommended_side

@@ -7,9 +7,11 @@ import pytest
 import respx
 
 from packages.llm.providers import (
+    FallbackProvider,
     LlmOutputTruncatedError,
     LlmProviderError,
     OpenAICompatibleProvider,
+    ProviderResponse,
 )
 
 URL = "https://llm.local/chat/completions"
@@ -148,3 +150,61 @@ def test_complete_json_retries_transient_429():
 
     assert response.content == '{"a": 1}'
     assert route.call_count == 2
+
+
+@respx.mock
+def test_complete_json_stops_after_two_transient_attempts():
+    route = respx.post(URL).mock(
+        return_value=httpx.Response(
+            429,
+            headers={"retry-after": "0"},
+            json={"error": {"message": "cell is at capacity"}},
+        )
+    )
+    provider = OpenAICompatibleProvider(
+        base_url="https://llm.local", api_key="secret", model="test"
+    )
+
+    with pytest.raises(LlmProviderError, match="HTTP 429"):
+        provider.complete_json("system", "user")
+
+    assert route.call_count == 2
+
+
+class _StubProvider:
+    def __init__(self, name: str, outcome: LlmProviderError | None) -> None:
+        self.provider = name
+        self.model = name
+        self._outcome = outcome
+
+    def complete_json(self, system: str, user: str) -> ProviderResponse:
+        if self._outcome is not None:
+            raise self._outcome
+        return ProviderResponse(
+            content='{"a": 1}', raw={}, provider=self.provider, model=self.model
+        )
+
+
+def test_fallback_provider_uses_secondary_provider():
+    provider = FallbackProvider(
+        _StubProvider("primary", LlmProviderError("primary down")),
+        _StubProvider("ollama_cloud", None),
+    )
+
+    response = provider.complete_json("system", "user")
+
+    assert response.provider == "ollama_cloud"
+
+
+def test_fallback_provider_reports_both_failures():
+    provider = FallbackProvider(
+        _StubProvider("primary", LlmProviderError("primary down")),
+        _StubProvider("ollama_cloud", LlmProviderError("fallback down")),
+    )
+
+    with pytest.raises(
+        LlmProviderError,
+        match="primary provider failed: primary down; "
+        "fallback provider failed: fallback down",
+    ):
+        provider.complete_json("system", "user")

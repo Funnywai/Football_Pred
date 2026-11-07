@@ -29,7 +29,10 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_temperature: float = 0.0
     llm_max_tokens: int = 16000
-    llm_timeout_seconds: float = 180.0
+    llm_timeout_seconds: float = 120.0
+    llm_fallback_base_url: str = "https://ollama.com/v1"
+    llm_fallback_api_key: str | None = None
+    llm_fallback_model: str = "deepseek-v4.1-flash:1017"
     llm_competitions: str = "EPL,LALIGA,BUNDESLIGA,SERIEA,LIGUE1,UCL"
     llm_session_id: str = ""
     news_feed_urls: str = (
