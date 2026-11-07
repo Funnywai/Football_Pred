@@ -15,6 +15,10 @@ class LlmProviderError(RuntimeError):
     """Raised when the configured LLM provider cannot return JSON."""
 
 
+class LlmOutputTruncatedError(LlmProviderError):
+    """Raised when the provider stops because the output token budget ran out."""
+
+
 @dataclass(frozen=True, slots=True)
 class ProviderResponse:
     content: str
@@ -75,7 +79,9 @@ class OpenAICompatibleProvider:
         self.timeout_seconds = timeout_seconds
         self.session_id = session_id or f"football-llm-{uuid.uuid4()}"
 
-    def _payload(self, system: str, user: str) -> dict[str, Any]:
+    def _payload(
+        self, system: str, user: str, *, max_tokens: int | None = None
+    ) -> dict[str, Any]:
         return {
             "model": self.model,
             "messages": [
@@ -83,21 +89,28 @@ class OpenAICompatibleProvider:
                 {"role": "user", "content": user},
             ],
             "temperature": self.temperature,
-            "max_tokens": self.max_tokens,
+            "max_tokens": self.max_tokens if max_tokens is None else max_tokens,
             "response_format": {"type": "json_object"},
         }
 
-    def _request_content(self, system: str, user: str) -> tuple[str, dict[str, Any]]:
+    def _request_content(
+        self, system: str, user: str, *, max_tokens: int | None = None
+    ) -> tuple[str, dict[str, Any]]:
         endpoint = f"{self.base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
             "x-opencode-session": self.session_id,
         }
+        budget = self.max_tokens if max_tokens is None else max_tokens
         with httpx.Client(timeout=self.timeout_seconds) as client:
-            response = client.post(endpoint, headers=headers, json=self._payload(system, user))
+            response = client.post(
+                endpoint,
+                headers=headers,
+                json=self._payload(system, user, max_tokens=budget),
+            )
             if response.status_code == 400:
-                payload = self._payload(system, user)
+                payload = self._payload(system, user, max_tokens=budget)
                 payload.pop("response_format", None)
                 response = client.post(endpoint, headers=headers, json=payload)
             if response.status_code >= 400:
@@ -111,11 +124,26 @@ class OpenAICompatibleProvider:
         message = choices[0].get("message") if isinstance(choices[0], dict) else None
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, str) or not content.strip():
-            raise LlmProviderError("LLM provider returned empty content")
+            finish_reason = choices[0].get("finish_reason")
+            details = (body.get("usage") or {}).get("completion_tokens_details") or {}
+            reasoning_tokens = details.get("reasoning_tokens")
+            if finish_reason == "length":
+                raise LlmOutputTruncatedError(
+                    "LLM output truncated: "
+                    f"finish_reason=length, reasoning_tokens={reasoning_tokens}, "
+                    f"max_tokens={budget}"
+                )
+            raise LlmProviderError(
+                "LLM provider returned empty content "
+                f"(finish_reason={finish_reason!r}, "
+                f"reasoning_tokens={reasoning_tokens}, max_tokens={budget})"
+            )
         return content, body
 
     def complete_json(self, system: str, user: str) -> ProviderResponse:
         attempts = 2
+        max_budget = max(self.max_tokens, 32000)
+        budget = self.max_tokens
         last_error: LlmProviderError | None = None
         for attempt in range(1, attempts + 1):
             prompt = user
@@ -125,7 +153,15 @@ class OpenAICompatibleProvider:
                     + "\n\nIMPORTANT: Your previous answer was not valid JSON. "
                     "Return ONLY one complete JSON object, with no prose and no truncation."
                 )
-            content, body = self._request_content(system, prompt)
+            try:
+                content, body = self._request_content(
+                    system, prompt, max_tokens=budget
+                )
+            except LlmOutputTruncatedError:
+                if budget < max_budget:
+                    budget = min(budget * 2, max_budget)
+                    continue
+                raise
             try:
                 normalized = normalize_json_content(content)
             except LlmProviderError as exc:
