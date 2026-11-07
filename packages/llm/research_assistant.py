@@ -293,17 +293,40 @@ def run_llm_research_assistant(
         finding_payloads,
         available_bankroll,
     )
-    try:
-        response = provider.complete_json(system, main_user)
-        decision = MainAgentDecision.model_validate_json(
-            normalize_json_content(response.content)
-        )
-        unknown = sorted(set(decision.evidence_refs) - allowed_refs)
-        if unknown:
-            raise ValueError(f"unknown evidence refs: {unknown}")
-    except Exception as exc:  # noqa: BLE001 - persist failed run
+    decision: MainAgentDecision | None = None
+    response = None
+    last_error: Exception | None = None
+    for attempt in range(2):
+        prompt = main_user
+        if attempt > 0:
+            prompt = (
+                main_user
+                + "\n\nYOUR PREVIOUS JSON FAILED VALIDATION:\n"
+                + str(last_error)
+                + "\nReturn ONE JSON object containing ALL required fields: "
+                "report, probabilities, recommended_side, recommended_stake_pct, "
+                "confidence, evidence_refs, abstain, abstain_reason."
+            )
+        try:
+            response = provider.complete_json(system, prompt)
+            decision = MainAgentDecision.model_validate_json(
+                normalize_json_content(response.content)
+            )
+            unknown = sorted(set(decision.evidence_refs) - allowed_refs)
+            if unknown:
+                raise ValueError(f"unknown evidence refs: {unknown}")
+            break
+        except ValueError as exc:  # schema or evidence-ref violation: retry once
+            last_error = exc
+            decision = None
+        except Exception as exc:  # noqa: BLE001 - persist failed run
+            run.status = "failed"
+            run.error = str(exc)
+            session.flush()
+            return _result(run, findings, None, None)
+    if decision is None or response is None:
         run.status = "failed"
-        run.error = str(exc)
+        run.error = str(last_error)
         session.flush()
         return _result(run, findings, None, None)
 

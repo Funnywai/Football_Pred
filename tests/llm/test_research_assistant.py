@@ -226,3 +226,62 @@ def test_assistant_reaches_main_agent_with_two_active_findings():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_assistant_retries_main_agent_once_after_schema_violation():
+    engine, session = _session()
+    try:
+        match, _snapshot = _seed(session)
+        refs = [f"match:{match.id}"]
+        responses = [
+            _finding(agent_id, refs[0]) for agent_id, _name, _scope in ROLE_AGENTS
+        ]
+        responses.append(
+            json.dumps(
+                {
+                    "report": {
+                        "summary": "missing required decision fields",
+                        "key_findings": [],
+                        "market_view": "fair",
+                        "risks": [],
+                        "reasoning": "incomplete",
+                    },
+                    "probabilities": {"H": 0.5, "D": 0.3, "A": 0.2},
+                }
+            )
+        )
+        responses.append(
+            json.dumps(
+                {
+                    "report": {
+                        "summary": "retry produced a complete decision",
+                        "key_findings": [],
+                        "market_view": "fair",
+                        "risks": [],
+                        "reasoning": "complete",
+                    },
+                    "probabilities": {"H": 0.5, "D": 0.3, "A": 0.2},
+                    "recommended_side": "H",
+                    "recommended_stake_pct": 0.01,
+                    "confidence": 0.7,
+                    "evidence_refs": refs,
+                    "abstain": False,
+                    "abstain_reason": None,
+                }
+            )
+        )
+        provider = MockProvider(responses)
+
+        result = run_llm_research_assistant(
+            session,
+            match.id,
+            provider=provider,
+            max_workers=1,
+        )
+
+        assert result["status"] in {"bet", "no_bet"}
+        assert len(provider.calls) == len(ROLE_AGENTS) + 2
+        assert "FAILED VALIDATION" in provider.calls[-1][1]
+    finally:
+        session.close()
+        engine.dispose()

@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_temperature: float = 0.0
     llm_max_tokens: int = 16000
-    llm_timeout_seconds: float = 60.0
+    llm_timeout_seconds: float = 180.0
     llm_competitions: str = "EPL,LALIGA,BUNDESLIGA,SERIEA,LIGUE1,UCL"
     llm_session_id: str = ""
     news_feed_urls: str = (

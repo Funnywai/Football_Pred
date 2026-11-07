@@ -126,3 +126,25 @@ def test_complete_json_raises_truncated_when_max_budget_is_exhausted():
 
     with pytest.raises(LlmOutputTruncatedError, match="finish_reason=length"):
         provider.complete_json("system", "user")
+
+
+@respx.mock
+def test_complete_json_retries_transient_429():
+    route = respx.post(URL).mock(
+        side_effect=[
+            httpx.Response(
+                429,
+                headers={"retry-after": "0"},
+                json={"error": {"message": "cell is at capacity"}},
+            ),
+            _content_response('{"a": 1}'),
+        ]
+    )
+    provider = OpenAICompatibleProvider(
+        base_url="https://llm.local", api_key="secret", model="test"
+    )
+
+    response = provider.complete_json("system", "user")
+
+    assert response.content == '{"a": 1}'
+    assert route.call_count == 2

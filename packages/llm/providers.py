@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -17,6 +18,11 @@ class LlmProviderError(RuntimeError):
 
 class LlmOutputTruncatedError(LlmProviderError):
     """Raised when the provider stops because the output token budget ran out."""
+
+
+_TRANSIENT_STATUS = frozenset({429, 500, 502, 503, 504})
+_MAX_REQUEST_ATTEMPTS = 3
+_BACKOFF_SECONDS = (15.0, 30.0)
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,6 +99,41 @@ class OpenAICompatibleProvider:
             "response_format": {"type": "json_object"},
         }
 
+    def _post(
+        self,
+        client: httpx.Client,
+        endpoint: str,
+        headers: dict[str, str],
+        payload: dict[str, Any],
+    ) -> httpx.Response:
+        for attempt in range(_MAX_REQUEST_ATTEMPTS):
+            try:
+                response = client.post(endpoint, headers=headers, json=payload)
+            except (httpx.TimeoutException, httpx.TransportError) as exc:
+                if attempt + 1 >= _MAX_REQUEST_ATTEMPTS:
+                    raise LlmProviderError(
+                        "LLM provider request failed after "
+                        f"{_MAX_REQUEST_ATTEMPTS} attempts: {exc}"
+                    ) from exc
+                time.sleep(_BACKOFF_SECONDS[min(attempt, len(_BACKOFF_SECONDS) - 1)])
+                continue
+            if response.status_code in _TRANSIENT_STATUS:
+                if attempt + 1 >= _MAX_REQUEST_ATTEMPTS:
+                    raise LlmProviderError(
+                        f"LLM provider HTTP {response.status_code}: "
+                        f"{response.text[:500]}"
+                    )
+                retry_after = response.headers.get("retry-after", "")
+                delay = (
+                    float(retry_after)
+                    if retry_after.replace(".", "", 1).isdigit()
+                    else _BACKOFF_SECONDS[min(attempt, len(_BACKOFF_SECONDS) - 1)]
+                )
+                time.sleep(min(delay, 60.0))
+                continue
+            return response
+        raise LlmProviderError("LLM provider request failed")
+
     def _request_content(
         self, system: str, user: str, *, max_tokens: int | None = None
     ) -> tuple[str, dict[str, Any]]:
@@ -104,15 +145,16 @@ class OpenAICompatibleProvider:
         }
         budget = self.max_tokens if max_tokens is None else max_tokens
         with httpx.Client(timeout=self.timeout_seconds) as client:
-            response = client.post(
+            response = self._post(
+                client,
                 endpoint,
-                headers=headers,
-                json=self._payload(system, user, max_tokens=budget),
+                headers,
+                self._payload(system, user, max_tokens=budget),
             )
             if response.status_code == 400:
                 payload = self._payload(system, user, max_tokens=budget)
                 payload.pop("response_format", None)
-                response = client.post(endpoint, headers=headers, json=payload)
+                response = self._post(client, endpoint, headers, payload)
             if response.status_code >= 400:
                 raise LlmProviderError(
                     f"LLM provider HTTP {response.status_code}: {response.text[:500]}"
