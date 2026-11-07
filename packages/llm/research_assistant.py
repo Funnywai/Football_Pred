@@ -8,9 +8,15 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from packages.db.models import LlmResearchFinding, LlmResearchRun, Match
+from packages.db.models import (
+    LlmEvidencePacket,
+    LlmResearchFinding,
+    LlmResearchRun,
+    Match,
+)
 from packages.ledger.service import LedgerService
 from packages.llm.evidence import build_evidence_packet
 from packages.llm.prompts.registry import PromptRegistry
@@ -27,7 +33,8 @@ from packages.llm.risk import (
 )
 from packages.shared.time import ensure_utc, utc_now
 
-PROMPT_VERSION = "research-v1"
+PROMPT_VERSION = "research-v2"
+MIN_ACTIVE_FINDINGS = 2
 _DEFAULT_PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts" / "llm" / "research"
 
 
@@ -144,6 +151,23 @@ def run_llm_research_assistant(
     packet, evidence_hash = build_evidence_packet(
         session, match_id, as_of=cutoff, stage=stage
     )
+    packet_row = session.scalar(
+        select(LlmEvidencePacket).where(
+            LlmEvidencePacket.match_id == match.id,
+            LlmEvidencePacket.stage == stage,
+            LlmEvidencePacket.packet_hash == evidence_hash,
+        )
+    )
+    if packet_row is None:
+        packet_row = LlmEvidencePacket(
+            match_id=match.id,
+            stage=stage,
+            as_of=cutoff,
+            packet_hash=evidence_hash,
+            packet=packet,
+        )
+        session.add(packet_row)
+        session.flush()
     allowed_refs = set(packet.get("source_refs", []))
     registry = PromptRegistry.from_directory(prompt_dir or _DEFAULT_PROMPT_DIR)
     system = registry.get("system").text
@@ -253,10 +277,13 @@ def run_llm_research_assistant(
     session.flush()
 
     active = [finding for finding in findings if not finding.abstain]
-    if len(active) < 3:
+    if len(active) < MIN_ACTIVE_FINDINGS:
         run.status = "abstained"
         run.abstain = True
-        run.error = f"only {len(active)} active role findings; at least 3 required"
+        run.error = (
+            f"only {len(active)} active role findings; "
+            f"at least {MIN_ACTIVE_FINDINGS} required"
+        )
         session.flush()
         return _result(run, findings, None, None)
 

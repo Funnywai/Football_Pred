@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import timedelta
 from pathlib import Path
@@ -28,6 +29,8 @@ _LLM_PREDICTION_OFFSET = timedelta(minutes=28)
 # RQ's default 180s timeout is too short for the 9-call pipeline.
 _LLM_JOB_TIMEOUT_SECONDS = 1200
 
+logger = logging.getLogger(__name__)
+
 
 def run_llm_prediction_job(match_id: str, stage: str = "T-30m") -> dict[str, object]:
     settings = get_settings()
@@ -44,14 +47,31 @@ def run_llm_prediction_job(match_id: str, stage: str = "T-30m") -> dict[str, obj
                 match = session.get(Match, uuid.UUID(match_id))
                 if match is not None:
                     try:
-                        collect_match_evidence(
+                        status = collect_match_evidence(
                             session,
                             match,
                             build_adapters(settings),
                             settings,
                         )
-                    except Exception:  # noqa: BLE001 - missing evidence must not stop the run
+                        logger.info(
+                            "evidence status for match %s: %s", match_id, status
+                        )
+                        errors = {
+                            source: value
+                            for source, value in status.items()
+                            if str(value).startswith("error:")
+                        }
+                        if errors:
+                            logger.warning(
+                                "evidence source errors for match %s: %s",
+                                match_id,
+                                errors,
+                            )
+                    except Exception:
                         session.rollback()
+                        logger.exception(
+                            "evidence collection failed for match %s", match_id
+                        )
                 return run_llm_research_assistant(
                     session,
                     uuid.UUID(match_id),

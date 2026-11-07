@@ -192,6 +192,13 @@ def test_canonical_team_slug_maps_ucl_provider_names_to_hkjc_names():
     assert canonical_team_slug("Bruges") == "club-brugge"
 
 
+def test_canonical_team_slug_maps_hkjc_exonyms_to_stored_slugs():
+    assert canonical_team_slug("Cologne") == "1-fc-koln"
+    assert canonical_team_slug("Bilbao") == "athletic-bilbao"
+    assert canonical_team_slug("Rennes") == "stade-rennais-fc-1901"
+    assert canonical_team_slug("Gladbach") == "borussia-monchengladbach"
+
+
 def test_canonical_team_slug_rejects_blank_name():
     with pytest.raises(ValueError):
         canonical_team_slug("   ")

@@ -239,3 +239,36 @@ def test_fetch_match_details_non_json_raises_schema_error():
         pytest.raises(AdapterSchemaError, match="did not return JSON"),
     ):
         adapter.fetch_match_details(12345)
+
+
+def test_parse_team_xg_reads_league_table_xg():
+    from decimal import Decimal
+
+    payload = {
+        "table": [
+            {
+                "data": {
+                    "table": {
+                        "xg": [
+                            {
+                                "name": "Arsenal",
+                                "teamId": 9825,
+                                "played": 9,
+                                "xg": 14.5,
+                                "xgConceded": 7.2,
+                            }
+                        ]
+                    }
+                }
+            }
+        ]
+    }
+
+    rows = FotMobAdapter.parse_team_xg(payload)
+
+    assert len(rows) == 1
+    assert rows[0].team_name == "Arsenal"
+    assert rows[0].team_id == 9825
+    assert rows[0].matches == 9
+    assert rows[0].xg == Decimal("14.5")
+    assert rows[0].xga == Decimal("7.2")

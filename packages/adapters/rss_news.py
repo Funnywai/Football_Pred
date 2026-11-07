@@ -59,7 +59,7 @@ class RssNewsAdapter(BaseAdapter):
     ) -> None:
         super().__init__(
             client=client,
-            limiter=limiter if limiter is not None else MinIntervalRateLimiter(900.0),
+            limiter=limiter if limiter is not None else MinIntervalRateLimiter(2.0),
         )
 
     def fetch_feed(self, feed_url: str, source_name: str) -> FetchResult:

@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from packages.db.base import Base
 from packages.db.models import (
     Competition,
+    LlmEvidencePacket,
     LlmResearchFinding,
     LlmResearchRun,
     MarketLine,
@@ -154,8 +155,73 @@ def test_assistant_runs_roles_then_main_agent_and_places_paper_bet():
         assert result["probabilities"] == {"H": "0.5", "D": "0.3", "A": "0.2"}
         assert result["paper_bet_id"] is not None
         assert session.scalar(select(LlmResearchRun)) is not None
+        assert session.scalar(select(LlmEvidencePacket)) is not None
         assert len(session.scalars(select(LlmResearchFinding)).all()) == len(ROLE_AGENTS)
         assert session.scalar(select(PaperBet)) is not None
+        assert len(provider.calls) == len(ROLE_AGENTS) + 1
+    finally:
+        session.close()
+        engine.dispose()
+
+
+def _abstain_finding(agent_id: str, ref: str) -> str:
+    return json.dumps(
+        {
+            "agent_id": agent_id,
+            "summary": f"{agent_id} abstains",
+            "key_findings": [],
+            "confidence": 0.2,
+            "direction": "abstain",
+            "evidence_refs": [ref],
+            "uncertainties": ["missing data"],
+            "abstain": True,
+            "abstain_reason": "source data missing",
+        }
+    )
+
+
+def test_assistant_reaches_main_agent_with_two_active_findings():
+    engine, session = _session()
+    try:
+        match, _snapshot = _seed(session)
+        refs = [f"match:{match.id}"]
+        responses = []
+        for index, (agent_id, _name, _scope) in enumerate(ROLE_AGENTS):
+            if index < 2:
+                responses.append(_finding(agent_id, refs[0]))
+            else:
+                responses.append(_abstain_finding(agent_id, refs[0]))
+        responses.append(
+            json.dumps(
+                {
+                    "report": {
+                        "summary": "limited but usable evidence",
+                        "key_findings": ["market and form agree"],
+                        "market_view": "fair price",
+                        "risks": ["thin data"],
+                        "reasoning": "two active agents",
+                    },
+                    "probabilities": {"H": 0.45, "D": 0.30, "A": 0.25},
+                    "recommended_side": "H",
+                    "recommended_stake_pct": 0.01,
+                    "confidence": 0.55,
+                    "evidence_refs": refs,
+                    "abstain": False,
+                    "abstain_reason": None,
+                }
+            )
+        )
+        provider = MockProvider(responses)
+
+        result = run_llm_research_assistant(
+            session,
+            match.id,
+            provider=provider,
+            max_workers=1,
+        )
+
+        assert result["status"] in {"bet", "no_bet"}
+        assert result["status"] != "abstained"
         assert len(provider.calls) == len(ROLE_AGENTS) + 1
     finally:
         session.close()

@@ -29,6 +29,10 @@ def _enqueue_recent_result_refresh(queue: Queue) -> None:
     queue.enqueue("apps.worker.jobs.run_recent_result_refresh")
 
 
+def _enqueue_fotmob_link(queue: Queue) -> None:
+    queue.enqueue("apps.worker.jobs.run_fotmob_link", job_timeout=900)
+
+
 def _enqueue_settlement_scan(queue: Queue) -> None:
     queue.enqueue(
         "apps.worker.jobs.run_settlement_scan",
@@ -89,6 +93,13 @@ def build_scheduler(queue: Queue | None = None) -> BlockingScheduler:
         replace_existing=True,
         max_instances=1,
         coalesce=True,
+        misfire_grace_time=grace_seconds,
+    )
+    scheduler.add_job(
+        lambda: _enqueue_fotmob_link(resolved),
+        CronTrigger(hour=6, minute=20, timezone=HONG_KONG_TIMEZONE),
+        id="fotmob-link",
+        replace_existing=True,
         misfire_grace_time=grace_seconds,
     )
     scheduler.add_job(

@@ -159,8 +159,14 @@ def _decide_match(
         return _skipped("competition is not supported")
     if match.status != MatchStatus.SCHEDULED:
         return _skipped("match is not scheduled")
-    if snapshot is None or snapshot.market != MarketType.HAD:
-        return _skipped("odds snapshot is not a HAD snapshot")
+    if snapshot is None:
+        return _skipped(
+            "no odds snapshot available (HKJC link missing or odds fetch skipped)"
+        )
+    if snapshot.market != MarketType.HAD:
+        return _skipped(
+            f"odds snapshot is not a HAD snapshot ({snapshot.market.value})"
+        )
 
     decision_at = ensure_utc(snapshot.snapshot_at)
     current = ensure_utc(now) if now is not None else utc_now()

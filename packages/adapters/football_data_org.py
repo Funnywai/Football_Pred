@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -32,6 +33,8 @@ _STATUS_MAP = {
 }
 
 _DEFAULT_LIMITER = MinIntervalRateLimiter(6.5)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -204,9 +207,12 @@ class FootballDataOrgAdapter(BaseAdapter):
                     )
                 status = _STATUS_MAP.get(raw_status.upper())
                 if status is None:
-                    raise AdapterSchemaError(
-                        f"unsupported provider status {raw_status!r} for match {source_match_id}"
+                    logger.warning(
+                        "skipping match %s: unsupported provider status %r",
+                        source_match_id,
+                        raw_status,
                     )
+                    continue
                 home_team = row["homeTeam"]
                 away_team = row["awayTeam"]
                 if not isinstance(home_team, dict):

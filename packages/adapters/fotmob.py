@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from typing import ClassVar, cast
 
 import httpx
@@ -9,14 +10,25 @@ import httpx
 from packages.adapters.base import (
     AdapterSchemaError,
     BaseAdapter,
+    CoverageGapError,
     FetchResult,
     MinIntervalRateLimiter,
 )
 from packages.domain.enums import AvailabilityStatus, LineupType
+from packages.shared.time import parse_iso_utc
 
 COMPETITION_CODES = frozenset(
     {"EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1", "UCL"}
 )
+
+FOTMOB_LEAGUE_IDS = {
+    "EPL": 47,
+    "LALIGA": 87,
+    "BUNDESLIGA": 54,
+    "SERIEA": 55,
+    "LIGUE1": 53,
+    "UCL": 42,
+}
 
 _UNAVAILABLE_STATUS = {
     "injury": AvailabilityStatus.INJURY,
@@ -43,6 +55,23 @@ class LineupDTO:
     starters: tuple[LineupPlayer, ...]
     subs: tuple[LineupPlayer, ...]
     inferred: bool
+
+
+@dataclass(frozen=True)
+class FotMobFixture:
+    fixture_id: int
+    kickoff_at: datetime
+    home_name: str
+    away_name: str
+
+
+@dataclass(frozen=True)
+class FotMobTeamXG:
+    team_id: int | None
+    team_name: str
+    matches: int | None
+    xg: Decimal
+    xga: Decimal
 
 
 @dataclass(frozen=True)
@@ -119,6 +148,18 @@ def _lineup_players(
     return tuple(_lineup_player(raw, label) for raw in raw_players)
 
 
+def _decimal_required(value: object, label: str) -> Decimal:
+    if value is None:
+        raise AdapterSchemaError(f"{label} is missing")
+    try:
+        parsed = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise AdapterSchemaError(f"{label} is not a decimal") from exc
+    if not parsed.is_finite():
+        raise AdapterSchemaError(f"{label} must be finite")
+    return parsed
+
+
 def _expected_return(value: object, label: str) -> date | None:
     if value is None:
         return None
@@ -152,12 +193,112 @@ class FotMobAdapter(BaseAdapter):
     def supports_competition(cls, competition_code: str) -> bool:
         return competition_code.upper() in cls.competition_codes
 
+    def fetch_league_fixtures(
+        self,
+        competition_code: str,
+        season_start_year: int,
+    ) -> FetchResult:
+        league_id = FOTMOB_LEAGUE_IDS.get(competition_code.upper())
+        if league_id is None:
+            raise CoverageGapError(
+                f"fotmob has no league mapping for {competition_code}"
+            )
+        season = f"{season_start_year}-{season_start_year + 1}"
+        return self._get_json(
+            f"{self._base_url}/leagues",
+            params={"id": league_id, "season": season},
+        )
+
+    @staticmethod
+    def parse_league_fixtures(payload: object) -> list[FotMobFixture]:
+        root = _as_object(payload, "payload")
+        fixtures = _as_object(root.get("fixtures"), "fixtures")
+        raw_matches = _as_list(fixtures.get("allMatches"), "fixtures.allMatches")
+        rows: list[FotMobFixture] = []
+        for index, raw in enumerate(raw_matches):
+            label = f"fixtures.allMatches[{index}]"
+            row = _as_object(raw, label)
+            fixture_id = _positive_int(row.get("id"), f"{label}.id")
+            home = _as_object(row.get("home"), f"{label}.home")
+            away = _as_object(row.get("away"), f"{label}.away")
+            status = _as_object(row.get("status"), f"{label}.status")
+            raw_kickoff = status.get("utcTime")
+            if not isinstance(raw_kickoff, str):
+                raise AdapterSchemaError(f"{label}.status.utcTime must be a string")
+            kickoff_at = parse_iso_utc(raw_kickoff)
+            if kickoff_at is None:
+                raise AdapterSchemaError(f"{label}.status.utcTime is invalid")
+            home_name = _optional_string(home.get("name"), f"{label}.home.name")
+            away_name = _optional_string(away.get("name"), f"{label}.away.name")
+            if not home_name or not away_name:
+                raise AdapterSchemaError(f"{label} has an empty team name")
+            rows.append(
+                FotMobFixture(
+                    fixture_id=fixture_id,
+                    kickoff_at=kickoff_at,
+                    home_name=home_name,
+                    away_name=away_name,
+                )
+            )
+        return rows
+
     def fetch_match_details(self, match_id: int) -> FetchResult:
         validated_id = _positive_int(match_id, "match_id")
         return self._get_json(
             f"{self._base_url}/matchDetails",
             params={"matchId": str(validated_id)},
         )
+
+    @staticmethod
+    def parse_team_xg(payload: object) -> list[FotMobTeamXG]:
+        root = _as_object(payload, "payload")
+        raw_tables = _as_list(root.get("table"), "table")
+        rows: list[FotMobTeamXG] = []
+        for table_index, raw_table in enumerate(raw_tables):
+            table = _as_object(raw_table, f"table[{table_index}]")
+            data = _as_object(table.get("data"), f"table[{table_index}].data")
+            table_data = _as_object(
+                data.get("table"), f"table[{table_index}].data.table"
+            )
+            raw_entries = table_data.get("xg")
+            if raw_entries is None:
+                continue
+            entries = _as_list(
+                raw_entries, f"table[{table_index}].data.table.xg"
+            )
+            for index, raw in enumerate(entries):
+                label = f"table[{table_index}].data.table.xg[{index}]"
+                entry = _as_object(raw, label)
+                name = _optional_string(
+                    entry.get("name") or entry.get("teamName"), f"{label}.name"
+                )
+                if not name:
+                    raise AdapterSchemaError(f"{label}.name is empty")
+                raw_team_id = entry.get("teamId") or entry.get("id")
+                team_id = (
+                    _positive_int(raw_team_id, f"{label}.teamId")
+                    if raw_team_id is not None
+                    else None
+                )
+                raw_played = entry.get("played")
+                matches = (
+                    int(raw_played)
+                    if isinstance(raw_played, (int, float))
+                    and not isinstance(raw_played, bool)
+                    else None
+                )
+                rows.append(
+                    FotMobTeamXG(
+                        team_id=team_id,
+                        team_name=name,
+                        matches=matches,
+                        xg=_decimal_required(entry.get("xg"), f"{label}.xg"),
+                        xga=_decimal_required(
+                            entry.get("xgConceded"), f"{label}.xgConceded"
+                        ),
+                    )
+                )
+        return rows
 
     @staticmethod
     def parse_lineups(payload: object, lineup_type: LineupType) -> list[LineupDTO]:

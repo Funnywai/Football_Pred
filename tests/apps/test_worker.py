@@ -32,13 +32,16 @@ from apps.worker.jobs import (
 from packages.adapters.base import AdapterHTTPError, FetchResult, hash_text
 from packages.db.base import Base
 from packages.db.models import (
+    Availability,
     Competition,
     DecisionLog,
+    Lineup,
     MarketLine,
     Match,
     ModelPrediction,
     OddsSnapshot,
     PaperBet,
+    Player,
     RawPayload,
     SourceFetchRun,
     Team,
@@ -82,7 +85,25 @@ STANDARD_LINEUP_PAYLOAD = {
                 "starters": [{"id": 2, "name": "Away GK", "position": "GK"}],
                 "subs": [],
             },
-        }
+        },
+        "unavailable": {
+            "homeTeam": [
+                {
+                    "id": 11,
+                    "name": "Home Injured",
+                    "type": "injury",
+                    "reason": "hamstring",
+                }
+            ],
+            "awayTeam": [
+                {
+                    "id": 12,
+                    "name": "Away Doubt",
+                    "type": "doubtful",
+                    "reason": "knock",
+                }
+            ],
+        },
     }
 }
 
@@ -569,11 +590,12 @@ def test_run_daily_ingest_records_a_failed_football_data_run(monkeypatch):
         run_daily_ingest(season=2025)
 
     with factory() as session:
-        run = session.query(SourceFetchRun).one()
-        assert run.source_name == "football-data.org"
-        assert run.status is FetchRunStatus.FAILED
-        assert run.error_count == 1
-        assert "football-data unavailable" in (run.error_summary or "")
+        runs = session.query(SourceFetchRun).all()
+        assert runs
+        assert all(run.source_name == "football-data.org" for run in runs)
+        assert all(run.status is FetchRunStatus.FAILED for run in runs)
+        assert all(run.error_count == 1 for run in runs)
+        assert "football-data unavailable" in (runs[0].error_summary or "")
         assert session.query(Match).count() == 0
     engine.dispose()
 
@@ -829,6 +851,7 @@ def test_load_hkjc_result_persists_raw_result_before_parsing(session, monkeypatc
 def test_t75_lineup_check_confirms_and_clears_unconfirmed_flag(session):
     match = _match(session, flags=("lineup_unconfirmed", "lineup_link_missing"))
     status = check_lineup(
+        session,
         match,
         "T-75m",
         AdapterBundle(fotmob=_FakeFotMob(STANDARD_LINEUP_PAYLOAD)),
@@ -836,11 +859,20 @@ def test_t75_lineup_check_confirms_and_clears_unconfirmed_flag(session):
     assert status == "confirmed"
     assert "lineup_unconfirmed" not in match.coverage_flags
     assert "lineup_link_missing" not in match.coverage_flags
+    lineups = session.query(Lineup).order_by(Lineup.team_id).all()
+    assert len(lineups) == 2
+    assert all(lineup.starters for lineup in lineups)
+    assert {lineup.lineup_type.value for lineup in lineups} == {"standard"}
+    availability = session.query(Availability).all()
+    assert len(availability) == 2
+    assert {row.status.value for row in availability} == {"injury", "doubtful"}
+    assert session.query(Player).count() == 2
 
 
 def test_lineup_gate_records_missing_fotmob_link(session):
     match = _match(session, source_match_ids={})
     status = check_lineup(
+        session,
         match,
         "T-75m",
         AdapterBundle(fotmob=_FakeFotMob(STANDARD_LINEUP_PAYLOAD)),
@@ -853,6 +885,7 @@ def test_lineup_gate_records_missing_fotmob_link(session):
 def test_t30_recheck_marks_lineup_unconfirmed_when_missing(session):
     match = _match(session)
     status = check_lineup(
+        session,
         match,
         "T-30m",
         AdapterBundle(fotmob=_FakeFotMob({"content": {}})),
@@ -865,6 +898,7 @@ def test_lineup_check_rejects_a_non_lineup_trigger(session):
     match = _match(session)
     with pytest.raises(ValueError, match="not a lineup trigger"):
         check_lineup(
+            session,
             match,
             "T-24h",
             AdapterBundle(fotmob=_FakeFotMob(STANDARD_LINEUP_PAYLOAD)),
@@ -1364,3 +1398,153 @@ def test_reconciliation_isolates_per_match_errors(monkeypatch):
     with factory() as verify:
         assert verify.query(DecisionLog).count() == 0
     engine.dispose()
+
+
+def test_run_daily_ingest_links_hkjc_even_when_fixture_fetch_fails(monkeypatch):
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    settings = Settings(
+        database_url="sqlite+pysqlite:///:memory:",
+        _env_file=None,
+    )
+    with factory() as setup:
+        seed_competitions(setup)
+        competition = (
+            setup.query(Competition).filter(Competition.code == "EPL").one()
+        )
+        home = Team(
+            slug="tottenham",
+            name="Tottenham",
+            short_name="TOT",
+            country="England",
+        )
+        away = Team(
+            slug="crystal-palace",
+            name="Crystal Palace",
+            short_name="CRY",
+            country="England",
+        )
+        setup.add_all([home, away])
+        setup.flush()
+        setup.add(
+            Match(
+                competition_id=competition.id,
+                season="2026/27",
+                kickoff_at=datetime(2026, 10, 31, 17, 30, tzinfo=UTC),
+                home_team_id=home.id,
+                away_team_id=away.id,
+                status=MatchStatus.SCHEDULED,
+                source_match_ids={"football-data.org": "999"},
+                coverage_flags=[],
+            )
+        )
+        setup.commit()
+
+    monkeypatch.setattr("apps.worker.jobs.get_settings", lambda: settings)
+    monkeypatch.setattr(
+        "apps.worker.jobs.build_adapters",
+        lambda _settings: AdapterBundle(
+            football_data=_FailingFootballData(),
+            hkjc=_FakeHkjc(),
+        ),
+    )
+    monkeypatch.setattr("apps.worker.jobs.build_engine", lambda _url: engine)
+    monkeypatch.setattr("apps.worker.jobs.build_session_factory", lambda _engine: factory)
+
+    with pytest.raises(AdapterHTTPError, match="football-data unavailable"):
+        run_daily_ingest(season=2026, competitions=("EPL",))
+
+    with factory() as verify:
+        match = verify.query(Match).one()
+        assert match.source_match_ids["hkjc"] == "50078674"
+        runs = {run.source_name: run for run in verify.query(SourceFetchRun).all()}
+        assert runs["football-data.org"].status is FetchRunStatus.FAILED
+        assert runs["hkjc"].status is FetchRunStatus.SUCCEEDED
+    engine.dispose()
+
+
+def test_run_fotmob_link_links_upcoming_matches(monkeypatch):
+    from apps.worker.jobs import run_fotmob_link
+
+    now = datetime(2026, 11, 7, 10, 0, tzinfo=UTC)
+    engine, factory = _worker_runtime(monkeypatch, now=now)
+    with factory() as setup:
+        seed_competitions(setup)
+        competition = (
+            setup.query(Competition).filter(Competition.code == "EPL").one()
+        )
+        home = Team(
+            slug="leeds-united",
+            name="Leeds United FC",
+            short_name="LEE",
+            country="England",
+        )
+        away = Team(
+            slug="tottenham",
+            name="Tottenham Hotspur FC",
+            short_name="TOT",
+            country="England",
+        )
+        setup.add_all([home, away])
+        setup.flush()
+        setup.add(
+            Match(
+                competition_id=competition.id,
+                season="2026/27",
+                kickoff_at=datetime(2026, 11, 7, 12, 30, tzinfo=UTC),
+                home_team_id=home.id,
+                away_team_id=away.id,
+                status=MatchStatus.SCHEDULED,
+                source_match_ids={"football-data.org": "560635"},
+                coverage_flags=[],
+            )
+        )
+        setup.commit()
+
+    class _FakeFotMobFixtures:
+        def fetch_league_fixtures(self, competition_code, season_start_year):
+            return _fetch_result(
+                "fotmob",
+                {
+                    "fixtures": {
+                        "allMatches": [
+                            {
+                                "id": "5795511",
+                                "home": {"name": "Leeds United"},
+                                "away": {"name": "Tottenham Hotspur"},
+                                "status": {"utcTime": "2026-11-07T12:30:00Z"},
+                            }
+                        ]
+                    }
+                },
+            )
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(
+        "apps.worker.jobs._build_fotmob_link_adapter",
+        lambda: _FakeFotMobFixtures(),
+    )
+
+    result = run_fotmob_link()
+
+    assert result["linked"]["EPL"] == 1
+    with factory() as verify:
+        match = verify.query(Match).one()
+        assert match.source_match_ids["fotmob"] == "5795511"
+        run = verify.query(SourceFetchRun).one()
+        assert run.source_name == "fotmob"
+        assert run.status is FetchRunStatus.SUCCEEDED
+    engine.dispose()
+
+
+def test_scheduler_includes_a_fotmob_link_job():
+    scheduler = build_scheduler(queue=_NoopQueue())
+    job = scheduler.get_job("fotmob-link")
+    assert job is not None

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
@@ -10,16 +11,24 @@ from rq import Queue, Retry
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from packages.adapters.base import AdapterError, AdapterSchemaError, FetchResult
+from packages.adapters.base import (
+    AdapterError,
+    AdapterSchemaError,
+    FetchResult,
+    MinIntervalRateLimiter,
+)
 from packages.adapters.fotmob import FotMobAdapter
 from packages.adapters.hkjc import HkjcAdapter, HkjcMatchResult
 from packages.db.models import (
+    Availability,
     Competition,
+    Lineup,
     MarketLine,
     Match,
     ModelPrediction,
     OddsSnapshot,
     PaperBet,
+    Player,
 )
 from packages.db.session import build_engine, build_session_factory, session_scope
 from packages.decision.coverage import (
@@ -27,6 +36,7 @@ from packages.decision.coverage import (
 )
 from packages.decision.service import decide_match
 from packages.domain.enums import (
+    AvailabilityBasis,
     BetStatus,
     CoverageFlag,
     FetchRunStatus,
@@ -40,7 +50,8 @@ from packages.feedback.service import (
     build_calibration_report,
     ensure_g1_versions,
 )
-from packages.ingest.normalize import seed_competitions
+from packages.ingest.linking import link_fotmob_matches
+from packages.ingest.normalize import get_competition, seed_competitions
 from packages.ingest.pipeline import (
     AdapterBundle,
     HkjcResultFetcher,
@@ -63,6 +74,8 @@ from packages.ledger.service import LedgerService
 from packages.shared.config import Settings, get_settings
 from packages.shared.time import ensure_utc, utc_now
 
+logger = logging.getLogger(__name__)
+
 HONG_KONG = ZoneInfo("Asia/Hong_Kong")
 _TRIGGER_DEDUPE_TTL_SECONDS = 6 * 60 * 60
 _LINEUP_ACTIONS = frozenset({"lineup_check", "lineup_recheck_decision"})
@@ -76,6 +89,8 @@ DATA_COMPETITIONS: tuple[str, ...] = (
 )
 _TRIGGER_RETRY = Retry(max=3, interval=[60, 300, 900])
 _RECENT_RESULT_WINDOW = timedelta(hours=18)
+_FOTMOB_LINK_HORIZON = timedelta(days=7)
+_FOTMOB_LINK_LIMITER_SECONDS = 20.0
 
 def _run_source_fetch[T](
     session: Session,
@@ -146,6 +161,7 @@ def run_daily_ingest(
         pipeline = IngestPipeline(session, adapters)
         year = season if season is not None else season_start_year()
         fixtures_by_league: dict[str, int] = {}
+        fixture_failures: list[Exception] = []
         for competition_code in competitions:
             try:
                 fixtures_by_league[competition_code] = _run_source_fetch(
@@ -164,11 +180,15 @@ def run_daily_ingest(
                     field_scope=f"{competition_code} fixtures",
                     test_evidence_ref="tests/adapters/test_football_data_org.py",
                 )
-            except Exception:
-                # Commit the FAILED source run before the job re-raises; otherwise
-                # session_scope would roll it back and lose the audit record.
+            except Exception as exc:
+                # Commit the FAILED source run, keep ingesting the other
+                # competitions, and keep the HKJC linking step below alive.
                 session.commit()
-                raise
+                fixture_failures.append(exc)
+                logger.exception(
+                    "fixture ingest failed for %s; continuing with other competitions",
+                    competition_code,
+                )
         linked_by_league: dict[str, int] = {}
         if adapters.hkjc is not None:
             today_hkt = utc_now().astimezone(HONG_KONG).date()
@@ -195,6 +215,10 @@ def run_daily_ingest(
                 linked_by_league = {code: 0 for code in competitions}
         total_fixtures = sum(fixtures_by_league.values())
         total_linked = sum(linked_by_league.values())
+        if fixture_failures:
+            # Persist the successful HKJC linking before surfacing the failure.
+            session.commit()
+            raise fixture_failures[0]
         return {
             "fixtures": total_fixtures,
             "hkjc_linked": total_linked,
@@ -243,27 +267,117 @@ def run_recent_result_refresh(now: datetime | None = None) -> dict[str, object]:
         date_from = recent_start.date().isoformat()
         date_to = current.date().isoformat()
         fixtures_by_league: dict[str, int] = {}
+        failures: list[Exception] = []
         for competition_code in codes:
-            fixtures_by_league[competition_code] = _run_source_fetch(
-                session,
-                source_name="football-data.org",
-                params={
-                    "competition_code": competition_code,
-                    "season_start_year": year,
-                    "date_from": date_from,
-                    "date_to": date_to,
-                },
-                operation=lambda run_id, code=competition_code: pipeline.ingest_fixtures(
-                    code,
-                    year,
-                    date_from=date_from,
-                    date_to=date_to,
-                    run_id=run_id,
-                ),
-                field_scope=f"recent {competition_code} fixtures",
-                test_evidence_ref="tests/apps/test_worker.py",
-            )
+            try:
+                fixtures_by_league[competition_code] = _run_source_fetch(
+                    session,
+                    source_name="football-data.org",
+                    params={
+                        "competition_code": competition_code,
+                        "season_start_year": year,
+                        "date_from": date_from,
+                        "date_to": date_to,
+                    },
+                    operation=lambda run_id, code=competition_code: pipeline.ingest_fixtures(
+                        code,
+                        year,
+                        date_from=date_from,
+                        date_to=date_to,
+                        run_id=run_id,
+                    ),
+                    field_scope=f"recent {competition_code} fixtures",
+                    test_evidence_ref="tests/apps/test_worker.py",
+                )
+            except Exception as exc:
+                session.commit()
+                failures.append(exc)
+                logger.exception(
+                    "recent result refresh failed for %s; continuing", competition_code
+                )
+        if failures:
+            session.commit()
+            raise failures[0]
     return {"fixtures": sum(fixtures_by_league.values()), "leagues": fixtures_by_league}
+
+
+def _build_fotmob_link_adapter() -> FotMobAdapter:
+    return FotMobAdapter(limiter=MinIntervalRateLimiter(_FOTMOB_LINK_LIMITER_SECONDS))
+
+
+def _link_fotmob_league(
+    session: Session,
+    adapter: FotMobAdapter,
+    competition_code: str,
+    season_year: int,
+) -> int:
+    fetched = adapter.fetch_league_fixtures(competition_code, season_year)
+    fixtures = FotMobAdapter.parse_league_fixtures(fetched.payload)
+    return link_fotmob_matches(
+        session, fixtures, competition_code=competition_code
+    )
+
+
+def run_fotmob_link(now: datetime | None = None) -> dict[str, object]:
+    """Link upcoming fixtures to FotMob ids so lineup checks can run."""
+    current = ensure_utc(now or utc_now())
+    settings = get_settings()
+    engine = build_engine(settings.database_url)
+    factory = build_session_factory(engine)
+    with session_scope(factory) as session:
+        seed_competitions(session)
+        year = season_start_year(current)
+        horizon = current + _FOTMOB_LINK_HORIZON
+        missing: dict[str, int] = {}
+        for competition_code in DATA_COMPETITIONS:
+            competition = get_competition(session, competition_code)
+            rows = session.scalars(
+                select(Match).where(
+                    Match.competition_id == competition.id,
+                    Match.status == MatchStatus.SCHEDULED,
+                    Match.kickoff_at >= current,
+                    Match.kickoff_at <= horizon,
+                )
+            ).all()
+            unlinked = [
+                match for match in rows if "fotmob" not in (match.source_match_ids or {})
+            ]
+            if unlinked:
+                missing[competition_code] = len(unlinked)
+        if not missing:
+            return {"linked": {}, "errors": {}, "missing": {}}
+
+        adapter = _build_fotmob_link_adapter()
+        linked: dict[str, int] = {}
+        errors: dict[str, str] = {}
+        try:
+            for competition_code in missing:
+                try:
+                    linked[competition_code] = _run_source_fetch(
+                        session,
+                        source_name="fotmob",
+                        params={
+                            "operation": "league_fixtures",
+                            "competition_code": competition_code,
+                            "season_start_year": year,
+                        },
+                        operation=lambda run_id, code=competition_code: _link_fotmob_league(
+                            session, adapter, code, year
+                        ),
+                        field_scope=f"{competition_code} fotmob fixtures",
+                        test_evidence_ref="tests/adapters/test_fotmob.py",
+                    )
+                except AdapterError as exc:
+                    errors[competition_code] = str(exc)
+                    logger.warning(
+                        "fotmob fixture link failed for %s: %s",
+                        competition_code,
+                        exc,
+                    )
+        finally:
+            adapter.close()
+        return {"linked": linked, "errors": errors, "missing": missing}
+
 
 
 def ingest_trigger_odds(
@@ -357,7 +471,151 @@ def _set_lineup_flag(match: Match, *, confirmed: bool) -> None:
     _set_flag(match, CoverageFlag.LINEUP_UNCONFIRMED, present=not confirmed)
 
 
+def _persist_lineups(
+    session: Session,
+    match: Match,
+    lineups: list,
+    *,
+    source_url: str,
+    now: datetime,
+) -> None:
+    for lineup in lineups:
+        team_id = (
+            match.home_team_id
+            if lineup.team_side == "home"
+            else match.away_team_id
+        )
+        row = session.scalar(
+            select(Lineup).where(
+                Lineup.match_id == match.id,
+                Lineup.team_id == team_id,
+                Lineup.lineup_type == lineup.lineup_type,
+                Lineup.source == "fotmob",
+            )
+        )
+        if row is None:
+            row = Lineup(
+                match_id=match.id,
+                team_id=team_id,
+                lineup_type=lineup.lineup_type,
+                source="fotmob",
+                starters=[],
+                subs=[],
+                inferred=lineup.inferred,
+                fetched_at=now,
+            )
+            session.add(row)
+        row.formation = lineup.formation
+        row.starters = [
+            {
+                "source_player_id": player.source_player_id,
+                "name": player.name,
+                "position": player.position,
+            }
+            for player in lineup.starters
+        ]
+        row.subs = [
+            {
+                "source_player_id": player.source_player_id,
+                "name": player.name,
+                "position": player.position,
+            }
+            for player in lineup.subs
+        ]
+        row.inferred = lineup.inferred
+        row.source_url = source_url
+        row.fetched_at = now
+        row.available_at = now
+        row.availability_basis = AvailabilityBasis.PROVIDER_POINT_IN_TIME
+        row.evidence_grade = AvailabilityBasis.PROVIDER_POINT_IN_TIME
+    session.flush()
+
+
+def _player_id_for_unavailable(
+    session: Session,
+    team_id: uuid.UUID,
+    *,
+    source_player_id: int | None,
+    name: str,
+) -> uuid.UUID | None:
+    if source_player_id is not None:
+        player = session.scalar(
+            select(Player).where(Player.fotmob_id == source_player_id)
+        )
+        if player is None:
+            player = Player(
+                name=name or f"FotMob {source_player_id}",
+                team_id=team_id,
+                fotmob_id=source_player_id,
+            )
+            session.add(player)
+            session.flush()
+        elif player.team_id is None:
+            player.team_id = team_id
+        return player.id
+    if not name:
+        return None
+    player = session.scalar(
+        select(Player).where(Player.team_id == team_id, Player.name == name)
+    )
+    if player is None:
+        player = Player(name=name, team_id=team_id)
+        session.add(player)
+        session.flush()
+    return player.id
+
+
+def _persist_unavailable(
+    session: Session,
+    match: Match,
+    rows: list,
+    *,
+    source_url: str,
+    now: datetime,
+) -> None:
+    for item in rows:
+        team_id = (
+            match.home_team_id if item.team_side == "home" else match.away_team_id
+        )
+        player_id = _player_id_for_unavailable(
+            session,
+            team_id,
+            source_player_id=item.source_player_id,
+            name=item.name,
+        )
+        conditions = [
+            Availability.match_id == match.id,
+            Availability.team_id == team_id,
+            Availability.source == "fotmob",
+        ]
+        if player_id is None:
+            conditions.append(Availability.player_id.is_(None))
+        else:
+            conditions.append(Availability.player_id == player_id)
+        row = session.scalar(select(Availability).where(*conditions))
+        if row is None:
+            row = Availability(
+                match_id=match.id,
+                team_id=team_id,
+                player_id=player_id,
+                status=item.status,
+                source="fotmob",
+                fetched_at=now,
+            )
+            session.add(row)
+        row.status = item.status
+        row.reason = item.reason
+        row.expected_return = item.expected_return
+        row.source_url = source_url
+        row.fetched_at = now
+        row.available_at = now
+        row.availability_basis = AvailabilityBasis.PROVIDER_POINT_IN_TIME
+        row.evidence_grade = AvailabilityBasis.PROVIDER_POINT_IN_TIME
+    session.flush()
+
+
 def check_lineup(
+    session: Session,
     match: Match,
     trigger: str,
     adapters: AdapterBundle,
@@ -384,6 +642,17 @@ def check_lineup(
         lineups = FotMobAdapter.parse_lineups(fetched.payload, LineupType.STANDARD)
     except AdapterSchemaError:
         lineups = []
+    try:
+        unavailable = FotMobAdapter.parse_unavailable(fetched.payload)
+    except AdapterSchemaError:
+        unavailable = []
+    now = utc_now()
+    _persist_lineups(
+        session, match, lineups, source_url=fetched.source_url, now=now
+    )
+    _persist_unavailable(
+        session, match, unavailable, source_url=fetched.source_url, now=now
+    )
     sides = {lineup.team_side for lineup in lineups}
     confirmed = {"home", "away"}.issubset(sides)
     _set_lineup_flag(match, confirmed=confirmed)
@@ -401,7 +670,7 @@ def run_lineup_check(match_id: str, trigger: str) -> dict[str, str]:
         adapters = build_adapters(settings)
         is_decision_trigger = trigger == LINEUP_RECHECK_TRIGGER
         try:
-            status = check_lineup(match, trigger, adapters)
+            status = check_lineup(session, match, trigger, adapters)
         except AdapterError:
             if is_decision_trigger:
                 _ = decide_match(session, match, None, now=utc_now())
@@ -779,6 +1048,7 @@ __all__ = [
     "run_calibration_report",
     "run_daily_ingest",
     "run_decision_reconciliation",
+    "run_fotmob_link",
     "run_lineup_check",
     "run_match_trigger",
     "run_recent_result_refresh",

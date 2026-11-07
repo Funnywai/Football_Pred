@@ -87,7 +87,7 @@ class OpenAICompatibleProvider:
             "response_format": {"type": "json_object"},
         }
 
-    def complete_json(self, system: str, user: str) -> ProviderResponse:
+    def _request_content(self, system: str, user: str) -> tuple[str, dict[str, Any]]:
         endpoint = f"{self.base_url}/chat/completions"
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -112,12 +112,32 @@ class OpenAICompatibleProvider:
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, str) or not content.strip():
             raise LlmProviderError("LLM provider returned empty content")
-        return ProviderResponse(
-            content=content,
-            raw=body,
-            provider=self.provider,
-            model=self.model,
-        )
+        return content, body
+
+    def complete_json(self, system: str, user: str) -> ProviderResponse:
+        attempts = 2
+        last_error: LlmProviderError | None = None
+        for attempt in range(1, attempts + 1):
+            prompt = user
+            if attempt > 1:
+                prompt = (
+                    user
+                    + "\n\nIMPORTANT: Your previous answer was not valid JSON. "
+                    "Return ONLY one complete JSON object, with no prose and no truncation."
+                )
+            content, body = self._request_content(system, prompt)
+            try:
+                normalized = normalize_json_content(content)
+            except LlmProviderError as exc:
+                last_error = exc
+                continue
+            return ProviderResponse(
+                content=normalized,
+                raw=body,
+                provider=self.provider,
+                model=self.model,
+            )
+        raise last_error or LlmProviderError("LLM provider did not return JSON")
 
 
 def build_provider(settings: Settings) -> LlmProvider | None:

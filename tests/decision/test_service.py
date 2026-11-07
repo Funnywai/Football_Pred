@@ -505,3 +505,18 @@ def test_decision_binds_active_experiment_and_epoch_key(
     assert bet.experiment_id == experiment.id
     assert log.experiment_id == experiment.id
     assert bet.decision_slot_key == f"g1:{experiment.id}:{match.id}:T-30m"
+
+
+def test_missing_snapshot_is_skipped_with_clear_reason(
+    session: Session, fixed_prediction
+):
+    match, _ = _seed(session)
+
+    result = decide_match(session, match, None, now=NOW)
+
+    assert result.status == "skipped"
+    assert "no odds snapshot" in result.reason
+    log = session.execute(select(DecisionLog)).scalar_one()
+    assert log.status == "skipped"
+    assert "no odds snapshot" in log.reason
+    assert log.paper_bet_id is None

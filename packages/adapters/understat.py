@@ -84,7 +84,7 @@ class UnderstatAdapter(BaseAdapter):
     ) -> None:
         super().__init__(
             client=client,
-            limiter=limiter if limiter is not None else MinIntervalRateLimiter(30.0),
+            limiter=limiter if limiter is not None else MinIntervalRateLimiter(5.0),
         )
         self._base_url = base_url.rstrip("/")
 

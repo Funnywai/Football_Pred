@@ -56,6 +56,13 @@ class _FakeScheduledHkjc:
         raise AssertionError("linking must not fetch results")
 
 
+def _add_team(session, name: str, slug: str) -> Team:
+    team = Team(slug=slug, name=name, short_name=slug[:3].upper(), country="England")
+    session.add(team)
+    session.flush()
+    return team
+
+
 def _seed_epl(session) -> tuple[Competition, Team, Team]:
     seed_competitions(session)
     competition = (
@@ -222,3 +229,170 @@ def test_link_hkjc_matches_ignores_unrelated_matches(session):
 
     assert link_hkjc_matches(session, [_scheduled()]) == 1
     assert "hkjc" not in (other.source_match_ids or {})
+
+
+def test_link_hkjc_matches_resolves_short_hkjc_team_name(session):
+    competition, _, _ = _seed_epl(session)
+    everton = _add_team(session, "Everton FC", "everton")
+    coventry = _add_team(session, "Coventry City FC", "coventry-city-fc")
+    match = _add_match(session, competition, everton, coventry)
+
+    linked = link_hkjc_matches(
+        session,
+        [_scheduled(home_name="Everton", away_name="Coventry")],
+    )
+
+    assert linked == 1
+    assert match.source_match_ids["hkjc"] == "50078674"
+
+
+def test_link_hkjc_matches_resolves_provider_short_names_by_tokens(session):
+    seed_competitions(session)
+    competition = session.query(Competition).filter(Competition.code == "SERIEA").one()
+    atalanta = _add_team(session, "Atalanta BC", "atalanta-bc")
+    bologna = _add_team(session, "Bologna FC 1909", "bologna-fc-1909")
+    match = _add_match(session, competition, atalanta, bologna)
+
+    linked = link_hkjc_matches(
+        session,
+        [
+            _scheduled(
+                match_source_id="50072541-1",
+                tournament_code="SERIEA",
+                home_name="Atalanta",
+                away_name="Bologna",
+            )
+        ],
+        competition_code="SERIEA",
+    )
+
+    assert linked == 1
+    assert match.source_match_ids["hkjc"] == "50072541-1"
+
+
+def test_link_hkjc_matches_uses_opponent_to_disambiguate_short_name(session):
+    seed_competitions(session)
+    competition = session.query(Competition).filter(Competition.code == "LALIGA").one()
+    sevilla = _add_team(session, "Sevilla FC", "sevilla")
+    alaves = _add_team(session, "Deportivo Alavés", "alaves")
+    sociedad = _add_team(
+        session, "Real Sociedad de Fútbol", "real-sociedad-de-futbol"
+    )
+    la_coruna = _add_team(
+        session, "RC Deportivo La Coruña", "rc-deportivo-la-coruna"
+    )
+    target = _add_match(session, competition, sevilla, alaves)
+    _add_match(session, competition, sociedad, la_coruna)
+
+    linked = link_hkjc_matches(
+        session,
+        [
+            _scheduled(
+                match_source_id="50072540-1",
+                tournament_code="LALIGA",
+                home_name="Sevilla",
+                away_name="Deportivo",
+            )
+        ],
+        competition_code="LALIGA",
+    )
+
+    assert linked == 1
+    assert target.source_match_ids["hkjc"] == "50072540-1"
+
+
+def test_link_hkjc_matches_skips_ambiguous_short_name(session, caplog):
+    competition, _, _ = _seed_epl(session)
+    everton = _add_team(session, "Everton FC", "everton")
+    man_united = _add_team(session, "Manchester United FC", "manchester-united")
+    newcastle = _add_team(session, "Newcastle United FC", "newcastle-united")
+    _add_match(session, competition, man_united, everton)
+    _add_match(session, competition, newcastle, everton)
+
+    with caplog.at_level("WARNING"):
+        linked = link_hkjc_matches(
+            session,
+            [_scheduled(home_name="United", away_name="Everton")],
+        )
+
+    assert linked == 0
+    assert "ambiguous" in caplog.text.casefold()
+
+
+def test_link_hkjc_matches_logs_unresolved_team_names(session, caplog):
+    competition, home, away = _seed_epl(session)
+    _add_match(session, competition, home, away)
+
+    with caplog.at_level("WARNING"):
+        linked = link_hkjc_matches(
+            session,
+            [_scheduled(home_name="Unknown FC")],
+        )
+
+    assert linked == 0
+    assert "Unknown FC" in caplog.text
+
+
+def test_link_fotmob_matches_links_provider_fixture(session):
+    from packages.adapters.fotmob import FotMobFixture
+    from packages.ingest.linking import link_fotmob_matches
+
+    competition, home, away = _seed_epl(session)
+    match = _add_match(session, competition, home, away)
+
+    fixtures = [
+        FotMobFixture(
+            fixture_id=5795511,
+            kickoff_at=KICKOFF,
+            home_name="Tottenham",
+            away_name="Crystal Palace",
+        )
+    ]
+    assert link_fotmob_matches(session, fixtures, competition_code="EPL") == 1
+    assert match.source_match_ids["fotmob"] == "5795511"
+
+
+def test_link_fotmob_matches_is_idempotent(session):
+    from packages.adapters.fotmob import FotMobFixture
+    from packages.ingest.linking import link_fotmob_matches
+
+    competition, home, away = _seed_epl(session)
+    match = _add_match(session, competition, home, away)
+    fixtures = [
+        FotMobFixture(
+            fixture_id=5795511,
+            kickoff_at=KICKOFF,
+            home_name="Tottenham",
+            away_name="Crystal Palace",
+        )
+    ]
+    assert link_fotmob_matches(session, fixtures, competition_code="EPL") == 1
+    assert link_fotmob_matches(session, fixtures, competition_code="EPL") == 0
+    assert match.source_match_ids["fotmob"] == "5795511"
+
+
+def test_link_fotmob_matches_ignores_spanish_articles(session):
+    from packages.adapters.fotmob import FotMobFixture
+    from packages.ingest.linking import link_fotmob_matches
+
+    seed_competitions(session)
+    competition = session.query(Competition).filter(Competition.code == "LALIGA").one()
+    coruna = _add_team(session, "RC Deportivo La Coruña", "rc-deportivo-la-coruna")
+    elche = _add_team(session, "Elche CF", "elche-cf")
+    match = _add_match(session, competition, coruna, elche)
+
+    linked = link_fotmob_matches(
+        session,
+        [
+            FotMobFixture(
+                fixture_id=5868014,
+                kickoff_at=KICKOFF,
+                home_name="Deportivo A Coruña",
+                away_name="Elche",
+            )
+        ],
+        competition_code="LALIGA",
+    )
+
+    assert linked == 1
+    assert match.source_match_ids["fotmob"] == "5868014"

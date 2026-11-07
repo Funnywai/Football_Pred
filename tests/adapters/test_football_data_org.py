@@ -1,3 +1,4 @@
+import copy
 from datetime import timedelta
 from typing import Any
 
@@ -167,14 +168,6 @@ def test_parse_matches_rejects_unknown_duration():
         FootballDataOrgAdapter.parse_matches(payload)
 
 
-def test_parse_matches_rejects_unknown_status():
-    payload = _single_match_payload()
-    payload["matches"][0]["status"] = "WHATEVER"
-
-    with pytest.raises(AdapterSchemaError, match="unsupported provider status"):
-        FootballDataOrgAdapter.parse_matches(payload)
-
-
 def test_parse_matches_rejects_missing_status():
     payload = _single_match_payload()
     del payload["matches"][0]["status"]
@@ -183,13 +176,28 @@ def test_parse_matches_rejects_missing_status():
         FootballDataOrgAdapter.parse_matches(payload)
 
 
-@pytest.mark.parametrize("status", ["AWARDED", "SUSPENDED"])
-def test_parse_matches_rejects_unmapped_provider_status(status):
+@pytest.mark.parametrize(
+    "status", ["WHATEVER", "AWARDED", "SUSPENDED", "2026-12-09 19:00:00Z"]
+)
+def test_parse_matches_skips_unmapped_provider_status(status):
     payload = _single_match_payload()
     payload["matches"][0]["status"] = status
 
-    with pytest.raises(AdapterSchemaError, match="unsupported provider status"):
-        FootballDataOrgAdapter.parse_matches(payload)
+    assert FootballDataOrgAdapter.parse_matches(payload) == []
+
+
+def test_parse_matches_skips_unmapped_status_and_keeps_valid_rows(caplog):
+    payload = _single_match_payload()
+    skipped = copy.deepcopy(payload["matches"][0])
+    skipped["id"] = 1002
+    skipped["status"] = "2026-12-09 19:00:00Z"
+    payload["matches"].append(skipped)
+
+    with caplog.at_level("WARNING"):
+        matches = FootballDataOrgAdapter.parse_matches(payload)
+
+    assert [match.source_match_id for match in matches] == [1001]
+    assert "1002" in caplog.text
 
 
 def test_parse_matches_wraps_malformed_row_with_row_context():
