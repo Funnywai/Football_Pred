@@ -297,14 +297,15 @@ export function LedgerSection({
           <TableFrame label="V1 and V2 paper bet ledger" wide>
             <table className="table--bets">
               <caption className="sr-only">
-                V1 and V2 paper bet ledger including lane, stake, settlement profit,
-                closing-line value and Brier score
+                V1 and V2 paper bet ledger including lane, match result, stake,
+                settlement profit, closing-line value and Brier score
               </caption>
               <thead>
                 <tr>
                   <th scope="col">Lane</th>
                   <th scope="col">Placed (HKT)</th>
                   <th scope="col">Match</th>
+                  <th scope="col">Result</th>
                   <th scope="col">Market / selection</th>
                   <th scope="col" className="num">Odds</th>
                   <th scope="col" className="num">Stake</th>
@@ -346,6 +347,14 @@ export function LedgerSection({
                             kickoff {formatKickoff(bet.kickoff_at)}
                           </time>
                         </span>
+                      </td>
+                      <td className="mono" title="90-minute score">
+                        {bet.home_goals_90 === null ||
+                        bet.home_goals_90 === undefined ||
+                        bet.away_goals_90 === null ||
+                        bet.away_goals_90 === undefined
+                          ? "—"
+                          : `${bet.home_goals_90}–${bet.away_goals_90}`}
                       </td>
                       <td>
                         <span className="selection">
