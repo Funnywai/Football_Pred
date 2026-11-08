@@ -259,10 +259,10 @@ export function LlmLedgerSection({
                   <th scope="col">Placed (HKT)</th>
                   <th scope="col">Match</th>
                   <th scope="col">Market / selection</th>
+                  <th scope="col">Result</th>
                   <th scope="col" className="num">Odds</th>
                   <th scope="col" className="num">Stake</th>
                   <th scope="col">Status</th>
-                  <th scope="col">Result</th>
                   <th scope="col" className="num">P/L</th>
                   <th scope="col" className="num">CLV</th>
                   <th scope="col" className="num">Brier</th>
@@ -303,13 +303,13 @@ export function LlmLedgerSection({
                         </span>
                         {bet.line_key ? <span className="subline mono">{bet.line_key}</span> : null}
                       </td>
+                      <td>
+                        <MatchResult bet={bet} />
+                      </td>
                       <td className="num">{formatOdds(bet.odds)}</td>
                       <td className="num">{formatMoney(bet.stake, currency)}</td>
                       <td>
                         <StatusTag status={bet.status} />
-                      </td>
-                      <td>
-                        <MatchResult bet={bet} />
                       </td>
                       <td className={`num text-${tone}`}>
                         {profit === null ? "—" : formatSignedMoney(profit, currency)}
