@@ -103,14 +103,14 @@ export async function getDashboardData(): Promise<DashboardData> {
     challengerEquity,
   ] = await Promise.all([
     getJson<Overview>("/dashboard/overview", "object"),
-    getJson<Prediction[]>("/dashboard/predictions?limit=50", "array"),
+    getJson<Prediction[]>("/dashboard/predictions?limit=200", "array"),
     getJson<Bet[]>("/dashboard/bets?limit=500", "array"),
     getJson<Equity>("/dashboard/equity", "object"),
     getJson<Calibration>("/dashboard/calibration", "object"),
     getJson<Technical>("/dashboard/technical", "object"),
     getJson<ChallengerSummary>("/dashboard/challenger", "object"),
     getJson<Prediction[]>(
-      "/dashboard/predictions?model_version=poisson-v2-shrunk&limit=50",
+      "/dashboard/predictions?model_version=poisson-v2-shrunk&limit=200",
       "array",
     ),
     getJson<Bet[]>("/dashboard/challenger/bets?limit=500", "array"),

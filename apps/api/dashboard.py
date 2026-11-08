@@ -414,7 +414,7 @@ def _decision_for_match(
 @router.get("/predictions")
 def predictions(
     session: SessionDep,
-    limit: int = 50,
+    limit: int = 200,
     model_version: str = "poisson-v1",
 ) -> list[dict[str, Any]]:
     clamped = max(1, min(limit, 200))
