@@ -17,8 +17,10 @@ import {
   statusTone,
 } from "@/lib/format";
 import type { EndpointResult } from "@/lib/api";
+import { buildBetsTsv } from "@/lib/bets-export";
 import type { Bet, Equity } from "@/lib/types";
 
+import { CopyTableButton } from "./copy-table-button";
 import { DayNavigator } from "./day-navigator";
 import { EquityChart } from "./equity-chart";
 import {
@@ -224,6 +226,7 @@ export function LedgerSection({
   }, [dayBets, query]);
 
   const visibleBets = filtered.slice(0, PAGE_SIZE);
+  const copyText = useMemo(() => buildBetsTsv(filtered), [filtered]);
   const totalRows = merged.length;
   const betsUnavailable = Boolean(betsResult.error);
   const challengerUnavailable = Boolean(challengerBetsResult.error);
@@ -304,7 +307,21 @@ export function LedgerSection({
       <Panel
         title="Bet ledger"
         kicker="V1 and V2 paper bets"
-        meta={`${visibleBets.length} / ${dayBets.length} rows · ${PAGE_SIZE} max`}
+        meta={
+          <div className="panel__meta-group">
+            <span>
+              {visibleBets.length} / {dayBets.length} rows · {PAGE_SIZE} max
+            </span>
+            {filtered.length > 0 ? (
+              <CopyTableButton
+                text={copyText}
+                label="Copy"
+                title="Copy the filtered bet ledger as tab-separated values"
+                copiedMessage="Filtered bet ledger copied to clipboard"
+              />
+            ) : null}
+          </div>
+        }
         bodyClassName="panel__body--flush"
       >
         <div className="ledger-toolbar">
