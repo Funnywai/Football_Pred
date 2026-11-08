@@ -520,3 +520,26 @@ def test_missing_snapshot_is_skipped_with_clear_reason(
     assert log.status == "skipped"
     assert "no odds snapshot" in log.reason
     assert log.paper_bet_id is None
+
+
+def test_match_specific_result_absence_does_not_degrade_source(
+    session: Session, fixed_prediction
+):
+    match, snapshot = _seed(session)
+    session.add(
+        SourceFetchRun(
+            run_id="result-not-published",
+            source_name="hkjc",
+            started_at=NOW,
+            finished_at=NOW,
+            status=FetchRunStatus.FAILED,
+            params={"operation": "match_results", "match_source_id": "50000000"},
+            error_summary="match 50000000 not found in matchResults for 2026-08-15",
+        )
+    )
+    session.flush()
+
+    result = decide_match(session, match, snapshot, now=NOW)
+
+    assert result.status in {"bet", "no_bet"}
+    assert "source_degraded" not in result.reason

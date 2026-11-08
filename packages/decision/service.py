@@ -362,6 +362,11 @@ def _degraded_sources(session: Session, now: datetime) -> tuple[str, ...]:
             SourceFetchRun.status == FetchRunStatus.FAILED,
             SourceFetchRun.finished_at.is_not(None),
             SourceFetchRun.finished_at >= cutoff,
+            # A single match whose result is not published yet is a data
+            # absence, not a source outage. It must not veto every decision.
+            func.coalesce(SourceFetchRun.error_summary, "").not_ilike(
+                "%not found in matchResults%"
+            ),
         )
         .distinct()
     ).all()
