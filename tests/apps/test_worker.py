@@ -28,6 +28,7 @@ from apps.worker.jobs import (
     run_match_trigger,
     run_recent_result_refresh,
     run_settlement_scan,
+    settle_match,
 )
 from packages.adapters.base import AdapterHTTPError, FetchResult, hash_text
 from packages.db.base import Base
@@ -1548,3 +1549,36 @@ def test_scheduler_includes_a_fotmob_link_job():
     scheduler = build_scheduler(queue=_NoopQueue())
     job = scheduler.get_job("fotmob-link")
     assert job is not None
+
+
+def test_settle_match_updates_match_status_and_score(monkeypatch):
+    engine = create_engine(
+        "sqlite+pysqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    settings = Settings(
+        database_url="sqlite+pysqlite:///:memory:",
+        _env_file=None,
+    )
+    with factory() as setup:
+        match = _match(setup, source_match_ids={"hkjc": "50078622"})
+        match.status = MatchStatus.LIVE
+        setup.commit()
+        match_id = str(match.id)
+
+    monkeypatch.setattr("apps.worker.jobs.get_settings", lambda: settings)
+    monkeypatch.setattr("apps.worker.jobs.build_engine", lambda _url: engine)
+    monkeypatch.setattr("apps.worker.jobs.build_session_factory", lambda _engine: factory)
+
+    result = settle_match(match_id, hkjc=_FakeHkjc())
+
+    assert result == {"settled": 0}
+    with factory() as verify:
+        refreshed = verify.get(Match, uuid.UUID(match_id))
+        assert refreshed.status is MatchStatus.FINISHED
+        assert refreshed.home_goals_90 == 4
+        assert refreshed.away_goals_90 == 1
+    engine.dispose()

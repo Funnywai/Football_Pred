@@ -947,6 +947,12 @@ def settle_match(
         )
         if goals is None:
             return {"settled": 0}
+        # HKJC is the settlement source; keep the canonical match row in sync so
+        # dashboards do not keep showing a settled match as live.
+        match.status = MatchStatus.FINISHED
+        match.home_goals_90 = goals[0]
+        match.away_goals_90 = goals[1]
+        session.flush()
         refunded = HkjcAdapter.refunded_markets(result)
         bets = list(
             session.execute(
