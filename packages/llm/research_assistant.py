@@ -192,6 +192,9 @@ def run_llm_research_assistant(
     )
     session.add(run)
     session.flush()
+    # Commit the running row before the agent calls: the enqueue scheduler and
+    # abandoned-job recovery use the database to decide whether this run exists.
+    session.commit()
 
     calls: dict[str, tuple[str, str]] = {}
     for agent_id, _name, _scope in ROLE_AGENTS:

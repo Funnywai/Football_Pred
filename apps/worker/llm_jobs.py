@@ -6,15 +6,16 @@ from datetime import timedelta
 from pathlib import Path
 
 from rq import Queue
+from rq.job import Job
+from rq.registry import FailedJobRegistry
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from packages.db.models import Competition, Match
+from packages.db.models import Competition, LlmResearchRun, Match
 from packages.db.session import build_engine, build_session_factory, session_scope
 from packages.domain.enums import MatchStatus
 from packages.ingest.evidence import collect_match_evidence
 from packages.ingest.pipeline import build_adapters
-from packages.ingest.triggers import TRIGGER_SCAN_WINDOW
 from packages.llm.orchestrator import run_llm_prediction
 from packages.llm.providers import build_provider
 from packages.llm.research_assistant import run_llm_research_assistant
@@ -23,7 +24,9 @@ from packages.shared.time import ensure_utc, utc_now
 
 _PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts" / "llm"
 _ASSISTANT_PROMPT_DIR = _PROMPT_DIR / "research"
-_LLM_DEDUPE_TTL_SECONDS = 6 * 60 * 60
+# Short lock: the run row is committed before the agent calls start, so the
+# database (not this key) is the source of truth for "already started".
+_LLM_DEDUPE_TTL_SECONDS = 5 * 60
 _LLM_PREDICTION_OFFSET = timedelta(minutes=28)
 # Six specialists, red team and judge can take several minutes in total.
 # RQ's default 180s timeout is too short for the 9-call pipeline.
@@ -109,10 +112,16 @@ def enqueue_due_llm_predictions(
         factory = build_session_factory(engine)
         try:
             with session_scope(factory) as opened:
-                return _enqueue_due(opened, current, queue, settings.llm_competitions)
+                enqueued = _enqueue_due(
+                    opened, current, queue, settings.llm_competitions
+                )
+                recovered = _recover_abandoned_llm_jobs(opened, current, queue)
+                return enqueued + recovered
         finally:
             engine.dispose()
-    return _enqueue_due(session, current, queue, settings.llm_competitions)
+    enqueued = _enqueue_due(session, current, queue, settings.llm_competitions)
+    recovered = _recover_abandoned_llm_jobs(session, current, queue)
+    return enqueued + recovered
 
 
 def _enqueue_due(
@@ -141,13 +150,28 @@ def _enqueue_due(
             Competition.code.in_(codes),
         )
     ).all()
-    enqueued = 0
+    candidates: list[Match] = []
     for match, _code in matches:
-        if not (
-            0
-            <= (current - (ensure_utc(match.kickoff_at) - _LLM_PREDICTION_OFFSET)).total_seconds()
-            < TRIGGER_SCAN_WINDOW.total_seconds()
-        ):
+        kickoff = ensure_utc(match.kickoff_at)
+        if current < kickoff - _LLM_PREDICTION_OFFSET:
+            continue
+        if current >= kickoff:
+            continue
+        candidates.append(match)
+    if not candidates:
+        return 0
+
+    existing = set(
+        session.scalars(
+            select(LlmResearchRun.match_id).where(
+                LlmResearchRun.stage == "T-30m",
+                LlmResearchRun.match_id.in_([match.id for match in candidates]),
+            )
+        ).all()
+    )
+    enqueued = 0
+    for match in candidates:
+        if match.id in existing:
             continue
         dedupe_key = f"football:llm:{match.id}:T-30m"
         if not connection.set(dedupe_key, "1", nx=True, ex=_LLM_DEDUPE_TTL_SECONDS):
@@ -161,3 +185,72 @@ def _enqueue_due(
         )
         enqueued += 1
     return enqueued
+
+
+def _recover_abandoned_llm_jobs(
+    session: Session,
+    current,
+    queue: Queue,
+) -> int:
+    connection = getattr(queue, "connection", None)
+    if connection is None:
+        return 0
+    try:
+        registry = FailedJobRegistry(queue=queue)
+        job_ids = registry.get_job_ids(0, 100)
+    except Exception:
+        logger.exception("failed to scan failed job registry")
+        return 0
+
+    terminal = {"bet", "no_bet", "abstained", "failed"}
+    handled: set[tuple[uuid.UUID, str]] = set()
+    recovered = 0
+    for job_id in job_ids:
+        try:
+            job = Job.fetch(job_id, connection=connection)
+        except Exception:
+            logger.debug("could not fetch failed job %s", job_id, exc_info=True)
+            continue
+        if job.func_name != "apps.worker.llm_jobs.run_llm_prediction_job":
+            continue
+        if "AbandonedJobError" not in (job.exc_info or ""):
+            continue
+        args = job.args or ()
+        if not args:
+            continue
+        try:
+            match_id = uuid.UUID(str(args[0]))
+        except ValueError:
+            continue
+        stage = str(args[1]) if len(args) > 1 else "T-30m"
+        if (match_id, stage) in handled:
+            continue
+        handled.add((match_id, stage))
+        match = session.get(Match, match_id)
+        if match is None or ensure_utc(match.kickoff_at) <= current:
+            continue
+        runs = list(
+            session.scalars(
+                select(LlmResearchRun).where(
+                    LlmResearchRun.match_id == match_id,
+                    LlmResearchRun.stage == stage,
+                )
+            ).all()
+        )
+        if any(run.status in terminal for run in runs):
+            continue
+        for run in runs:
+            session.delete(run)
+        session.flush()
+        dedupe_key = f"football:llm:{match_id}:{stage}"
+        connection.set(dedupe_key, "1", ex=_LLM_DEDUPE_TTL_SECONDS)
+        try:
+            registry.requeue(job_id)
+            recovered += 1
+            logger.info(
+                "requeued abandoned LLM job %s for match %s", job_id, match_id
+            )
+        except Exception:
+            connection.delete(dedupe_key)
+            logger.exception("failed to requeue abandoned LLM job %s", job_id)
+    return recovered
