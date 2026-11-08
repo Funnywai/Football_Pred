@@ -109,6 +109,11 @@ export type OutcomeEv = OutcomeProbabilities;
 
 export type DecisionStatus = "bet" | "no_bet" | "skipped" | "pending" | string;
 
+export interface PredictionDay {
+  date: string;
+  count: number;
+}
+
 export interface Prediction {
   match_id?: string | null;
   kickoff_at?: string | null;

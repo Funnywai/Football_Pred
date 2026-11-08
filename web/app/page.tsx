@@ -10,8 +10,14 @@ import { TechnicalSection } from "@/components/technical-section";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function DashboardPage() {
-  const data = await getDashboardData();
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ day?: string | string[] }>;
+}) {
+  const params = await searchParams;
+  const day = typeof params.day === "string" ? params.day : undefined;
+  const data = await getDashboardData(day);
   const overview = data.overview.data;
   const generatedAt = overview?.generated_at ?? null;
   const degraded = Object.values(data).some((result) => Boolean(result.error));
@@ -30,7 +36,12 @@ export default async function DashboardPage() {
 
       <main id="main" className="main">
         <OverviewSection result={data.overview} challengerResult={data.challenger} />
-        <PredictionsSection result={data.predictions} v2Result={data.challengerPredictions} />
+        <PredictionsSection
+          result={data.predictions}
+          v2Result={data.challengerPredictions}
+          days={data.predictionDays.data ?? []}
+          selectedDay={data.selectedDay}
+        />
         <LedgerSection
           betsResult={data.bets}
           equityResult={data.equity}

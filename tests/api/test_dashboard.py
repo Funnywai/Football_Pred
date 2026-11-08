@@ -634,3 +634,15 @@ def test_bets_include_match_result(app, client):
     assert row["home_goals_90"] == 2
     assert row["away_goals_90"] == 1
     assert row["match_status"] == "finished"
+
+
+def test_prediction_days_and_date_filter(app, client):
+    _seed(app)
+
+    days = client.get("/dashboard/predictions/days").json()
+
+    assert len(days) == 1
+    assert days[0]["count"] == 1
+    day = days[0]["date"]
+    assert len(client.get(f"/dashboard/predictions?date={day}").json()) == 1
+    assert client.get("/dashboard/predictions?date=1900-01-01").json() == []

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 
 import {
   asNumber,
@@ -8,13 +9,12 @@ import {
   formatNumber,
   formatOdds,
   formatSignedRatioPercent,
-  hktDateKey,
   probabilitiesToPercents,
 } from "@/lib/format";
 import { buildPredictionsTsv } from "@/lib/predictions-export";
 import { DayNavigator } from "./day-navigator";
 import type { EndpointResult } from "@/lib/api";
-import type { Prediction } from "@/lib/types";
+import type { Prediction, PredictionDay } from "@/lib/types";
 
 import { CopyTableButton } from "./copy-table-button";
 import { DataWarning, EmptyState, MatchCell, Panel, SectionHeader, StatusTag } from "./ui";
@@ -125,10 +125,15 @@ function Triplet({
 export function PredictionsSection({
   result,
   v2Result,
+  days,
+  selectedDay,
 }: {
   result: EndpointResult<Prediction[]>;
   v2Result: EndpointResult<Prediction[]>;
+  days: PredictionDay[];
+  selectedDay: string | null;
 }) {
+  const router = useRouter();
   const predictions = useMemo(
     () => (Array.isArray(result.data) ? result.data : []),
     [result.data],
@@ -150,33 +155,23 @@ export function PredictionsSection({
       ),
     [predictions],
   );
-  const dayKeys = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          sorted
-            .map((prediction) => hktDateKey(prediction.kickoff_at))
-            .filter((key): key is string => Boolean(key)),
-        ),
-      ).sort((left, right) => right.localeCompare(left)),
-    [sorted],
-  );
-  const [dayIndex, setDayIndex] = useState(0);
-  const selectedDay = dayKeys[dayIndex] ?? null;
-  const visiblePredictions = useMemo(
-    () =>
-      sorted.filter((prediction) => hktDateKey(prediction.kickoff_at) === selectedDay),
-    [sorted, selectedDay],
-  );
+  const dayIndex = days.findIndex((item) => item.date === selectedDay);
+  const currentIndex = dayIndex < 0 ? 0 : dayIndex;
+  const visiblePredictions = sorted;
   const copyText =
     visiblePredictions.length > 0 ? buildPredictionsTsv(visiblePredictions) : "";
+  const goToDay = (index: number) => {
+    const target = days[index];
+    if (!target) return;
+    router.push(`/?day=${encodeURIComponent(target.date)}#predictions`);
+  };
   return (
     <section id="predictions" className="section" aria-labelledby="predictions-title">
       <SectionHeader
         index="02"
         kicker="Model output"
         title="Predictions"
-        meta={result.error ? "feed unavailable" : `${predictions.length} rows · H/D/A`}
+        meta={result.error ? "feed unavailable" : `${visiblePredictions.length} rows · ${days.length} days`}
       />
 
       {result.error ? (
@@ -197,9 +192,7 @@ export function PredictionsSection({
           kicker="Newest day first"
           meta={
             <div className="panel__meta-group">
-              <span>
-                {visiblePredictions.length} / {predictions.length} rows · HKT day
-              </span>
+              <span>{visiblePredictions.length} rows · HKT day</span>
               {copyText ? <CopyTableButton text={copyText} label="Copy" /> : null}
             </div>
           }
@@ -208,11 +201,11 @@ export function PredictionsSection({
           <div className="prediction-day-nav">
             <DayNavigator
               dayKey={selectedDay}
-              dayIndex={dayIndex}
-              dayCount={dayKeys.length}
-              onFirst={() => setDayIndex(0)}
-              onPrevious={() => setDayIndex((current) => Math.min(dayKeys.length - 1, current + 1))}
-              onNext={() => setDayIndex((current) => Math.max(0, current - 1))}
+              dayIndex={currentIndex}
+              dayCount={days.length}
+              onFirst={() => goToDay(0)}
+              onPrevious={() => goToDay(currentIndex + 1)}
+              onNext={() => goToDay(currentIndex - 1)}
             />
           </div>
           <TableFrame label="Latest model predictions" wide>

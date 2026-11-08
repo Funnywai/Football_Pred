@@ -7,6 +7,7 @@ import type {
   Equity,
   Overview,
   Prediction,
+  PredictionDay,
   Technical,
 } from "./types";
 
@@ -33,6 +34,8 @@ export interface DashboardData {
   challengerPredictions: EndpointResult<Prediction[]>;
   challengerBets: EndpointResult<Bet[]>;
   challengerEquity: EndpointResult<Equity>;
+  predictionDays: EndpointResult<PredictionDay[]>;
+  selectedDay: string | null;
 }
 
 export type PayloadKind = "array" | "object";
@@ -89,7 +92,19 @@ export async function getJson<T>(
  * Fetch every dashboard endpoint in parallel. Failures are isolated per panel so a
  * single degraded endpoint never takes down the page.
  */
-export async function getDashboardData(): Promise<DashboardData> {
+export async function getDashboardData(day?: string): Promise<DashboardData> {
+  const predictionDays = await getJson<PredictionDay[]>(
+    "/dashboard/predictions/days",
+    "array",
+  );
+  const availableDays = predictionDays.data ?? [];
+  const requested = day?.trim();
+  const selectedDay =
+    requested && availableDays.some((item) => item.date === requested)
+      ? requested
+      : availableDays[0]?.date ?? null;
+  const dateQuery = selectedDay ? `&date=${encodeURIComponent(selectedDay)}` : "";
+
   const [
     overview,
     predictions,
@@ -103,14 +118,17 @@ export async function getDashboardData(): Promise<DashboardData> {
     challengerEquity,
   ] = await Promise.all([
     getJson<Overview>("/dashboard/overview", "object"),
-    getJson<Prediction[]>("/dashboard/predictions?limit=200", "array"),
+    getJson<Prediction[]>(
+      "/dashboard/predictions?limit=200" + dateQuery,
+      "array",
+    ),
     getJson<Bet[]>("/dashboard/bets?limit=500", "array"),
     getJson<Equity>("/dashboard/equity", "object"),
     getJson<Calibration>("/dashboard/calibration", "object"),
     getJson<Technical>("/dashboard/technical", "object"),
     getJson<ChallengerSummary>("/dashboard/challenger", "object"),
     getJson<Prediction[]>(
-      "/dashboard/predictions?model_version=poisson-v2-shrunk&limit=200",
+      "/dashboard/predictions?model_version=poisson-v2-shrunk&limit=200" + dateQuery,
       "array",
     ),
     getJson<Bet[]>("/dashboard/challenger/bets?limit=500", "array"),
@@ -128,5 +146,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     challengerPredictions,
     challengerBets,
     challengerEquity,
+    predictionDays,
+    selectedDay,
   };
 }

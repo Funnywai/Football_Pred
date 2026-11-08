@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import and_, func, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, aliased
@@ -44,6 +44,7 @@ _SIDES: tuple[Side, Side, Side] = (Side.H, Side.D, Side.A)
 _MONEY = Decimal("0.01")
 _ZERO = Decimal("0.00")
 _DATA_COMPETITIONS = ("EPL", "LALIGA", "BUNDESLIGA", "SERIEA", "LIGUE1", "UCL")
+_HKT = timezone(timedelta(hours=8))
 
 
 def get_session(request: Request) -> Iterator[Session]:
@@ -416,6 +417,7 @@ def predictions(
     session: SessionDep,
     limit: int = 200,
     model_version: str = "poisson-v1",
+    date_str: Annotated[str | None, Query(alias="date")] = None,
 ) -> list[dict[str, Any]]:
     clamped = max(1, min(limit, 200))
     experiment = active_experiment(
@@ -467,6 +469,24 @@ def predictions(
     )
     home = aliased(Team)
     away = aliased(Team)
+    conditions = [
+        ModelPrediction.market == _HAD,
+        ModelPrediction.line_key == _HAD_LINE,
+        ModelPrediction.outcome.in_(_SIDES),
+    ]
+    if date_str is not None:
+        try:
+            selected_day = date.fromisoformat(date_str)
+        except ValueError:
+            return []
+        day_start = (
+            datetime.combine(selected_day, time.min, tzinfo=_HKT)
+            .astimezone(UTC)
+            .replace(tzinfo=None)
+        )
+        day_end = day_start + timedelta(days=1)
+        conditions.append(Match.kickoff_at >= day_start)
+        conditions.append(Match.kickoff_at < day_end)
     rows = _safe_all(
         session,
         select(
@@ -496,12 +516,8 @@ def predictions(
         .join(Competition, Competition.id == Match.competition_id)
         .join(home, home.id == Match.home_team_id)
         .join(away, away.id == Match.away_team_id)
-        .where(
-            ModelPrediction.market == _HAD,
-            ModelPrediction.line_key == _HAD_LINE,
-            ModelPrediction.outcome.in_(_SIDES),
-        )
-        .order_by(Match.kickoff_at.asc(), Match.id.asc()),
+        .where(*conditions)
+        .order_by(Match.kickoff_at.desc(), Match.id.desc()),
     )
 
     grouped: dict[uuid.UUID, list[Any]] = {}
@@ -554,6 +570,33 @@ def predictions(
             }
         )
     return output
+
+
+@router.get("/predictions/days")
+def prediction_days(
+    session: SessionDep,
+    model_version: str = "poisson-v1",
+) -> list[dict[str, Any]]:
+    rows = _safe_all(
+        session,
+        select(Match.id, Match.kickoff_at)
+        .join(ModelPrediction, ModelPrediction.match_id == Match.id)
+        .where(
+            ModelPrediction.model_version == model_version,
+            ModelPrediction.market == _HAD,
+            ModelPrediction.line_key == _HAD_LINE,
+            ModelPrediction.outcome.in_(_SIDES),
+        )
+        .distinct(),
+    )
+    counts: dict[str, int] = {}
+    for _match_id, kickoff_at in rows:
+        day = ensure_utc(kickoff_at).astimezone(_HKT).date().isoformat()
+        counts[day] = counts.get(day, 0) + 1
+    return [
+        {"date": day, "count": counts[day]}
+        for day in sorted(counts, reverse=True)
+    ]
 
 
 def _bet_model_version(session: Session, bet: PaperBet) -> str | None:
