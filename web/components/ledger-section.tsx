@@ -44,6 +44,33 @@ function isSettled(bet: Bet): boolean {
   return Boolean(bet.settled_at) || ["won", "win", "lost", "loss", "void", "push", "settled"].includes(status);
 }
 
+function resultLabel(bet: Bet): string {
+  const home = bet.home_goals_90;
+  const away = bet.away_goals_90;
+  const hasScore =
+    home !== null && home !== undefined && away !== null && away !== undefined;
+  const status = (bet.match_status ?? "").toLowerCase();
+  const betStatus = (bet.status ?? "").toLowerCase();
+  const settled =
+    Boolean(bet.settled_at) ||
+    ["won", "lost", "void", "push", "settled"].includes(betStatus);
+  const statusLabel = settled
+    ? "FT"
+    : status === "finished"
+      ? "FT"
+      : status === "live"
+        ? "LIVE"
+        : status === "postponed"
+          ? "PP"
+          : status === "cancelled"
+            ? "CANC"
+            : null;
+  if (hasScore) {
+    return statusLabel ? `${home}–${away} ${statusLabel}` : `${home}–${away}`;
+  }
+  return statusLabel ?? "—";
+}
+
 function summarize(bets: Bet[]) {
   return {
     staked: bets.reduce((total, bet) => total + (asNumber(bet.stake) ?? 0), 0),
@@ -348,13 +375,8 @@ export function LedgerSection({
                           </time>
                         </span>
                       </td>
-                      <td className="mono" title="90-minute score">
-                        {bet.home_goals_90 === null ||
-                        bet.home_goals_90 === undefined ||
-                        bet.away_goals_90 === null ||
-                        bet.away_goals_90 === undefined
-                          ? "—"
-                          : `${bet.home_goals_90}–${bet.away_goals_90}`}
+                      <td className="mono" title="90-minute score and match status">
+                        {resultLabel(bet)}
                       </td>
                       <td>
                         <span className="selection">

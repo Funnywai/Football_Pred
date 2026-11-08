@@ -633,3 +633,4 @@ def test_bets_include_match_result(app, client):
 
     assert row["home_goals_90"] == 2
     assert row["away_goals_90"] == 1
+    assert row["match_status"] == "finished"

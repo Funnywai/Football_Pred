@@ -601,6 +601,7 @@ def _bets_for_experiment(
             Match.away_goals_90,
             Match.home_goals_final,
             Match.away_goals_final,
+            Match.status,
             Settlement,
         )
         .join(Match, Match.id == PaperBet.match_id)
@@ -618,7 +619,7 @@ def _bets_for_experiment(
     output: list[dict[str, Any]] = []
     for row in rows:
         bet: PaperBet = row[0]
-        settlement: Settlement | None = row[9]
+        settlement: Settlement | None = row[10]
         payout = (
             Decimal(str(settlement.payout)) if settlement is not None else None
         )
@@ -634,6 +635,7 @@ def _bets_for_experiment(
                 "away_goals_90": row[6],
                 "home_goals_final": row[7],
                 "away_goals_final": row[8],
+                "match_status": _enum(row[9]),
                 "market": _enum(bet.market),
                 "selection": _enum(bet.selection),
                 "line_key": bet.line_key,
