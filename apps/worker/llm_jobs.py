@@ -24,9 +24,10 @@ from packages.shared.time import ensure_utc, utc_now
 
 _PROMPT_DIR = Path(__file__).resolve().parents[2] / "prompts" / "llm"
 _ASSISTANT_PROMPT_DIR = _PROMPT_DIR / "research"
-# Short lock: the run row is committed before the agent calls start, so the
-# database (not this key) is the source of truth for "already started".
-_LLM_DEDUPE_TTL_SECONDS = 5 * 60
+# Lock for the whole job timeout: the run row is committed before the agent
+# calls start, but this key prevents duplicate enqueues while a job is still
+# queued behind other matches.
+_LLM_DEDUPE_TTL_SECONDS = 20 * 60
 _LLM_PREDICTION_OFFSET = timedelta(minutes=28)
 # Six specialists, red team and judge can take several minutes in total.
 # RQ's default 180s timeout is too short for the 9-call pipeline.
