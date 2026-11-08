@@ -297,17 +297,23 @@ def run_llm_research_assistant(
     response = None
     last_error: Exception | None = None
     for attempt in range(2):
-        prompt = main_user
-        if attempt > 0:
-            prompt = (
-                main_user
-                + "\n\nYOUR PREVIOUS JSON FAILED VALIDATION:\n"
-                + str(last_error)
-                + "\nReturn ONE JSON object containing ALL required fields: "
-                "report, probabilities, recommended_side, recommended_stake_pct, "
-                "confidence, evidence_refs, abstain, abstain_reason."
-            )
         try:
+            if attempt == 0:
+                prompt = main_user
+            else:
+                prompt = (
+                    "You previously returned this JSON:\n"
+                    + (response.content if response is not None else "")
+                    + "\n\nIt failed validation:\n"
+                    + str(last_error)
+                    + "\n\nReturn ONE complete JSON object with ALL of: report, "
+                    "probabilities (H, D, A numeric values summing to 1), "
+                    "recommended_side (H|D|A|abstain), recommended_stake_pct "
+                    "(0 when abstaining), confidence, evidence_refs, abstain, "
+                    "abstain_reason. Even when abstaining you MUST include "
+                    "probabilities, recommended_side='abstain', "
+                    "recommended_stake_pct=0 and confidence."
+                )
             response = provider.complete_json(system, prompt)
             decision = MainAgentDecision.model_validate_json(
                 normalize_json_content(response.content)
@@ -316,7 +322,7 @@ def run_llm_research_assistant(
             if unknown:
                 raise ValueError(f"unknown evidence refs: {unknown}")
             break
-        except ValueError as exc:  # schema or evidence-ref violation: retry once
+        except ValueError as exc:  # schema or evidence-ref violation: repair once
             last_error = exc
             decision = None
         except Exception as exc:  # noqa: BLE001 - persist failed run

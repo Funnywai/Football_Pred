@@ -281,7 +281,8 @@ def test_assistant_retries_main_agent_once_after_schema_violation():
 
         assert result["status"] in {"bet", "no_bet"}
         assert len(provider.calls) == len(ROLE_AGENTS) + 2
-        assert "FAILED VALIDATION" in provider.calls[-1][1]
+        assert "You previously returned this JSON" in provider.calls[-1][1]
+        assert "Even when abstaining" in provider.calls[-1][1]
     finally:
         session.close()
         engine.dispose()
