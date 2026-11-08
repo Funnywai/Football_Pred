@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 
-import { asNumber, formatKickoff } from "@/lib/format";
+import { asNumber, formatKickoff, hktDateKey } from "@/lib/format";
 import type { LlmResearchRun } from "@/lib/llm-types";
 import { buildLlmRunsTsv } from "@/lib/llm-runs-export";
 
 import { CopyTableButton } from "./copy-table-button";
+import { DayNavigator } from "./day-navigator";
 import { LlmRunDialog } from "./llm-run-dialog";
 import { TableFrame } from "./table-frame";
 import { EmptyState, MatchCell, Panel, StatusTag } from "./ui";
@@ -38,6 +39,7 @@ function AnalystsCell({ run }: { run: LlmResearchRun }) {
 export function LlmRunsTable({ runs }: { runs: LlmResearchRun[] }) {
   const [query, setQuery] = useState("");
   const [activeStatus, setActiveStatus] = useState<string | null>(null);
+  const [dayIndex, setDayIndex] = useState(0);
   const [selection, setSelection] = useState<{
     run: LlmResearchRun;
     token: number;
@@ -56,16 +58,32 @@ export function LlmRunsTable({ runs }: { runs: LlmResearchRun[] }) {
     return list;
   }, [runs]);
 
+  const dayKeys = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          runs
+            .map((run) => hktDateKey(run.kickoff_at))
+            .filter((key): key is string => Boolean(key)),
+        ),
+      ).sort((left, right) => right.localeCompare(left)),
+    [runs],
+  );
+  const selectedDay = dayKeys[dayIndex] ?? null;
+
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase();
     return runs.filter((run) => {
+      if (selectedDay !== null && hktDateKey(run.kickoff_at) !== selectedDay) {
+        return false;
+      }
       if (activeStatus !== null && runStatus(run) !== activeStatus) return false;
       if (!needle) return true;
       return [run.home_team, run.away_team, run.competition, run.status]
         .filter((value): value is string => typeof value === "string" && Boolean(value))
         .some((value) => value.toLowerCase().includes(needle));
     });
-  }, [activeStatus, query, runs]);
+  }, [activeStatus, query, runs, selectedDay]);
 
   const copyText = useMemo(() => buildLlmRunsTsv(visible), [visible]);
 
@@ -97,7 +115,10 @@ export function LlmRunsTable({ runs }: { runs: LlmResearchRun[] }) {
             className="ledger-search__input"
             type="search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setDayIndex(0);
+            }}
             placeholder="Team, competition or status"
           />
         </label>
@@ -112,7 +133,10 @@ export function LlmRunsTable({ runs }: { runs: LlmResearchRun[] }) {
                   : "llm-filter__chip"
               }
               aria-pressed={activeStatus === null}
-              onClick={() => setActiveStatus(null)}
+              onClick={() => {
+                setActiveStatus(null);
+                setDayIndex(0);
+              }}
             >
               All
             </button>
@@ -126,13 +150,29 @@ export function LlmRunsTable({ runs }: { runs: LlmResearchRun[] }) {
                     : "llm-filter__chip"
                 }
                 aria-pressed={activeStatus === status}
-                onClick={() => setActiveStatus(status)}
+                onClick={() => {
+                  setActiveStatus(status);
+                  setDayIndex(0);
+                }}
               >
                 {status.replaceAll("_", " ")}
               </button>
             ))}
           </div>
         </div>
+      </div>
+
+      <div className="prediction-day-nav">
+        <DayNavigator
+          dayKey={selectedDay}
+          dayIndex={dayIndex}
+          dayCount={dayKeys.length}
+          onFirst={() => setDayIndex(0)}
+          onPrevious={() =>
+            setDayIndex((current) => Math.min(dayKeys.length - 1, current + 1))
+          }
+          onNext={() => setDayIndex((current) => Math.max(0, current - 1))}
+        />
       </div>
 
       {visible.length === 0 ? (

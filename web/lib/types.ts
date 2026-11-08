@@ -151,6 +151,11 @@ export interface Bet {
   brier?: Numeric;
   model_version?: string | null;
   decision_slot_key?: string | null;
+  match_status?: string | null;
+  home_goals_90?: Numeric;
+  away_goals_90?: Numeric;
+  home_goals_final?: Numeric;
+  away_goals_final?: Numeric;
 }
 
 export interface EquityPoint {

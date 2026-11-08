@@ -540,6 +540,11 @@ def llm_bets(
                 home.name,
                 away.name,
                 Settlement,
+                Match.status,
+                Match.home_goals_90,
+                Match.away_goals_90,
+                Match.home_goals_final,
+                Match.away_goals_final,
             )
             .join(Match, Match.id == PaperBet.match_id)
             .join(Competition, Competition.id == Match.competition_id)
@@ -582,6 +587,11 @@ def llm_bets(
                 "brier": str(settlement.brier_score)
                 if settlement and settlement.brier_score is not None
                 else None,
+                "match_status": row[6].value if hasattr(row[6], "value") else str(row[6]),
+                "home_goals_90": row[7],
+                "away_goals_90": row[8],
+                "home_goals_final": row[9],
+                "away_goals_final": row[10],
                 "model_version": bet.analysis_run_key.split(":", 1)[0],
             }
         )

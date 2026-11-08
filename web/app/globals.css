@@ -878,6 +878,10 @@ table {
   padding-right: 10px;
 }
 
+.llm-bets-table {
+  min-width: 1420px;
+}
+
 .table--fixtures {
   min-width: 680px;
 }

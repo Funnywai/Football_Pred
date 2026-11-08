@@ -26,7 +26,7 @@ export async function getLlmEquity(): Promise<EndpointResult<Equity>> {
 }
 
 export async function getLlmResearchRuns(): Promise<EndpointResult<LlmResearchRun[]>> {
-  return getJson<LlmResearchRun[]>("/llm/research-runs?limit=20", "array");
+  return getJson<LlmResearchRun[]>("/llm/research-runs?limit=200", "array");
 }
 
 export async function getLlmPageData() {

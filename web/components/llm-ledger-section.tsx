@@ -38,6 +38,41 @@ function isOpen(status: string | null | undefined): boolean {
   return statusTone(status) === "accent";
 }
 
+function MatchResult({ bet }: { bet: Bet }) {
+  const status = (bet.match_status ?? "").toLowerCase();
+  const settled = Boolean(bet.settled_at);
+  const finished = status === "finished" || settled;
+  const live = status === "live" && !settled;
+  const home90 = asNumber(bet.home_goals_90);
+  const away90 = asNumber(bet.away_goals_90);
+  const home = home90 ?? asNumber(bet.home_goals_final);
+  const away = away90 ?? asNumber(bet.away_goals_final);
+
+  if ((!finished && !live) || home === null || away === null) {
+    return <span className="text-muted">—</span>;
+  }
+
+  return (
+    <span className="result">
+      <span className="result__score">
+        {home}–{away}
+      </span>
+      <abbr
+        className="result__label"
+        title={
+          live
+            ? "Live score"
+            : home90 === null
+              ? "After extra time"
+              : "Full time"
+        }
+      >
+        {live ? "LIVE" : home90 === null ? "AET" : "FT"}
+      </abbr>
+    </span>
+  );
+}
+
 function isSettled(bet: Bet): boolean {
   const status = (bet.status ?? "").toLowerCase();
   return Boolean(bet.settled_at) || ["won", "win", "lost", "loss", "void", "push", "settled"].includes(status);
@@ -227,6 +262,7 @@ export function LlmLedgerSection({
                   <th scope="col" className="num">Odds</th>
                   <th scope="col" className="num">Stake</th>
                   <th scope="col">Status</th>
+                  <th scope="col">Result</th>
                   <th scope="col" className="num">P/L</th>
                   <th scope="col" className="num">CLV</th>
                   <th scope="col" className="num">Brier</th>
@@ -271,6 +307,9 @@ export function LlmLedgerSection({
                       <td className="num">{formatMoney(bet.stake, currency)}</td>
                       <td>
                         <StatusTag status={bet.status} />
+                      </td>
+                      <td>
+                        <MatchResult bet={bet} />
                       </td>
                       <td className={`num text-${tone}`}>
                         {profit === null ? "—" : formatSignedMoney(profit, currency)}
