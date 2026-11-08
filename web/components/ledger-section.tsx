@@ -44,31 +44,42 @@ function isSettled(bet: Bet): boolean {
   return Boolean(bet.settled_at) || ["won", "win", "lost", "loss", "void", "push", "settled"].includes(status);
 }
 
-function resultLabel(bet: Bet): string {
-  const home = bet.home_goals_90;
-  const away = bet.away_goals_90;
-  const hasScore =
-    home !== null && home !== undefined && away !== null && away !== undefined;
+function BetResult({ bet }: { bet: Bet }) {
   const status = (bet.match_status ?? "").toLowerCase();
   const betStatus = (bet.status ?? "").toLowerCase();
   const settled =
     Boolean(bet.settled_at) ||
     ["won", "lost", "void", "push", "settled"].includes(betStatus);
-  const statusLabel = settled
-    ? "FT"
-    : status === "finished"
-      ? "FT"
-      : status === "live"
-        ? "LIVE"
-        : status === "postponed"
-          ? "PP"
-          : status === "cancelled"
-            ? "CANC"
-            : null;
-  if (hasScore) {
-    return statusLabel ? `${home}–${away} ${statusLabel}` : `${home}–${away}`;
+  const live = status === "live" && !settled;
+  const finished = status === "finished" || settled;
+  const home90 = asNumber(bet.home_goals_90);
+  const away90 = asNumber(bet.away_goals_90);
+  const home = home90 ?? asNumber(bet.home_goals_final);
+  const away = away90 ?? asNumber(bet.away_goals_final);
+
+  if ((!finished && !live) || home === null || away === null) {
+    return <span className="text-muted">—</span>;
   }
-  return statusLabel ?? "—";
+
+  return (
+    <span className="result">
+      <span className="result__score">
+        {home}–{away}
+      </span>
+      <abbr
+        className="result__label"
+        title={
+          live
+            ? "Live score"
+            : home90 === null
+              ? "After extra time"
+              : "Full time"
+        }
+      >
+        {live ? "LIVE" : home90 === null ? "AET" : "FT"}
+      </abbr>
+    </span>
+  );
 }
 
 function summarize(bets: Bet[]) {
@@ -375,8 +386,8 @@ export function LedgerSection({
                           </time>
                         </span>
                       </td>
-                      <td className="mono" title="90-minute score and match status">
-                        {resultLabel(bet)}
+                      <td>
+                        <BetResult bet={bet} />
                       </td>
                       <td>
                         <span className="selection">
