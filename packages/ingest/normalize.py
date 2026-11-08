@@ -157,8 +157,22 @@ def upsert_match(session: Session, fixture: NormalizedFixture) -> Match:
         existing.result_available_at = utc_now()
         existing.result_availability_basis = AvailabilityBasis.OBSERVED_SNAPSHOT
     existing.kickoff_at = fixture.kickoff_at
-    existing.status = fixture.status
     existing.matchday = fixture.matchday
+    # A settled result is authoritative. If the provider is lagging and still
+    # reports a live/scheduled state, do not downgrade a finished match.
+    if (
+        existing.status is MatchStatus.FINISHED
+        and existing.home_goals_90 is not None
+        and existing.away_goals_90 is not None
+        and fixture.status is not MatchStatus.FINISHED
+    ):
+        existing.source_match_ids = {
+            **(existing.source_match_ids or {}),
+            **fixture.source_match_ids,
+        }
+        session.flush()
+        return existing
+    existing.status = fixture.status
     existing.home_goals_90 = fixture.home_goals_90
     existing.away_goals_90 = fixture.away_goals_90
     existing.home_goals_final = fixture.home_goals_final

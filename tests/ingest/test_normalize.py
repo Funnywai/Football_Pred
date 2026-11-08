@@ -258,6 +258,36 @@ def test_upsert_match_updates_existing_fixture(session):
     assert session.query(Match).count() == 1
 
 
+def test_upsert_match_does_not_downgrade_a_finished_result(session):
+    seed_competitions(session)
+    _seed_teams(session)
+    competition = get_competition(session, "EPL")
+    finished = normalize_fixture(
+        session,
+        _dto(
+            status=MatchStatus.FINISHED,
+            home_goals_90=2,
+            away_goals_90=1,
+            home_goals_final=2,
+            away_goals_final=1,
+        ),
+        competition.id,
+    )
+    match = upsert_match(session, finished)
+
+    stale = normalize_fixture(
+        session,
+        _dto(status=MatchStatus.LIVE),
+        competition.id,
+    )
+    updated = upsert_match(session, stale)
+
+    assert updated.id == match.id
+    assert updated.status is MatchStatus.FINISHED
+    assert updated.home_goals_90 == 2
+    assert updated.away_goals_90 == 1
+
+
 def test_upsert_match_keeps_result_availability_timestamp_once(session):
     seed_competitions(session)
     _seed_teams(session)
