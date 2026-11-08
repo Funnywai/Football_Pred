@@ -28,6 +28,7 @@ from packages.llm.research import (
 )
 from packages.llm.risk import (
     LLM_ASSISTANT_MODEL_VERSION,
+    MAX_SINGLE_BET_FRACTION,
     apply_research_risk,
     llm_research_experiment,
 )
@@ -94,9 +95,11 @@ def _main_user_prompt(
         f"EVIDENCE_PACKET:\n{json.dumps(packet, sort_keys=True, default=str)}\n\n"
         f"ROLE_FINDINGS:\n{json.dumps(findings, sort_keys=True, default=str)}\n\n"
         f"LLM_BANKROLL_AVAILABLE: {available_bankroll}\n"
-        "HARD_SAFETY_RULES: max stake 2% of available bankroll; "
-        "no bets after kickoff; odds must be fresh; minimum stake 1.00 HKD; "
-        "risk layer may cap or reject your recommendation.\n\n"
+        "HARD_SAFETY_RULES: recommended_stake_pct is a decimal FRACTION of "
+        "available bankroll (0.005 = 0.5%, 0.01 = 1%); never send percentage "
+        "points such as 0.5 or 1.0 for 0.5% or 1%; the value must not exceed "
+        "0.02 (2%); no bets after kickoff; odds must be fresh; minimum stake "
+        "1.00 HKD; risk layer may cap or reject your recommendation.\n\n"
         f"OUTPUT_SCHEMA:\n{schema}\n\n"
         "Return JSON only. You are the only component allowed to produce final H/D/A probabilities."
     )
@@ -336,6 +339,17 @@ def run_llm_research_assistant(
         session.flush()
         return _result(run, findings, None, None)
 
+    requested_stake_pct = decision.recommended_stake_pct
+    if requested_stake_pct > MAX_SINGLE_BET_FRACTION:
+        decision = decision.model_copy(
+            update={
+                "recommended_stake_pct": min(
+                    requested_stake_pct / Decimal(100),
+                    MAX_SINGLE_BET_FRACTION,
+                )
+            }
+        )
+
     run.raw_response = response.content
     run.provider = response.provider
     run.report = decision.report
@@ -357,6 +371,7 @@ def run_llm_research_assistant(
             "reason": risk.reason,
             "selection": risk.selection,
             "stake": str(risk.stake) if risk.stake is not None else None,
+            "requested_stake_pct": str(requested_stake_pct),
             "odds": str(risk.odds) if risk.odds is not None else None,
             "paper_bet_id": str(risk.paper_bet_id) if risk.paper_bet_id else None,
             "bankroll": str(risk.bankroll) if risk.bankroll is not None else None,

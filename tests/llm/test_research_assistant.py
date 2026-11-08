@@ -286,3 +286,47 @@ def test_assistant_retries_main_agent_once_after_schema_violation():
     finally:
         session.close()
         engine.dispose()
+
+
+def test_assistant_normalizes_percent_style_stake():
+    engine, session = _session()
+    try:
+        match, _snapshot = _seed(session)
+        refs = [f"match:{match.id}"]
+        responses = [
+            _finding(agent_id, refs[0]) for agent_id, _name, _scope in ROLE_AGENTS
+        ]
+        responses.append(
+            json.dumps(
+                {
+                    "report": {
+                        "summary": "model sent 0.75 meaning 0.75 percent",
+                        "key_findings": [],
+                        "market_view": "fair",
+                        "risks": [],
+                        "reasoning": "small stake",
+                    },
+                    "probabilities": {"H": 0.5, "D": 0.3, "A": 0.2},
+                    "recommended_side": "H",
+                    "recommended_stake_pct": 0.75,
+                    "confidence": 0.7,
+                    "evidence_refs": refs,
+                    "abstain": False,
+                    "abstain_reason": None,
+                }
+            )
+        )
+        provider = MockProvider(responses)
+
+        result = run_llm_research_assistant(
+            session,
+            match.id,
+            provider=provider,
+            max_workers=1,
+        )
+
+        assert result["status"] in {"bet", "no_bet"}
+        assert result["recommended_stake_pct"] == "0.0075"
+    finally:
+        session.close()
+        engine.dispose()
