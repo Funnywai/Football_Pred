@@ -41,11 +41,12 @@ LINE_AVAILABLE = "AVAILABLE"
 FULL_TIME_STAGE_ID = 5
 FULL_TIME_RESULT_TYPE = 1
 RESULTS_PAGE_SIZE = 10
-MAX_RESULTS_PAGES = 10
+MAX_RESULTS_PAGES = 50
 
 _UNKNOWN_STATUS = "UNKNOWN"
 _MIN_BETTABLE_ODDS = Decimal(1)
 _DEFAULT_LIMITER = MinIntervalRateLimiter(60.0)
+_DEFAULT_RESULTS_LIMITER = MinIntervalRateLimiter(2.0)
 _OFFER_TRUE = frozenset({"offer"})
 _OFFER_FALSE = frozenset({"nooffer", "tempnotoffer"})
 
@@ -383,10 +384,16 @@ class HkjcAdapter(BaseAdapter):
         graphql_url: str = DEFAULT_GRAPHQL_URL,
         client: httpx.Client | None = None,
         limiter: MinIntervalRateLimiter | None = None,
+        results_limiter: MinIntervalRateLimiter | None = None,
     ) -> None:
         super().__init__(
             client=client,
             limiter=limiter if limiter is not None else _DEFAULT_LIMITER,
+        )
+        self._results_limiter = (
+            results_limiter
+            if results_limiter is not None
+            else (limiter if limiter is not None else _DEFAULT_RESULTS_LIMITER)
         )
         self._queries_dir: Path = Path(queries_dir)
         self._graphql_url: str = graphql_url
@@ -533,6 +540,7 @@ class HkjcAdapter(BaseAdapter):
             self._graphql_url,
             json_body=body,
             headers=self._headers(),
+            limiter=self._results_limiter,
         )
         _raise_on_graphql_errors(result.payload)
         return result

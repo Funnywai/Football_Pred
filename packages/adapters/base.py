@@ -102,8 +102,9 @@ class BaseAdapter(ABC):
         self.close()
 
     def _request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
-        if self._limiter is not None:
-            self._limiter.wait()
+        limiter = kwargs.pop("limiter", None) or self._limiter
+        if limiter is not None:
+            limiter.wait()
         kwargs.setdefault("follow_redirects", True)
         try:
             response = self._client.request(method, url, **kwargs)
@@ -169,8 +170,11 @@ class BaseAdapter(ABC):
         *,
         json_body: dict[str, Any],
         headers: dict[str, str] | None = None,
+        limiter: MinIntervalRateLimiter | None = None,
     ) -> FetchResult:
-        response = self._request("POST", url, json=json_body, headers=headers)
+        response = self._request(
+            "POST", url, json=json_body, headers=headers, limiter=limiter
+        )
         text = response.text
         try:
             payload = response.json()

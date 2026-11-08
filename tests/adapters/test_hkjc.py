@@ -886,3 +886,35 @@ def test_fetch_raises_whitelist_error_from_graphql_error_payload():
             adapter.fetch_match_results("50079081")
     finally:
         adapter.close()
+
+
+@respx.mock
+def test_fetch_match_results_pages_past_the_first_hundred_matches():
+    pages = []
+    for page in range(1, 12):
+        ids = [f"page-{page}-{index}" for index in range(10)]
+        if page == 11:
+            ids[0] = "50079754"
+        pages.append(
+            {
+                "data": {
+                    "matchNumByDate": {"total": 110},
+                    "matches": [{"id": match_id} for match_id in ids],
+                }
+            }
+        )
+    route = respx.post(GRAPHQL_URL).mock(
+        side_effect=[httpx.Response(200, json=payload) for payload in pages]
+    )
+    adapter = HkjcAdapter(
+        queries_dir=QUERIES_DIR, query_version="test-v1", limiter=NO_LIMIT
+    )
+    try:
+        result = adapter.fetch_match_results(
+            "50079754", match_date=date(2026, 11, 8)
+        )
+    finally:
+        adapter.close()
+
+    assert route.call_count == 11
+    assert result.payload == pages[-1]
