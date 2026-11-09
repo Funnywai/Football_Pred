@@ -8,10 +8,10 @@ from pathlib import Path
 from rq import Queue
 from rq.job import Job
 from rq.registry import FailedJobRegistry
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from packages.db.models import Competition, LlmResearchRun, Match
+from packages.db.models import Availability, Competition, LlmResearchRun, Match
 from packages.db.session import build_engine, build_session_factory, session_scope
 from packages.domain.enums import MatchStatus
 from packages.ingest.evidence import collect_match_evidence
@@ -34,6 +34,27 @@ _LLM_PREDICTION_OFFSET = timedelta(minutes=28)
 _LLM_JOB_TIMEOUT_SECONDS = 1200
 
 logger = logging.getLogger(__name__)
+
+
+def _ensure_match_availability(session: Session, match: Match, settings) -> None:
+    if (match.source_match_ids or {}).get("fotmob") is None:
+        return
+    latest = session.scalar(
+        select(func.max(Availability.fetched_at)).where(
+            Availability.match_id == match.id
+        )
+    )
+    if latest is not None and (
+        utc_now() - ensure_utc(latest)
+    ).total_seconds() < 600:
+        return
+    from apps.worker.jobs import check_lineup
+
+    try:
+        with session.begin_nested():
+            check_lineup(session, match, "T-30m", build_adapters(settings))
+    except Exception:
+        logger.exception("availability refresh failed for match %s", match.id)
 
 
 def run_llm_prediction_job(match_id: str, stage: str = "T-30m") -> dict[str, object]:
@@ -76,6 +97,7 @@ def run_llm_prediction_job(match_id: str, stage: str = "T-30m") -> dict[str, obj
                         logger.exception(
                             "evidence collection failed for match %s", match_id
                         )
+                    _ensure_match_availability(session, match, settings)
                 return run_llm_research_assistant(
                     session,
                     uuid.UUID(match_id),

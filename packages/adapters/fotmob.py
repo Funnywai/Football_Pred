@@ -37,7 +37,9 @@ _UNAVAILABLE_STATUS = {
     "available": AvailabilityStatus.AVAILABLE,
 }
 
-_DEFAULT_LIMITER = MinIntervalRateLimiter(600.0)
+# Match details carry lineups and unavailable players for every covered league;
+# a short interval keeps match-window batches practical without hammering the API.
+_DEFAULT_LIMITER = MinIntervalRateLimiter(5.0)
 
 
 @dataclass(frozen=True)
@@ -160,15 +162,13 @@ def _decimal_required(value: object, label: str) -> Decimal:
     return parsed
 
 
-def _expected_return(value: object, label: str) -> date | None:
-    if value is None:
+def _expected_return(value: object) -> date | None:
+    if not isinstance(value, str) or not value.strip():
         return None
-    if not isinstance(value, str):
-        raise AdapterSchemaError(f"{label}.expectedReturn must be an ISO date string")
     try:
-        return date.fromisoformat(value)
-    except ValueError as exc:
-        raise AdapterSchemaError(f"invalid {label}.expectedReturn {value!r}") from exc
+        return date.fromisoformat(value.strip())
+    except ValueError:
+        return None
 
 
 class FotMobAdapter(BaseAdapter):
@@ -333,24 +333,34 @@ class FotMobAdapter(BaseAdapter):
     def parse_unavailable(payload: object) -> list[UnavailableDTO]:
         root = _as_object(payload, "payload")
         content = _as_object(root.get("content"), "content")
-        raw_unavailable: object = content.get("unavailable")
-        if raw_unavailable is None:
-            raw_unavailable = {}
-        unavailable = _as_object(raw_unavailable, "content.unavailable")
+        raw_lineup = content.get("lineup")
+        lineup = raw_lineup if isinstance(raw_lineup, dict) else {}
+        raw_legacy = content.get("unavailable")
+        legacy = raw_legacy if isinstance(raw_legacy, dict) else {}
         rows: list[UnavailableDTO] = []
         for side, key in (("home", "homeTeam"), ("away", "awayTeam")):
-            if key not in unavailable:
+            team = lineup.get(key)
+            entries_raw = team.get("unavailable") if isinstance(team, dict) else None
+            if entries_raw is None:
+                entries_raw = legacy.get(key)
+            if entries_raw is None:
                 continue
-            label = f"content.unavailable.{key}"
-            entries = _as_list(unavailable[key], label)
+            label = f"content.lineup.{key}.unavailable"
+            entries = _as_list(entries_raw, label)
             for index, raw in enumerate(entries):
                 row_label = f"{label}[{index}]"
                 row = _as_object(raw, row_label)
-                raw_status = _optional_string(row.get("type"), f"{row_label}.type")
-                status_key = (raw_status or "").lower()
-                status = _UNAVAILABLE_STATUS.get(status_key)
+                raw_nested = row.get("unavailability")
+                nested = raw_nested if isinstance(raw_nested, dict) else {}
+                raw_status = _optional_string(
+                    nested.get("type")
+                    if "type" in nested
+                    else row.get("type"),
+                    f"{row_label}.type",
+                )
+                status = _UNAVAILABLE_STATUS.get((raw_status or "").lower())
                 if status is None:
-                    raise AdapterSchemaError(f"unknown unavailable type {status_key!r}")
+                    continue
                 player_id_value = row.get("id")
                 player_id = (
                     None
@@ -366,16 +376,33 @@ class FotMobAdapter(BaseAdapter):
                     raise AdapterSchemaError(f"{row_label}.name must be a string")
                 if player_id is None and not name:
                     raise AdapterSchemaError(f"{row_label} must have an id or name")
+                raw_reason = (
+                    nested.get("reason")
+                    if "reason" in nested
+                    else row.get("reason")
+                )
+                reason = _optional_string(raw_reason, f"{row_label}.reason")
+                raw_expected = (
+                    nested.get("expectedReturn")
+                    if "expectedReturn" in nested
+                    else row.get("expectedReturn")
+                )
+                expected = _expected_return(raw_expected)
+                if (
+                    expected is None
+                    and isinstance(raw_expected, str)
+                    and raw_expected.strip()
+                ):
+                    note = f"expected return: {raw_expected.strip()}"
+                    reason = f"{reason}; {note}" if reason else note
                 rows.append(
                     UnavailableDTO(
                         team_side=side,
                         source_player_id=player_id,
                         name=name,
                         status=status,
-                        reason=_optional_string(row.get("reason"), f"{row_label}.reason"),
-                        expected_return=_expected_return(
-                            row.get("expectedReturn"), row_label
-                        ),
+                        reason=reason,
+                        expected_return=expected,
                     )
                 )
         return rows

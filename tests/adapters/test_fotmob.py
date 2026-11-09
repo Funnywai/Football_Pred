@@ -157,20 +157,63 @@ def test_parse_lineups_preserves_predicted_lineup_type():
     assert all(row.inferred is True for row in rows)
 
 
-def test_parse_unavailable_rejects_unknown_type():
+def test_parse_unavailable_skips_unknown_type():
     payload = _payload()
     payload["content"]["unavailable"]["homeTeam"][0]["type"] = "illness"
 
-    with pytest.raises(AdapterSchemaError, match="unknown unavailable type"):
-        FotMobAdapter.parse_unavailable(payload)
+    rows = FotMobAdapter.parse_unavailable(payload)
+
+    assert len(rows) == 1
+    assert rows[0].status is AvailabilityStatus.SUSPENSION
 
 
-def test_parse_unavailable_rejects_invalid_expected_return():
+def test_parse_unavailable_keeps_free_text_expected_return_in_reason():
     payload = _payload()
     payload["content"]["unavailable"]["homeTeam"][0]["expectedReturn"] = "next month"
 
-    with pytest.raises(AdapterSchemaError, match="expectedReturn"):
-        FotMobAdapter.parse_unavailable(payload)
+    rows = FotMobAdapter.parse_unavailable(payload)
+
+    assert rows[0].expected_return is None
+    assert "expected return: next month" in (rows[0].reason or "")
+
+
+def test_parse_unavailable_reads_lineup_team_unavailable_block():
+    payload = {
+        "content": {
+            "lineup": {
+                "homeTeam": {
+                    "unavailable": [
+                        {
+                            "id": 9,
+                            "name": "Injured Player",
+                            "unavailability": {
+                                "type": "injury",
+                                "expectedReturn": "Late November 2026",
+                            },
+                        }
+                    ]
+                },
+                "awayTeam": {
+                    "unavailable": [
+                        {
+                            "id": 10,
+                            "name": "Banned Player",
+                            "unavailability": {"type": "suspension"},
+                        }
+                    ]
+                },
+            }
+        }
+    }
+
+    rows = FotMobAdapter.parse_unavailable(payload)
+
+    assert [row.status for row in rows] == [
+        AvailabilityStatus.INJURY,
+        AvailabilityStatus.SUSPENSION,
+    ]
+    assert rows[0].expected_return is None
+    assert "expected return: Late November 2026" in (rows[0].reason or "")
 
 
 def test_parse_unavailable_rejects_non_list_team_entries():
