@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
@@ -23,7 +24,7 @@ from packages.db.models import (
 from packages.domain.enums import MarketType, MatchStatus, Side, SnapshotKind
 from packages.llm.providers import MockProvider
 from packages.llm.research import ROLE_AGENTS
-from packages.llm.research_assistant import run_llm_research_assistant
+from packages.llm.research_assistant import _parse_finding, run_llm_research_assistant
 
 D = Decimal
 NOW = datetime.now(UTC)
@@ -330,3 +331,119 @@ def test_assistant_normalizes_percent_style_stake():
     finally:
         session.close()
         engine.dispose()
+
+
+def _role_response(payload: dict) -> SimpleNamespace:
+    return SimpleNamespace(content=json.dumps(payload))
+
+
+def test_parse_finding_injects_missing_agent_id_and_ignores_extra_fields():
+    finding = _parse_finding(
+        "form_agent",
+        _role_response(
+            {
+                "summary": "valid finding",
+                "key_findings": ["form is good"],
+                "confidence": 0.7,
+                "direction": "H",
+                "evidence_refs": ["match:1"],
+                "uncertainties": [],
+                "abstain": False,
+                "abstain_reason": None,
+                "direction_note": "unexpected extra field",
+            }
+        ),
+        {"match:1"},
+    )
+
+    assert finding.agent_id == "form_agent"
+    assert finding.abstain is False
+    assert finding.evidence_refs == ["match:1"]
+
+
+def test_parse_finding_injects_missing_agent_id_for_abstain():
+    finding = _parse_finding(
+        "availability_agent",
+        _role_response(
+            {
+                "summary": "no availability evidence",
+                "confidence": 0,
+                "direction": "abstain",
+                "evidence_refs": [],
+                "uncertainties": [],
+                "abstain": True,
+                "abstain_reason": "source missing",
+            }
+        ),
+        set(),
+    )
+
+    assert finding.agent_id == "availability_agent"
+    assert finding.abstain is True
+    assert finding.abstain_reason == "source missing"
+
+
+def test_parse_finding_filters_unknown_refs():
+    finding = _parse_finding(
+        "market_agent",
+        _role_response(
+            {
+                "summary": "market finding",
+                "key_findings": ["price is fair"],
+                "confidence": 0.6,
+                "direction": "H",
+                "evidence_refs": ["match:1", "evidence:bad"],
+                "uncertainties": [],
+                "abstain": False,
+                "abstain_reason": None,
+            }
+        ),
+        {"match:1"},
+    )
+
+    assert finding.evidence_refs == ["match:1"]
+    assert any("unknown evidence refs ignored" in item for item in finding.uncertainties)
+
+
+def test_parse_finding_abstains_when_only_unknown_refs_remain():
+    finding = _parse_finding(
+        "market_agent",
+        _role_response(
+            {
+                "summary": "market finding",
+                "key_findings": [],
+                "confidence": 0.4,
+                "direction": "H",
+                "evidence_refs": ["evidence:bad"],
+                "uncertainties": [],
+                "abstain": False,
+                "abstain_reason": None,
+            }
+        ),
+        set(),
+    )
+
+    assert finding.abstain is True
+    assert finding.direction == "abstain"
+    assert "no valid evidence refs" in (finding.abstain_reason or "")
+
+
+def test_parse_finding_coerces_abstain_direction():
+    finding = _parse_finding(
+        "news_agent",
+        _role_response(
+            {
+                "summary": "no news",
+                "confidence": 0,
+                "direction": "H",
+                "evidence_refs": [],
+                "uncertainties": [],
+                "abstain": True,
+                "abstain_reason": "source missing",
+            }
+        ),
+        set(),
+    )
+
+    assert finding.abstain is True
+    assert finding.direction == "abstain"

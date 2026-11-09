@@ -128,12 +128,37 @@ def _parse_finding(
     allowed_refs: set[str],
 ) -> ResearchFinding:
     content = normalize_json_content(response.content)
-    finding = ResearchFinding.model_validate_json(content)
+    payload = json.loads(content)
+    if not isinstance(payload, dict):
+        raise TypeError("role finding must be a JSON object")
+
+    payload.setdefault("agent_id", agent_id)
+    if payload.get("abstain") is True or payload.get("direction") == "abstain":
+        payload["abstain"] = True
+        payload["direction"] = "abstain"
+
+    refs = payload.get("evidence_refs")
+    if isinstance(refs, list):
+        strings = [ref for ref in refs if isinstance(ref, str)]
+        valid = [ref for ref in strings if ref in allowed_refs]
+        unknown = sorted(set(strings) - allowed_refs)
+        payload["evidence_refs"] = valid
+        if unknown:
+            uncertainties = payload.get("uncertainties")
+            if not isinstance(uncertainties, list):
+                uncertainties = []
+            payload["uncertainties"] = [
+                *uncertainties,
+                f"unknown evidence refs ignored: {', '.join(unknown)}",
+            ]
+        if not payload.get("abstain") and not valid:
+            payload["abstain"] = True
+            payload["direction"] = "abstain"
+            payload["abstain_reason"] = "no valid evidence refs after filtering"
+
+    finding = ResearchFinding.model_validate(payload)
     if finding.agent_id != agent_id:
         raise ValueError(f"agent_id mismatch: expected {agent_id}, got {finding.agent_id}")
-    unknown = sorted(set(finding.evidence_refs) - allowed_refs)
-    if unknown:
-        raise ValueError(f"unknown evidence refs: {unknown}")
     return finding
 
 

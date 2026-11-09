@@ -11,7 +11,7 @@ HAD_OUTCOMES = ("H", "D", "A")
 
 
 class ResearchFinding(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     agent_id: str
     summary: str
@@ -40,7 +40,7 @@ class ResearchFinding(BaseModel):
 
 
 class MainAgentDecision(BaseModel):
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    model_config = ConfigDict(frozen=True, extra="ignore")
 
     report: dict[str, Any]
     probabilities: dict[Literal["H", "D", "A"], Decimal]
