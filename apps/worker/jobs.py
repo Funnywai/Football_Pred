@@ -89,7 +89,7 @@ DATA_COMPETITIONS: tuple[str, ...] = (
 )
 _TRIGGER_RETRY = Retry(max=3, interval=[60, 300, 900])
 _RECENT_RESULT_WINDOW = timedelta(hours=18)
-_FOTMOB_LINK_HORIZON = timedelta(days=7)
+_FOTMOB_LINK_HORIZON = timedelta(days=30)
 _FOTMOB_LINK_LIMITER_SECONDS = 20.0
 
 def _run_source_fetch[T](
