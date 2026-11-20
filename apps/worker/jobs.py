@@ -301,6 +301,48 @@ def run_recent_result_refresh(now: datetime | None = None) -> dict[str, object]:
     return {"fixtures": sum(fixtures_by_league.values()), "leagues": fixtures_by_league}
 
 
+def run_hkjc_link(now: datetime | None = None, *, horizon_days: int = 7) -> dict[str, object]:
+    """Refresh HKJC scheduled links without re-running fixture ingestion."""
+    current = ensure_utc(now or utc_now())
+    settings = get_settings()
+    engine = build_engine(settings.database_url)
+    factory = build_session_factory(engine)
+    with session_scope(factory) as session:
+        seed_competitions(session)
+        adapters = build_adapters(settings)
+        pipeline = IngestPipeline(session, adapters)
+        if adapters.hkjc is None:
+            return {"hkjc_linked": 0, "hkjc_by_league": {}}
+        today_hkt = current.astimezone(HONG_KONG).date()
+        end_hkt = today_hkt + timedelta(days=horizon_days)
+        try:
+            linked = _run_source_fetch(
+                session,
+                source_name="hkjc",
+                params={
+                    "operation": "scheduled_matches",
+                    "start_date": today_hkt.isoformat(),
+                    "end_date": end_hkt.isoformat(),
+                },
+                operation=lambda run_id: pipeline.link_hkjc_many(
+                    DATA_COMPETITIONS,
+                    today_hkt,
+                    end_hkt,
+                    run_id=run_id,
+                ),
+                field_scope="multi-league fixtures",
+                test_evidence_ref="tests/adapters/test_hkjc.py",
+            )
+        except AdapterError as exc:
+            logger.warning("hkjc scheduled link refresh failed: %s", exc)
+            linked = {code: 0 for code in DATA_COMPETITIONS}
+        return {
+            "hkjc_linked": sum(linked.values()),
+            "hkjc_by_league": linked,
+        }
+
+
+
 def _build_fotmob_link_adapter() -> FotMobAdapter:
     return FotMobAdapter(limiter=MinIntervalRateLimiter(_FOTMOB_LINK_LIMITER_SECONDS))
 
@@ -1055,6 +1097,7 @@ __all__ = [
     "run_daily_ingest",
     "run_decision_reconciliation",
     "run_fotmob_link",
+    "run_hkjc_link",
     "run_lineup_check",
     "run_match_trigger",
     "run_recent_result_refresh",

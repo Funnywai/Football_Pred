@@ -197,6 +197,7 @@ def test_canonical_team_slug_maps_hkjc_exonyms_to_stored_slugs():
     assert canonical_team_slug("Bilbao") == "athletic-bilbao"
     assert canonical_team_slug("Rennes") == "stade-rennais-fc-1901"
     assert canonical_team_slug("Gladbach") == "borussia-monchengladbach"
+    assert canonical_team_slug("Hamburg") == "hamburger-sv"
 
 
 def test_canonical_team_slug_rejects_blank_name():

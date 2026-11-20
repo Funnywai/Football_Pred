@@ -24,6 +24,7 @@ from apps.worker.jobs import (
     run_calibration_report,
     run_daily_ingest,
     run_decision_reconciliation,
+    run_hkjc_link,
     run_lineup_check,
     run_match_trigger,
     run_recent_result_refresh,
@@ -1582,3 +1583,55 @@ def test_settle_match_updates_match_status_and_score(monkeypatch):
         assert refreshed.home_goals_90 == 4
         assert refreshed.away_goals_90 == 1
     engine.dispose()
+
+
+def test_run_hkjc_link_links_upcoming_match(monkeypatch):
+    now = datetime(2026, 11, 20, 9, 0, tzinfo=UTC)
+    engine, factory = _worker_runtime(monkeypatch, hkjc=_FakeHkjc(), now=now)
+    with factory() as setup:
+        seed_competitions(setup)
+        competition = (
+            setup.query(Competition).filter(Competition.code == "EPL").one()
+        )
+        home = Team(
+            slug="tottenham",
+            name="Tottenham",
+            short_name="TOT",
+            country="England",
+        )
+        away = Team(
+            slug="crystal-palace",
+            name="Crystal Palace",
+            short_name="CRY",
+            country="England",
+        )
+        setup.add_all([home, away])
+        setup.flush()
+        setup.add(
+            Match(
+                competition_id=competition.id,
+                season="2026/27",
+                kickoff_at=datetime(2026, 10, 31, 17, 30, tzinfo=UTC),
+                home_team_id=home.id,
+                away_team_id=away.id,
+                status=MatchStatus.SCHEDULED,
+                source_match_ids={"football-data.org": "999"},
+                coverage_flags=[],
+            )
+        )
+        setup.commit()
+
+    result = run_hkjc_link(now=now)
+
+    assert result["hkjc_linked"] == 1
+    with factory() as verify:
+        match = verify.query(Match).one()
+        assert match.source_match_ids["hkjc"] == "50078674"
+    engine.dispose()
+
+
+def test_scheduler_includes_an_hkjc_link_job():
+    scheduler = build_scheduler(queue=_NoopQueue())
+    job = scheduler.get_job("hkjc-link")
+    assert job is not None
+    assert job.trigger.interval == timedelta(hours=6)

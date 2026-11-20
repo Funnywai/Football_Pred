@@ -85,6 +85,7 @@ TEAM_ALIASES: dict[str, str] = {
     "Paris SG": "paris-saint-germain",
     "PSG": "paris-saint-germain",
     "Cologne": "1-fc-koln",
+    "Hamburg": "hamburger-sv",
     "Gladbach": "borussia-monchengladbach",
     "M'gladbach": "borussia-monchengladbach",
     "Bayern Munich": "bayern-munich",

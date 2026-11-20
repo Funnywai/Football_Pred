@@ -33,6 +33,10 @@ def _enqueue_fotmob_link(queue: Queue) -> None:
     queue.enqueue("apps.worker.jobs.run_fotmob_link", job_timeout=900)
 
 
+def _enqueue_hkjc_link(queue: Queue) -> None:
+    queue.enqueue("apps.worker.jobs.run_hkjc_link", job_timeout=900)
+
+
 def _enqueue_settlement_scan(queue: Queue) -> None:
     queue.enqueue(
         "apps.worker.jobs.run_settlement_scan",
@@ -90,6 +94,15 @@ def build_scheduler(queue: Queue | None = None) -> BlockingScheduler:
             timezone=HONG_KONG_TIMEZONE,
         ),
         id="llm-prediction-scan",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=grace_seconds,
+    )
+    scheduler.add_job(
+        lambda: _enqueue_hkjc_link(resolved),
+        IntervalTrigger(hours=6, timezone=HONG_KONG_TIMEZONE),
+        id="hkjc-link",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
